@@ -1,0 +1,164 @@
+@inherits StateComponent
+@inject IJSRuntime JS
+
+<div class="app" dir="@(State.IsRtl ? "rtl" : "ltr")">
+
+    <Sidebar />
+    <div class="scrim @(State.SidebarOpen == true ? "show" : "")" @onclick="State.CloseSidebar"></div>
+
+    <main class="main">
+        <header class="topbar">
+            <button class="icon-btn" title="منو" @onclick="State.ToggleSidebar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+            </button>
+
+            <div class="pickers">
+                @if (State.Providers.Count == 0)
+                {
+                    <button class="chip" @onclick="State.OpenSettings">+ افزودن API</button>
+                }
+                else
+                {
+                    <select class="picker" value="@State.CurrentProviderId" @onchange="OnProviderChanged" title="سرویس‌دهنده">
+                        @foreach (var p in State.Providers)
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                    <select class="picker model" value="@State.CurrentModel" @onchange="OnModelChanged" title="مدل">
+                        @if (string.IsNullOrWhiteSpace(State.CurrentModel))
+                        {
+                            <option value="">— مدل —</option>
+                        }
+                        @foreach (var m in State.ModelsFor(State.CurrentProvider))
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <button class="icon-btn" title="گفتگوی جدید" @onclick="State.NewChat">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+            </button>
+        </header>
+
+        <div id="messages" class="messages">
+            @if (State.Active == null || State.Active.Messages.Count == 0)
+            {
+                <div class="welcome">
+                    <div class="logo">AI</div>
+                    <h1>امروز چه کمکی از من برمی‌آید؟</h1>
+                    @if (State.Providers.Count == 0)
+                    {
+                        <p class="muted">برای شروع، کلید API سرویس مورد نظرتان را اضافه کنید.</p>
+                        <button class="primary" @onclick="State.OpenSettings">افزودن API</button>
+                    }
+                    else
+                    {
+                        <p class="muted" dir="ltr">@State.CurrentProvider?.Name · @State.CurrentModel</p>
+                    }
+                </div>
+            }
+            else
+            {
+                var msgs = State.Active.Messages;
+                <div class="thread">
+                    @for (var i = 0; i < msgs.Count; i++)
+                    {
+                        var last = i == msgs.Count - 1;
+                        <MessageView @key="msgs[i]" Message="msgs[i]" IsLast="last" Streaming="@(State.IsStreaming && last)" />
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="composer">
+            @if (State.Notice != null)
+            {
+                <div class="notice" @onclick="State.ClearNotice">@State.Notice</div>
+            }
+            <div class="box">
+                <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="send" placeholder="هر چیزی بپرسید..."></textarea>
+                @if (State.IsStreaming)
+                {
+                    <button class="send" title="توقف" @onclick="State.Stop">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
+                    </button>
+                }
+                else
+                {
+                    <button class="send" title="ارسال" @onclick="SendClick">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg>
+                    </button>
+                }
+            </div>
+            <div class="hint">پاسخ‌ها ممکن است اشتباه باشند. اطلاعات مهم را بررسی کنید.</div>
+        </div>
+    </main>
+
+    @if (State.ShowSettings)
+    {
+        <SettingsDialog />
+    }
+</div>
+
+@code {
+    ElementReference _input;
+    DotNetObjectReference<ChatApp>? _self;
+    int _lastCount;
+    Conversation? _lastActive;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await State.InitAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("chat.initComposer", _input, _self);
+            var narrow = await JS.InvokeAsync<bool>("chat.isNarrow");
+            State.SetNarrow(narrow);
+        }
+
+        var count = State.Active?.Messages.Count ?? 0;
+        var force = count != _lastCount || !ReferenceEquals(State.Active, _lastActive);
+        _lastCount = count;
+        _lastActive = State.Active;
+
+        if (State.IsStreaming || force)
+            await JS.InvokeVoidAsync("chat.scroll", "messages", force);
+    }
+
+    void OnProviderChanged(ChangeEventArgs e) => State.SelectProvider(e.Value?.ToString());
+    void OnModelChanged(ChangeEventArgs e) => State.SelectModel(e.Value?.ToString());
+
+    [JSInvokable]
+    public Task OnEnter() => InvokeAsync(SendClick);
+
+    async Task SendClick()
+    {
+        if (State.IsStreaming) return;
+
+        var err = State.ValidateSend();
+        if (err != null)
+        {
+            State.SetNotice(err);
+            if (State.Providers.Count == 0) State.OpenSettings();
+            return;
+        }
+
+        var text = await JS.InvokeAsync<string>("chat.takeValue", _input);
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await State.SendAsync(text);
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        _self?.Dispose();
+    }
+}

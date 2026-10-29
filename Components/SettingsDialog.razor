@@ -1,0 +1,259 @@
+@inherits StateComponent
+
+<div class="modal-backdrop" @onclick="State.CloseSettings">
+    <div class="modal" @onclick:stopPropagation="true">
+
+        <div class="modal-head">
+            <h2>تنظیمات</h2>
+            <button class="icon-btn" title="بستن" @onclick="State.CloseSettings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+        </div>
+
+        <div class="modal-body">
+
+            <!-- left column: provider list + general options -->
+            <div class="s-list">
+                <div class="s-title">API ها</div>
+                @foreach (var p in State.Providers)
+                {
+                    var prov = p;
+                    <button class="s-item @(_editing?.Id == prov.Id && !_isNew ? "active" : "")" @onclick="() => Edit(prov)">
+                        <span dir="auto">@prov.Name</span>
+                        <small class="muted">@ProviderDefaults.TypeLabel(prov.Type)</small>
+                    </button>
+                }
+                <button class="s-item add @(_isNew ? "active" : "")" @onclick="StartNew">+ افزودن API جدید</button>
+
+                <div class="s-title" style="margin-top:18px">عمومی</div>
+
+                <label class="check">
+                    <input type="checkbox" checked="@State.IsRtl" @onchange="OnRtlChanged" />
+                    <span>رابط راست‌به‌چپ (فارسی)</span>
+                </label>
+
+                <label class="lbl">پیام سیستمی (اختیاری، برای همه مدل‌ها)</label>
+                <textarea class="inp" rows="3" dir="auto" placeholder="مثلاً: همیشه به فارسی پاسخ بده."
+                          value="@State.SystemPrompt"
+                          @oninput="OnSystemPromptInput"></textarea>
+
+                @if (_confirmClear)
+                {
+                    <button class="btn danger" @onclick="ClearAll">مطمئنید؟ همه گفتگوها پاک می‌شود</button>
+                }
+                else
+                {
+                    <button class="btn" @onclick="() => _confirmClear = true">پاک کردن همه گفتگوها</button>
+                }
+            </div>
+
+            <!-- right column: editor -->
+            <div class="s-editor">
+                @if (_editing == null)
+                {
+                    <p class="muted">یک API را انتخاب کنید یا مورد جدیدی اضافه کنید.</p>
+                }
+                else
+                {
+                    <div class="s-title">@(_isNew ? "API جدید" : "ویرایش API")</div>
+
+                    <label class="lbl">الگوی آماده</label>
+                    <select class="inp" @onchange="OnPreset">
+                        <option value="">— انتخاب کنید (اختیاری) —</option>
+                        @foreach (var pr in ProviderDefaults.Presets)
+                        {
+                            <option value="@pr.Name">@pr.Name</option>
+                        }
+                    </select>
+
+                    <label class="lbl">نام نمایشی</label>
+                    <input class="inp" dir="auto" @bind="_editing.Name" @bind:event="oninput" />
+
+                    <label class="lbl">نوع API</label>
+                    <select class="inp" @bind="_editing.Type" @bind:after="OnTypeChanged">
+                        @foreach (var t in Enum.GetValues<ProviderType>())
+                        {
+                            <option value="@t">@ProviderDefaults.TypeLabel(t)</option>
+                        }
+                    </select>
+
+                    <label class="lbl">آدرس پایه (Base URL)</label>
+                    <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_editing.BaseUrl" @bind:event="oninput" />
+
+                    <label class="lbl">کلید API</label>
+                    <div class="row">
+                        <input class="inp" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false"
+                               type="@(_showKey ? "text" : "password")" @bind="_editing.ApiKey" @bind:event="oninput" />
+                        <button class="btn" type="button" @onclick="() => _showKey = !_showKey">@(_showKey ? "پنهان" : "نمایش")</button>
+                    </div>
+
+                    <label class="lbl">مدل‌ها (هر خط یک مدل)</label>
+                    <textarea class="inp" rows="6" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_modelsText" @bind:event="oninput"></textarea>
+
+                    <div class="row">
+                        <button class="btn" disabled="@_busy" @onclick="FetchModels">دریافت خودکار لیست مدل‌ها</button>
+                    </div>
+
+                    <label class="lbl">مدل پیش‌فرض</label>
+                    <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_editing.DefaultModel" @bind:event="oninput" />
+
+                    @if (_status != null)
+                    {
+                        <p class="status" dir="auto">@_status</p>
+                    }
+
+                    <div class="row end">
+                        @if (!_isNew)
+                        {
+                            @if (_confirmDelete)
+                            {
+                                <button class="btn danger" @onclick="DeleteProvider">حذف قطعی</button>
+                            }
+                            else
+                            {
+                                <button class="btn" @onclick="() => _confirmDelete = true">حذف</button>
+                            }
+                        }
+                        <button class="primary" @onclick="Save">ذخیره</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    ProviderConfig? _editing;
+    bool _isNew;
+    string _modelsText = "";
+    bool _showKey;
+    bool _busy;
+    bool _confirmDelete;
+    bool _confirmClear;
+    string? _status;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        if (State.Providers.Count == 0) StartNew();
+        else Edit(State.CurrentProvider ?? State.Providers[0]);
+    }
+
+    void Edit(ProviderConfig p)
+    {
+        _editing = p.Clone();
+        _isNew = false;
+        _modelsText = string.Join("\n", p.Models);
+        _status = null;
+        _showKey = false;
+        _confirmDelete = false;
+    }
+
+    void StartNew()
+    {
+        _editing = new ProviderConfig
+        {
+            Name = "OpenAI",
+            Type = ProviderType.OpenAiCompatible,
+            BaseUrl = ProviderDefaults.BaseUrl(ProviderType.OpenAiCompatible)
+        };
+        _isNew = true;
+        _modelsText = "";
+        _status = null;
+        _showKey = false;
+        _confirmDelete = false;
+    }
+
+    void OnSystemPromptInput(ChangeEventArgs e) => State.SetSystemPrompt(e.Value?.ToString() ?? string.Empty);
+
+    void OnRtlChanged(ChangeEventArgs e) => State.SetRtl(e.Value is true);
+
+    void OnPreset(ChangeEventArgs e)
+    {
+        var preset = ProviderDefaults.Presets.FirstOrDefault(p => p.Name == e.Value?.ToString());
+        if (preset == null || _editing == null) return;
+        _editing.Name = preset.Name;
+        _editing.Type = preset.Type;
+        _editing.BaseUrl = preset.BaseUrl;
+    }
+
+    void OnTypeChanged()
+    {
+        if (_editing == null) return;
+        // switching type: if the URL is still one of the known defaults, swap it for the new type's default
+        var known = ProviderDefaults.Presets.Select(p => p.BaseUrl)
+            .Concat(new[] { "https://api.openai.com/v1", "https://api.anthropic.com/v1", "https://generativelanguage.googleapis.com/v1beta" });
+        if (string.IsNullOrWhiteSpace(_editing.BaseUrl) || known.Contains(_editing.BaseUrl.Trim()))
+            _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
+    }
+
+    async Task FetchModels()
+    {
+        if (_editing == null) return;
+        if (string.IsNullOrWhiteSpace(_editing.BaseUrl))
+            _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
+
+        _busy = true;
+        _status = "در حال دریافت...";
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var list = await State.FetchModelsAsync(_editing, cts.Token);
+            _modelsText = string.Join("\n", list);
+            if (string.IsNullOrWhiteSpace(_editing.DefaultModel) && list.Count > 0)
+                _editing.DefaultModel = list[0];
+            _status = $"{list.Count} مدل دریافت شد. برای نگه‌داشتن، ذخیره را بزنید.";
+        }
+        catch (Exception ex)
+        {
+            _status = "خطا: " + ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    async Task Save()
+    {
+        if (_editing == null) return;
+        if (string.IsNullOrWhiteSpace(_editing.Name))
+        {
+            _status = "نام را وارد کنید.";
+            return;
+        }
+
+        _editing.Name = _editing.Name.Trim();
+        _editing.ApiKey = (_editing.ApiKey ?? "").Trim();
+        _editing.DefaultModel = (_editing.DefaultModel ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(_editing.BaseUrl))
+            _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
+        _editing.BaseUrl = _editing.BaseUrl.Trim();
+
+        _editing.Models = _modelsText
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct()
+            .ToList();
+        if (string.IsNullOrWhiteSpace(_editing.DefaultModel) && _editing.Models.Count > 0)
+            _editing.DefaultModel = _editing.Models[0];
+
+        await State.SaveProviderAsync(_editing);
+        _isNew = false;
+        _status = "ذخیره شد ✓";
+    }
+
+    async Task DeleteProvider()
+    {
+        if (_editing == null) return;
+        await State.DeleteProviderAsync(_editing.Id);
+        _confirmDelete = false;
+        if (State.Providers.Count == 0) StartNew();
+        else Edit(State.Providers[0]);
+    }
+
+    async Task ClearAll()
+    {
+        _confirmClear = false;
+        await State.ClearAllConversationsAsync();
+    }
+}
