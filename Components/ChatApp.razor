@@ -1,6 +1,7 @@
 @inherits StateComponent
 @using Microsoft.Maui.Storage
 @inject IJSRuntime JS
+@inject LogService Log
 
 <div class="app" dir="@(State.IsRtl ? "rtl" : "ltr")">
 
@@ -155,6 +156,11 @@
     {
         <ProjectDialog />
     }
+
+    @if (State.ShowLogs)
+    {
+        <LogDialog />
+    }
 </div>
 
 @code {
@@ -231,6 +237,9 @@
     // The "save" button of a code block was clicked.
     [JSInvokable]
     public Task OnSaveText(string name, string text) => State.SaveTextAsync(name, text);
+
+    [JSInvokable]
+    public void OnJsError(string message) => Log.Error("JS: " + message);
 
     [JSInvokable]
     public void OnFileTooBig(string name) =>

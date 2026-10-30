@@ -15,23 +15,29 @@ public class ChatState
     readonly ProviderFactory _factory;
     readonly FileExportService _export;
     readonly HttpClient _http;
+    readonly LogService _log;
 
     CancellationTokenSource? _cts;
     bool _initialized;
     DateTime _lastNotify = DateTime.MinValue;
 
-    public ChatState(StorageService storage, ProviderFactory factory, FileExportService export, HttpClient http)
+    public ChatState(StorageService storage, ProviderFactory factory, FileExportService export, HttpClient http, LogService log)
     {
         _storage = storage;
         _factory = factory;
         _export = export;
         _http = http;
+        _log = log;
     }
 
     // ------------------------------------------------------------ viewer, saving, toast
 
     /// <summary>An image shown full-size in the viewer.</summary>
     public record ViewerImage(string Src, string Name, Attachment? Att);
+
+    public bool ShowLogs { get; private set; }
+    public void OpenLogs() { ShowLogs = true; Notify(); }
+    public void CloseLogs() { ShowLogs = false; Notify(); }
 
     public ViewerImage? Viewer { get; private set; }
     public string? Toast { get; private set; }
@@ -65,6 +71,7 @@ public class ChatState
         }
         catch (Exception ex)
         {
+            _log.Error($"Saving file '{name}' failed", ex);
             SetNotice("ذخیره ناموفق بود: " + ex.Message);
         }
     }
@@ -114,6 +121,7 @@ public class ChatState
         }
         catch (Exception ex)
         {
+            _log.Error("Downloading image failed", ex);
             SetNotice("دانلود تصویر ناموفق بود: " + ex.Message);
         }
     }
@@ -491,8 +499,20 @@ public class ChatState
         await _storage.SaveProvidersAsync(Providers);
     }
 
-    public Task<List<string>> FetchModelsAsync(ProviderConfig cfg, CancellationToken ct) =>
-        _factory.Create(cfg.Type).ListModelsAsync(cfg, ct);
+    public async Task<List<string>> FetchModelsAsync(ProviderConfig cfg, CancellationToken ct)
+    {
+        try
+        {
+            var list = await _factory.Create(cfg.Type).ListModelsAsync(cfg, ct);
+            _log.Info($"Fetched {list.Count} models from {cfg.Name}");
+            return list;
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Fetching models from {cfg.Name} failed", ex);
+            throw;
+        }
+    }
 
     // ------------------------------------------------------------ conversations
 
@@ -734,6 +754,9 @@ public class ChatState
 
         // project: extra instructions go to the system prompt, reference files go in front of the first message
         var project = ProjectOf(conv);
+        var fileCount = history.Sum(m => m.Attachments.Count);
+        _log.Info($"Request: {provider.Name} ({provider.Type}) / {model}, {history.Count} messages, {fileCount} attachments" +
+                  (project != null ? $", project '{project.Name}'" : ""));
         var system = string.Join("\n\n",
             new[] { SystemPrompt, project?.Instructions }.Where(x => !string.IsNullOrWhiteSpace(x)));
         if (project is { Files.Count: > 0 })
@@ -775,6 +798,7 @@ public class ChatState
         catch (Exception ex)
         {
             reply.ErrorText = ex.Message;
+            _log.Error($"Request to {provider.Name} ({provider.Type}) / {model} failed", ex);
         }
         finally
         {

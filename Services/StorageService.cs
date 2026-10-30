@@ -20,6 +20,9 @@ public class StorageService
     };
 
     readonly SemaphoreSlim _lock = new(1, 1);
+    readonly LogService _log;
+
+    public StorageService(LogService log) => _log = log;
 
     static string PathOf(string name) => Path.Combine(FileSystem.AppDataDirectory, name);
 
@@ -130,8 +133,9 @@ public class StorageService
             var text = await File.ReadAllTextAsync(path);
             return JsonSerializer.Deserialize<T>(text, Json);
         }
-        catch
+        catch (Exception ex)
         {
+            _log.Error($"Could not read {file}", ex);
             return default;
         }
     }
@@ -146,9 +150,9 @@ public class StorageService
             await File.WriteAllTextAsync(tmp, json);
             File.Move(tmp, path, true);
         }
-        catch
+        catch (Exception ex)
         {
-            // best effort
+            _log.Error($"Could not save {file}", ex);
         }
         finally
         {

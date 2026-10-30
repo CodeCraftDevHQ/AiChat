@@ -44,6 +44,8 @@
                           value="@State.SystemPrompt"
                           @oninput="OnSystemPromptInput"></textarea>
 
+                <button class="btn wide" @onclick="State.OpenLogs">مشاهده لاگ‌ها</button>
+
                 @if (_confirmClear)
                 {
                     <button class="btn danger" @onclick="ClearAll">مطمئنید؟ همه گفتگوها پاک می‌شود</button>

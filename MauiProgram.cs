@@ -21,10 +21,23 @@ public static class MauiProgram
         // cancellation is handled per request.
         builder.Services.AddSingleton(new HttpClient { Timeout = Timeout.InfiniteTimeSpan });
         builder.Services.AddSingleton<ProviderFactory>();
+        builder.Services.AddSingleton<LogService>();
         builder.Services.AddSingleton<StorageService>();
         builder.Services.AddSingleton<FileExportService>();
         builder.Services.AddSingleton<ChatState>();
 
-        return builder.Build();
+        var app = builder.Build();
+
+        var log = app.Services.GetRequiredService<LogService>();
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => log.Error("Unhandled exception: " + e.ExceptionObject);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            log.Error("Unobserved task exception: " + e.Exception.GetBaseException());
+            e.SetObserved();
+        };
+        log.Info($"App started. {AppInfo.Current.Name} {AppInfo.Current.VersionString} on " +
+                 $"{DeviceInfo.Current.Platform} {DeviceInfo.Current.VersionString} ({DeviceInfo.Current.Model})");
+
+        return app;
     }
 }
