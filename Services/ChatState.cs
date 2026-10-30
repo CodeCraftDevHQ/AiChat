@@ -402,8 +402,58 @@ public class ChatState
     public void ToggleSidebar() { SidebarOpen = !(SidebarOpen ?? false); Notify(); }
     public void CloseSidebar() { SidebarOpen = false; Notify(); }
 
-    public void OpenSettings() { ShowSettings = true; if (IsNarrow) SidebarOpen = false; Notify(); }
-    public void CloseSettings() { ShowSettings = false; Notify(); }
+    /// <summary>"general", "api", "chat", "data", "about" or null (on phones: the section list).</summary>
+    public string? SettingsSection { get; private set; }
+
+    public void OpenSettings()
+    {
+        SettingsSection = null;
+        ShowSettings = true;
+        if (IsNarrow) SidebarOpen = false;
+        Notify();
+    }
+
+    public void OpenSettingsAt(string section)
+    {
+        OpenSettings();
+        SettingsSection = section;
+        Notify();
+    }
+
+    public void SetSettingsSection(string? section) { SettingsSection = section; Notify(); }
+    public void CloseSettings() { ShowSettings = false; SettingsSection = null; Notify(); }
+
+    // ------------------------------------------------------------ back navigation
+
+    /// <summary>The project dialog registers its own "cancel" here so it can clean up files it uploaded.</summary>
+    public Action? ProjectDialogCancelHandler { get; set; }
+
+    /// <summary>
+    /// Closes the top-most layer (viewer, dialogs, settings page, sidebar).
+    /// Returns false when nothing was open, so the caller can let the app go to the background.
+    /// </summary>
+    public bool HandleBack(bool includeSidebar = true)
+    {
+        if (Viewer != null) { CloseViewer(); return true; }
+        if (ShowLogs) { CloseLogs(); return true; }
+
+        if (ProjectDialogOpen)
+        {
+            if (ProjectDialogCancelHandler != null) ProjectDialogCancelHandler();
+            else CloseProjectDialog();
+            return true;
+        }
+
+        if (ShowSettings)
+        {
+            if (IsNarrow && SettingsSection != null) SetSettingsSection(null); // section -> section list
+            else CloseSettings();                                               // list -> chat
+            return true;
+        }
+
+        if (includeSidebar && IsNarrow && SidebarOpen == true) { CloseSidebar(); return true; }
+        return false;
+    }
 
     public void SetNotice(string? text) { Notice = text; Notify(); }
     public void ClearNotice() => SetNotice(null);

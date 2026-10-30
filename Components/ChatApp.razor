@@ -17,7 +17,7 @@
             <div class="pickers">
                 @if (State.Providers.Count == 0)
                 {
-                    <button class="chip" @onclick="State.OpenSettings">+ افزودن API</button>
+                    <button class="chip" @onclick="OpenApiSettings">+ افزودن API</button>
                 }
                 else
                 {
@@ -62,7 +62,7 @@
                     @if (State.Providers.Count == 0)
                     {
                         <p class="muted">برای شروع، کلید API سرویس مورد نظرتان را اضافه کنید.</p>
-                        <button class="primary" @onclick="State.OpenSettings">افزودن API</button>
+                        <button class="primary" @onclick="OpenApiSettings">افزودن API</button>
                     }
                     else
                     {
@@ -170,6 +170,8 @@
     Conversation? _lastActive;
     string? _appliedTheme;
 
+    void OpenApiSettings() => State.OpenSettingsAt("api");
+
     async Task ToggleTheme()
     {
         var dark = await JS.InvokeAsync<bool>("chat.isDark");
@@ -188,6 +190,9 @@
             _self = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("chat.initComposer", _input, _self);
             await JS.InvokeVoidAsync("chat.initDrop", _self);
+
+            // Android back button: close the top-most layer first, only then leave the app
+            BackNavigation.Handler = () => State.HandleBack();
             var narrow = await JS.InvokeAsync<bool>("chat.isNarrow");
             State.SetNarrow(narrow);
         }
@@ -238,6 +243,10 @@
     [JSInvokable]
     public Task OnSaveText(string name, string text) => State.SaveTextAsync(name, text);
 
+    // Esc closes dialogs (desktop)
+    [JSInvokable]
+    public void OnEscape() => State.HandleBack(includeSidebar: false);
+
     [JSInvokable]
     public void OnJsError(string message) => Log.Error("JS: " + message);
 
@@ -253,7 +262,7 @@
         if (err != null)
         {
             State.SetNotice(err);
-            if (State.Providers.Count == 0) State.OpenSettings();
+            if (State.Providers.Count == 0) State.OpenSettingsAt("api");
             return;
         }
 
@@ -285,6 +294,7 @@
     public override void Dispose()
     {
         base.Dispose();
+        BackNavigation.Handler = null;
         _self?.Dispose();
     }
 }

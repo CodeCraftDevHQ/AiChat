@@ -194,3 +194,9 @@ window.addEventListener('error', (e) => {
 window.addEventListener('unhandledrejection', (e) => {
     if (window.chat.dotnet) window.chat.dotnet.invokeMethodAsync('OnJsError', 'Unhandled promise rejection: ' + (e.reason && e.reason.message || e.reason));
 });
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && window.chat.dotnet && !e.defaultPrevented) {
+        window.chat.dotnet.invokeMethodAsync('OnEscape');
+    }
+});

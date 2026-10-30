@@ -78,6 +78,13 @@
         _original = State.ProjectDialogTarget;
         _isNew = _original == null;
         _project = _original?.Clone() ?? new Project();
+        State.ProjectDialogCancelHandler = Cancel;
+    }
+
+    public override void Dispose()
+    {
+        State.ProjectDialogCancelHandler = null;
+        base.Dispose();
     }
 
     async Task AddFiles()
