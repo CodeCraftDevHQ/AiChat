@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" width="456" height="456" viewBox="0 0 456 456" version="1.1">
+    <!-- chat bubble -->
+    <path fill="#FFFFFF" d="M228 96c-72 0-120 44-120 104 0 34 15 62 40 81-2 18-9 36-22 52 28-2 52-12 70-26 10 2 21 3 32 3 72 0 120-44 120-110S300 96 228 96z" />
+    <!-- sparkle -->
+    <path fill="#10A37F" d="M228 148c4 30 18 44 48 48-30 4-44 18-48 48-4-30-18-44-48-48 30-4 44-18 48-48z" />
+</svg>

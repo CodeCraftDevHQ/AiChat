@@ -26,6 +26,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<!-- App icon and splash screen -->
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#10A37F" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#212121" BaseSize="160,160" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.*" />
 		<PackageReference Include="Markdig" Version="0.*" />

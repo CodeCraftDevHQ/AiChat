@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 	<!-- usesCleartextTraffic lets you talk to local servers such as Ollama / LM Studio over http:// -->
-	<application android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true"></application>
+	<application android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round"></application>
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
 </manifest>
