@@ -16,8 +16,9 @@
     color-scheme: dark;
 }
 
+/* Theme: no data-theme = follow the system; data-theme="light" / "dark" = forced by the user. */
 @media (prefers-color-scheme: light) {
-    :root {
+    :root:not([data-theme]), :root[data-theme="system"] {
         --bg: #ffffff;
         --sidebar: #f9f9f9;
         --surface: #f4f4f4;
@@ -30,6 +31,34 @@
         --code-head: #ececec;
         color-scheme: light;
     }
+}
+
+:root[data-theme="light"] {
+    --bg: #ffffff;
+    --sidebar: #f9f9f9;
+    --surface: #f4f4f4;
+    --surface-2: #e9e9e9;
+    --hover: #ececec;
+    --text: #0d0d0d;
+    --muted: #6b6b6b;
+    --border: #e3e3e3;
+    --code-bg: #f7f7f8;
+    --code-head: #ececec;
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    --bg: #212121;
+    --sidebar: #171717;
+    --surface: #2f2f2f;
+    --surface-2: #383838;
+    --hover: #2a2a2a;
+    --text: #ececec;
+    --muted: #9b9b9b;
+    --border: #3b3b3b;
+    --code-bg: #0f0f0f;
+    --code-head: #2a2a2a;
+    color-scheme: dark;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }

@@ -1,4 +1,16 @@
 window.chat = {
+    // theme: "system" | "light" | "dark"
+    setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme || 'system');
+    },
+
+    isDark() {
+        const t = document.documentElement.getAttribute('data-theme');
+        if (t === 'dark') return true;
+        if (t === 'light') return false;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    },
+
     isNarrow() {
         return window.matchMedia('(max-width: 768px)').matches;
     },

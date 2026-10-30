@@ -43,6 +43,16 @@ public class ChatState
     public bool IsNarrow { get; private set; }
     public string? Notice { get; private set; }
 
+    /// <summary>"system", "light" or "dark".</summary>
+    public string Theme { get; private set; } = "system";
+
+    public void SetTheme(string theme)
+    {
+        Theme = theme is "light" or "dark" ? theme : "system";
+        Preferences.Default.Set("theme", Theme);
+        Notify();
+    }
+
     public bool IsRtl { get; private set; } = true;
     public string SystemPrompt { get; private set; } = "";
 
@@ -57,6 +67,7 @@ public class ChatState
         Conversations = (await _storage.LoadConversationsAsync() ?? new())
             .OrderByDescending(c => c.Updated).ToList();
 
+        Theme = Preferences.Default.Get("theme", "system");
         IsRtl = Preferences.Default.Get("rtl", true);
         SystemPrompt = Preferences.Default.Get("system_prompt", "");
 
