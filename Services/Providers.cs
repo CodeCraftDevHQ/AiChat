@@ -10,7 +10,7 @@ namespace AiChat.Services;
 public interface IChatProvider
 {
     IAsyncEnumerable<string> StreamAsync(ProviderConfig cfg, string model, IReadOnlyList<ChatMessage> history,
-        string? systemPrompt, CancellationToken ct);
+        string? systemPrompt, Func<string, byte[], Task>? onImage, CancellationToken ct);
 
     Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct);
 }
@@ -100,6 +100,43 @@ static class HistoryHelper
     }
 }
 
+static class ImageHelper
+{
+    /// <summary>
+    /// A data: URI is stored as a file through onImage (returns null);
+    /// anything else (http URL) is returned as a Markdown image so the chat can show it.
+    /// </summary>
+    public static async Task<string?> HandleUrlAsync(string url, Func<string, byte[], Task>? onImage)
+    {
+        if (url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var comma = url.IndexOf(',');
+            var semi = url.IndexOf(';');
+            if (comma > 5 && onImage != null)
+            {
+                var mime = url[5..(semi > 5 && semi < comma ? semi : comma)];
+                try
+                {
+                    await onImage(string.IsNullOrWhiteSpace(mime) ? "image/png" : mime,
+                        Convert.FromBase64String(url[(comma + 1)..]));
+                    return null;
+                }
+                catch (FormatException)
+                {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return $"\n\n![image]({url})\n\n";
+
+        return null;
+    }
+}
+
 static class ProviderHttp
 {
     public static string Url(ProviderConfig cfg, string path)
@@ -170,7 +207,7 @@ public class OpenAiCompatibleProvider : IChatProvider
     public OpenAiCompatibleProvider(HttpClient http) => _http = http;
 
     public async IAsyncEnumerable<string> StreamAsync(ProviderConfig cfg, string model,
-        IReadOnlyList<ChatMessage> history, string? systemPrompt, [EnumeratorCancellation] CancellationToken ct)
+        IReadOnlyList<ChatMessage> history, string? systemPrompt, Func<string, byte[], Task>? onImage, [EnumeratorCancellation] CancellationToken ct)
     {
         var messages = new JsonArray();
         if (!string.IsNullOrWhiteSpace(systemPrompt))
@@ -225,10 +262,24 @@ public class OpenAiCompatibleProvider : IChatProvider
 
                 if (root.TryGetProperty("choices", out var choices) &&
                     choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
-                    choices[0].TryGetProperty("delta", out var delta) &&
-                    delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+                    choices[0].TryGetProperty("delta", out var delta))
                 {
-                    text = c.GetString();
+                    if (delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+                        text = c.GetString();
+
+                    // Image output (e.g. OpenRouter image models): delta.images[].image_url.url
+                    if (delta.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var im in imgs.EnumerateArray())
+                        {
+                            if (im.TryGetProperty("image_url", out var iu) &&
+                                iu.TryGetProperty("url", out var u) && u.GetString() is { Length: > 0 } url)
+                            {
+                                var md = await ImageHelper.HandleUrlAsync(url, onImage);
+                                if (md != null) text = (text ?? "") + md;
+                            }
+                        }
+                    }
                 }
             }
             catch (JsonException)
@@ -270,7 +321,7 @@ public class AnthropicProvider : IChatProvider
     public AnthropicProvider(HttpClient http) => _http = http;
 
     public async IAsyncEnumerable<string> StreamAsync(ProviderConfig cfg, string model,
-        IReadOnlyList<ChatMessage> history, string? systemPrompt, [EnumeratorCancellation] CancellationToken ct)
+        IReadOnlyList<ChatMessage> history, string? systemPrompt, Func<string, byte[], Task>? onImage, [EnumeratorCancellation] CancellationToken ct)
     {
         var messages = new JsonArray();
         foreach (var t in HistoryHelper.Build(history))
@@ -367,7 +418,7 @@ public class GeminiProvider : IChatProvider
     static string CleanModel(string model) => model.StartsWith("models/") ? model["models/".Length..] : model;
 
     public async IAsyncEnumerable<string> StreamAsync(ProviderConfig cfg, string model,
-        IReadOnlyList<ChatMessage> history, string? systemPrompt, [EnumeratorCancellation] CancellationToken ct)
+        IReadOnlyList<ChatMessage> history, string? systemPrompt, Func<string, byte[], Task>? onImage, [EnumeratorCancellation] CancellationToken ct)
     {
         var contents = new JsonArray();
         foreach (var t in HistoryHelper.Build(history))
@@ -426,6 +477,19 @@ public class GeminiProvider : IChatProvider
                         if (part.TryGetProperty("thought", out var th) && th.ValueKind == JsonValueKind.True) continue;
                         if (part.TryGetProperty("text", out var tx) && tx.ValueKind == JsonValueKind.String)
                             sb.Append(tx.GetString());
+
+                        // Image output (Gemini image models): inlineData { mimeType, data }
+                        if ((part.TryGetProperty("inlineData", out var inl) || part.TryGetProperty("inline_data", out inl)) &&
+                            inl.ValueKind == JsonValueKind.Object && onImage != null)
+                        {
+                            var mime = inl.TryGetProperty("mimeType", out var mt) ? mt.GetString()
+                                : inl.TryGetProperty("mime_type", out var mt2) ? mt2.GetString() : null;
+                            if (inl.TryGetProperty("data", out var d) && d.GetString() is { Length: > 0 } b64)
+                            {
+                                try { await onImage(mime ?? "image/png", Convert.FromBase64String(b64)); }
+                                catch (FormatException) { }
+                            }
+                        }
                     }
                     text = sb.ToString();
                 }

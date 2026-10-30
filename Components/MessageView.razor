@@ -34,6 +34,16 @@
                     <div class="md">@((MarkupString)Message.Html)</div>
                 }
 
+                @if (Message.Attachments.Count > 0)
+                {
+                    <div class="att-row start">
+                        @foreach (var a in Message.Attachments)
+                        {
+                            <AttachmentChip @key="a" Attachment="a" />
+                        }
+                    </div>
+                }
+
                 @if (Message.ErrorText != null)
                 {
                     <div class="error-box" dir="auto">⚠️ @Message.ErrorText</div>
@@ -53,6 +63,12 @@
                                 {
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></svg>
                                 }
+                            </button>
+                        }
+                        @if (!string.IsNullOrEmpty(Message.Content))
+                        {
+                            <button class="icon-btn sm" title="ذخیره پاسخ به‌صورت فایل (.md)" @onclick="SaveAnswer">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11" /><path d="m7 11 5 5 5-5" /><path d="M5 20h14" /></svg>
                             </button>
                         }
                         @if (IsLast)
@@ -78,6 +94,8 @@
     [Parameter] public bool Streaming { get; set; }
 
     bool _copied;
+
+    Task SaveAnswer() => State.SaveTextAsync("answer.md", Message.Content);
 
     async Task CopyAsync()
     {

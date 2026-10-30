@@ -2,10 +2,10 @@
 
 @if (Attachment.Kind == "image")
 {
-    <div class="att-img">
+    <div class="att-img" title="@Attachment.Name" @onclick="OpenImage">
         @if (Attachment.DataUri != null)
         {
-            <img src="@Attachment.DataUri" alt="@Attachment.Name" title="@Attachment.Name" />
+            <img src="@Attachment.DataUri" alt="@Attachment.Name" />
         }
         else
         {
@@ -13,13 +13,13 @@
         }
         @if (Removable)
         {
-            <button class="att-x" title="حذف" @onclick="OnRemove">×</button>
+            <button class="att-x" title="حذف" @onclick="OnRemove" @onclick:stopPropagation="true">×</button>
         }
     </div>
 }
 else
 {
-    <div class="att-file" title="@Attachment.Name">
+    <div class="att-file" title="برای ذخیره کلیک کنید: @Attachment.Name" @onclick="SaveFile">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" /><path d="M14 3v5h5" /></svg>
         <span class="att-meta">
             <span class="att-name" dir="auto">@Attachment.Name</span>
@@ -27,7 +27,7 @@ else
         </span>
         @if (Removable)
         {
-            <button class="att-x inline" title="حذف" @onclick="OnRemove">×</button>
+            <button class="att-x inline" title="حذف" @onclick="OnRemove" @onclick:stopPropagation="true">×</button>
         }
     </div>
 }
@@ -46,4 +46,12 @@ else
                 Attachment.DataUri = $"data:{Attachment.MimeType};base64,{Convert.ToBase64String(bytes)}";
         }
     }
+
+    void OpenImage()
+    {
+        if (Attachment.DataUri != null)
+            State.OpenViewer(Attachment.DataUri, Attachment.Name, Attachment);
+    }
+
+    Task SaveFile() => State.SaveAttachmentAsync(Attachment);
 }

@@ -22,6 +22,7 @@ public static class MauiProgram
         builder.Services.AddSingleton(new HttpClient { Timeout = Timeout.InfiniteTimeSpan });
         builder.Services.AddSingleton<ProviderFactory>();
         builder.Services.AddSingleton<StorageService>();
+        builder.Services.AddSingleton<FileExportService>();
         builder.Services.AddSingleton<ChatState>();
 
         return builder.Build();

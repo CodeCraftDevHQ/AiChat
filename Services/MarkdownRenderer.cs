@@ -20,7 +20,10 @@ public static class MarkdownRenderer
     static readonly Regex PreBare = new(@"<pre><code>", RegexOptions.Compiled);
     static readonly Regex BadHref = new(@"href=""\s*(javascript|data|vbscript):[^""]*""", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    const string CopyButton = "<button type=\"button\" class=\"code-copy\">کپی</button>";
+    static readonly Regex ImgTag = new(@"<img ", RegexOptions.Compiled);
+
+    const string CopyButton =
+        "<button type=\"button\" class=\"code-save\">ذخیره</button><button type=\"button\" class=\"code-copy\">کپی</button>";
 
     public static string ToHtml(string? markdown)
     {
@@ -31,6 +34,7 @@ public static class MarkdownRenderer
         html = PreWithLang.Replace(html, "<pre data-lang=\"$1\">" + CopyButton + "<code class=\"language-$1\">");
         html = PreBare.Replace(html, "<pre data-lang=\"code\">" + CopyButton + "<code>");
         html = BadHref.Replace(html, "href=\"#\"");
+        html = ImgTag.Replace(html, "<img class=\"md-img\" loading=\"lazy\" ");
         return html;
     }
 }
