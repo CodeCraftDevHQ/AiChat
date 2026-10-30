@@ -49,7 +49,7 @@
             </button>
         </header>
 
-        <div id="messages" class="messages">
+        <div id="messages" class="messages @(Questions.Count >= 2 ? "has-rail" : "")">
             @if (State.Active == null || State.Active.Messages.Count == 0)
             {
                 <div class="welcome">
@@ -77,13 +77,41 @@
                     @for (var i = 0; i < msgs.Count; i++)
                     {
                         var last = i == msgs.Count - 1;
-                        <MessageView @key="msgs[i]" Message="msgs[i]" IsLast="last" Streaming="@(State.IsStreaming && last)" />
+                        <MessageView @key="msgs[i]" Message="msgs[i]" Index="i" IsLast="last" Streaming="@(State.IsStreaming && last)" />
                     }
                 </div>
             }
         </div>
 
+        @if (Questions.Count >= 2)
+        {
+            <div class="qrail @(_railOpen ? "open" : "")" @onmouseleave="CloseRail">
+                <div class="qpanel">
+                    @foreach (var q in Questions)
+                    {
+                        var qi = q.Index;
+                        <button class="qitem @(qi == _activeQ ? "active" : "")" @onclick="() => GoToQuestion(qi)">
+                            <span class="qtext" dir="auto">@q.Text</span>
+                            <i class="qdash"></i>
+                        </button>
+                    }
+                </div>
+                <button class="qdashes" title="سوال‌های شما" @onclick="ToggleRail">
+                    @foreach (var q in Questions)
+                    {
+                        <i class="qd @(q.Index == _activeQ ? "active" : "")"></i>
+                    }
+                </button>
+            </div>
+        }
+
         <div class="composer">
+            @if (!_atBottom && State.Active != null && State.Active.Messages.Count > 0)
+            {
+                <button class="to-bottom" title="رفتن به آخر گفتگو" @onclick="ScrollToBottom">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                </button>
+            }
             @if (State.Notice != null)
             {
                 <div class="notice" @onclick="State.ClearNotice">@State.Notice</div>
@@ -170,6 +198,52 @@
     Conversation? _lastActive;
     string? _appliedTheme;
 
+    // ---------------- question rail (jump to a question)
+
+    record Question(int Index, string Text);
+
+    int _activeQ = -1;
+    bool _atBottom = true;
+    bool _railOpen;
+
+    List<Question> Questions
+    {
+        get
+        {
+            var list = new List<Question>();
+            var msgs = State.Active?.Messages;
+            if (msgs == null) return list;
+            for (var i = 0; i < msgs.Count; i++)
+                if (msgs[i].Role == "user")
+                    list.Add(new Question(i, QuestionText(msgs[i])));
+            return list;
+        }
+    }
+
+    static string QuestionText(ChatMessage m)
+    {
+        if (!string.IsNullOrWhiteSpace(m.Content))
+            return m.Content.Trim().Replace("\n", " ");
+        return "📎 " + (m.Attachments.FirstOrDefault()?.Name ?? "…");
+    }
+
+    void ToggleRail() => _railOpen = !_railOpen;
+    void CloseRail() => _railOpen = false;
+
+    async Task GoToQuestion(int index)
+    {
+        if (State.IsNarrow) _railOpen = false;
+        await JS.InvokeVoidAsync("chat.scrollToMsg", index);
+    }
+
+    Task ScrollToBottom() => JS.InvokeVoidAsync("chat.scrollToBottom", "messages").AsTask();
+
+    [JSInvokable]
+    public Task OnActiveQuestion(int index) => InvokeAsync(() => { _activeQ = index; StateHasChanged(); });
+
+    [JSInvokable]
+    public Task OnAtBottom(bool atBottom) => InvokeAsync(() => { _atBottom = atBottom; StateHasChanged(); });
+
     void OpenApiSettings() => State.OpenSettingsAt("api");
 
     async Task ToggleTheme()
@@ -190,6 +264,7 @@
             _self = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("chat.initComposer", _input, _self);
             await JS.InvokeVoidAsync("chat.initDrop", _self);
+            await JS.InvokeVoidAsync("chat.initRail", _self);
 
             // Android back button: close the top-most layer first, only then leave the app
             BackNavigation.Handler = () => State.HandleBack();

@@ -108,6 +108,60 @@ window.chat = {
         return v;
     },
 
+    // Tracks which question is at the top of the chat and whether the chat is scrolled to the bottom.
+    initRail(dotnet) {
+        const el = document.getElementById('messages');
+        if (!el || el.__rail) return;
+        el.__rail = true;
+
+        let ticking = false, lastActive = -2, lastBottom = true;
+
+        const check = () => {
+            ticking = false;
+            const top = el.getBoundingClientRect().top;
+            const users = el.querySelectorAll('.msg.user');
+            let active = -1;
+            for (const u of users) {
+                if (u.getBoundingClientRect().top - top <= 80) active = parseInt(u.dataset.idx, 10);
+                else break;
+            }
+            if (active === -1 && users.length) active = parseInt(users[0].dataset.idx, 10);
+            if (active !== lastActive) {
+                lastActive = active;
+                dotnet.invokeMethodAsync('OnActiveQuestion', active);
+            }
+
+            const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+            if (bottom !== lastBottom) {
+                lastBottom = bottom;
+                dotnet.invokeMethodAsync('OnAtBottom', bottom);
+            }
+        };
+
+        el.__check = () => {
+            if (!ticking) { ticking = true; requestAnimationFrame(check); }
+        };
+        el.addEventListener('scroll', el.__check, { passive: true });
+    },
+
+    // Smoothly scroll to a message and flash it.
+    scrollToMsg(idx) {
+        const target = document.getElementById('m-' + idx);
+        const el = document.getElementById('messages');
+        if (!target || !el) return;
+        el.__stick = false;
+        target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        target.classList.add('flash');
+        setTimeout(() => target.classList.remove('flash'), 1400);
+    },
+
+    scrollToBottom(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.__stick = true;
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    },
+
     // Follow the stream, but only while the user is at (or near) the bottom.
     scroll(id, force) {
         const el = document.getElementById(id);
@@ -123,6 +177,7 @@ window.chat = {
             el.scrollTop = el.scrollHeight;
             el.__stick = true;
         }
+        if (el.__check) el.__check();
     },
 
     async copyText(text) {
