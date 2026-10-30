@@ -14,9 +14,44 @@
                     }
                 </div>
             }
-            @if (!string.IsNullOrEmpty(Message.Content))
+            @if (_editing)
             {
-                <div class="user-bubble" dir="auto">@Message.Content</div>
+                <div class="edit-box">
+                    <textarea class="inp" dir="auto" rows="@Math.Clamp(_editText.Split('\n').Length + 1, 3, 12)"
+                              @bind="_editText" @bind:event="oninput"></textarea>
+                    <div class="edit-actions">
+                        <button class="btn" @onclick="CancelEdit">انصراف</button>
+                        <button class="primary" @onclick="SaveEdit">ارسال</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                @if (!string.IsNullOrEmpty(Message.Content))
+                {
+                    <div class="user-bubble" dir="auto">@Message.Content</div>
+                }
+
+                @if (!State.IsStreaming)
+                {
+                    <div class="user-actions">
+                        @if (Message.Versions is { Count: > 1 })
+                        {
+                            <div class="ver-nav" dir="ltr">
+                                <button class="icon-btn sm" title="نسخه قبلی" disabled="@(Message.VersionIndex <= 0)" @onclick="() => Switch(-1)">
+                                    <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6" /></svg>
+                                </button>
+                                <span>@(Message.VersionIndex + 1) / @Message.Versions.Count</span>
+                                <button class="icon-btn sm" title="نسخه بعدی" disabled="@(Message.VersionIndex >= Message.Versions.Count - 1)" @onclick="() => Switch(1)">
+                                    <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg>
+                                </button>
+                            </div>
+                        }
+                        <button class="icon-btn sm" title="ویرایش پیام" @onclick="StartEdit">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                        </button>
+                    </div>
+                }
             }
         </div>
     }
@@ -94,6 +129,24 @@
     [Parameter] public bool Streaming { get; set; }
 
     bool _copied;
+    bool _editing;
+    string _editText = string.Empty;
+
+    void StartEdit()
+    {
+        _editText = Message.Content;
+        _editing = true;
+    }
+
+    void CancelEdit() => _editing = false;
+
+    async Task SaveEdit()
+    {
+        _editing = false;
+        await State.EditAndResendAsync(Message, _editText);
+    }
+
+    Task Switch(int delta) => State.SwitchVersionAsync(Message, delta);
 
     Task SaveAnswer() => State.SaveTextAsync("answer.md", Message.Content);
 

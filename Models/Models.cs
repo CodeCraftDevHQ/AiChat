@@ -56,8 +56,23 @@ public class Attachment
         : Size >= 1024 ? $"{Size / 1024d:0.#} KB" : $"{Size} B";
 }
 
+/// <summary>One alternative of an edited user message: its text plus everything that followed it.</summary>
+public class MessageVersion
+{
+    public string Content { get; set; } = "";
+    public List<Attachment> Attachments { get; set; } = new();
+    public List<ChatMessage> Tail { get; set; } = new();
+}
+
 public class ChatMessage
 {
+    /// <summary>
+    /// Set when a user message has been edited. The slot of the active version is kept empty
+    /// (its data lives in the message and in Conversation.Messages); the other slots hold their snapshots.
+    /// </summary>
+    public List<MessageVersion>? Versions { get; set; }
+    public int VersionIndex { get; set; }
+
     public string Role { get; set; } = "user"; // "user" | "assistant"
     public string Content { get; set; } = "";
     public List<Attachment> Attachments { get; set; } = new();

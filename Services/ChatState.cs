@@ -483,6 +483,98 @@ public class ChatState
         Notify();
     }
 
+    /// <summary>Every attachment in these messages, including edited versions and their tails.</summary>
+    static IEnumerable<Attachment> AllAttachments(IEnumerable<ChatMessage> messages)
+    {
+        foreach (var m in messages)
+        {
+            foreach (var a in m.Attachments) yield return a;
+            if (m.Versions == null) continue;
+            foreach (var v in m.Versions)
+            {
+                foreach (var a in v.Attachments) yield return a;
+                foreach (var a in AllAttachments(v.Tail)) yield return a;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ editing messages (versions)
+
+    void SnapshotCurrent(ChatMessage msg, List<ChatMessage> tail)
+    {
+        msg.Versions ??= new List<MessageVersion>();
+        if (msg.Versions.Count == 0) msg.Versions.Add(new MessageVersion());
+        if (msg.VersionIndex >= msg.Versions.Count) msg.VersionIndex = msg.Versions.Count - 1;
+
+        var slot = msg.Versions[msg.VersionIndex];
+        slot.Content = msg.Content;
+        slot.Attachments = msg.Attachments.ToList();
+        slot.Tail = tail;
+    }
+
+    static void ClearActiveSlot(ChatMessage msg)
+    {
+        msg.Versions![msg.VersionIndex] = new MessageVersion();
+    }
+
+    /// <summary>Edits a user message: the old text and everything after it is kept as an earlier version.</summary>
+    public async Task EditAndResendAsync(ChatMessage msg, string newText)
+    {
+        newText = (newText ?? string.Empty).Trim();
+        if (IsStreaming || Active == null || msg.Role != "user") return;
+        if (newText.Length == 0 && msg.Attachments.Count == 0) return;
+
+        var err = ValidateSend();
+        if (err != null) { SetNotice(err); return; }
+
+        var conv = Active;
+        var idx = conv.Messages.IndexOf(msg);
+        if (idx < 0) return;
+
+        var tail = conv.Messages.Skip(idx + 1).ToList();
+        SnapshotCurrent(msg, tail);
+        conv.Messages.RemoveRange(idx + 1, conv.Messages.Count - idx - 1);
+
+        msg.Versions!.Add(new MessageVersion());
+        msg.VersionIndex = msg.Versions.Count - 1;
+        msg.Content = newText;
+
+        var provider = CurrentProvider!;
+        conv.ProviderId = provider.Id;
+        conv.Model = CurrentModel;
+        Notice = null;
+
+        var reply = new ChatMessage { Role = "assistant", Model = $"{provider.Name} · {CurrentModel}" };
+        conv.Messages.Add(reply);
+        await RunAsync(conv, reply, provider, CurrentModel);
+    }
+
+    /// <summary>Shows the previous (delta = -1) or next (delta = +1) version of an edited message.</summary>
+    public async Task SwitchVersionAsync(ChatMessage msg, int delta)
+    {
+        if (IsStreaming || Active == null || msg.Versions == null) return;
+
+        var conv = Active;
+        var idx = conv.Messages.IndexOf(msg);
+        if (idx < 0) return;
+
+        var target = Math.Clamp(msg.VersionIndex + delta, 0, msg.Versions.Count - 1);
+        if (target == msg.VersionIndex) return;
+
+        SnapshotCurrent(msg, conv.Messages.Skip(idx + 1).ToList());
+        conv.Messages.RemoveRange(idx + 1, conv.Messages.Count - idx - 1);
+
+        var v = msg.Versions[target];
+        msg.VersionIndex = target;
+        msg.Content = v.Content;
+        msg.Attachments = v.Attachments.ToList();
+        conv.Messages.AddRange(v.Tail);
+        ClearActiveSlot(msg);
+
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
     public async Task TogglePinAsync(Conversation c)
     {
         c.Pinned = !c.Pinned;
@@ -503,7 +595,7 @@ public class ChatState
     {
         if (Active == c) { Stop(); Active = null; }
         Conversations.Remove(c);
-        _storage.DeleteAttachments(c.Messages.SelectMany(m => m.Attachments));
+        _storage.DeleteAttachments(AllAttachments(c.Messages).ToList());
         Notify();
         await _storage.SaveConversationsAsync(Conversations);
     }
@@ -512,7 +604,7 @@ public class ChatState
     {
         Stop();
         Active = null;
-        _storage.DeleteAttachments(Conversations.SelectMany(c => c.Messages).SelectMany(m => m.Attachments));
+        _storage.DeleteAttachments(AllAttachments(Conversations.SelectMany(c => c.Messages)).ToList());
         _storage.DeleteAttachments(Pending);
         Pending.Clear();
         Conversations.Clear();
