@@ -154,6 +154,17 @@ public class ChatState
     {
         if (Pending.Count >= MaxAttachments) return $"حداکثر {MaxAttachments} فایل در هر پیام مجاز است.";
 
+        var (att, error) = await CreateAttachmentAsync(name, stream);
+        if (att == null) return error;
+
+        Pending.Add(att);
+        Notify();
+        return null;
+    }
+
+    /// <summary>Validates a file and stores it. Used for message attachments and project files.</summary>
+    public async Task<(Attachment? Att, string? Error)> CreateAttachmentAsync(string name, Stream stream)
+    {
         name = Path.GetFileName(name);
         if (string.IsNullOrWhiteSpace(name)) name = "file";
 
@@ -168,10 +179,10 @@ public class ChatState
         {
             ms.Write(buffer, 0, n);
             if (ms.Length > limit)
-                return $"«{name}» بزرگ‌تر از حد مجاز است (حداکثر {(isImage ? "5 مگابایت" : "512 کیلوبایت")}).";
+                return (null, $"«{name}» بزرگ‌تر از حد مجاز است (حداکثر {(isImage ? "5 مگابایت" : "512 کیلوبایت")}).");
         }
         var data = ms.ToArray();
-        if (data.Length == 0) return $"«{name}» خالی است.";
+        if (data.Length == 0) return (null, $"«{name}» خالی است.");
 
         if (!isImage)
         {
@@ -179,15 +190,15 @@ public class ChatState
             var head = Math.Min(data.Length, 8192);
             for (var i = 0; i < head; i++)
                 if (data[i] == 0)
-                    return $"«{name}»: فقط عکس (png, jpg, gif, webp) و فایل‌های متنی/کد پشتیبانی می‌شوند.";
+                    return (null, $"«{name}»: فقط عکس (png, jpg, gif, webp) و فایل‌های متنی/کد پشتیبانی می‌شوند.");
             mime = "text/plain";
         }
 
         var att = await _storage.SaveAttachmentAsync(name, mime!, isImage ? "image" : "text", data);
-        Pending.Add(att);
-        Notify();
-        return null;
+        return (att, null);
     }
+
+    public void DeleteAttachmentFiles(IEnumerable<Attachment> files) => _storage.DeleteAttachments(files.ToList());
 
     public void RemovePending(Attachment a)
     {
@@ -196,6 +207,87 @@ public class ChatState
     }
 
     public Task<byte[]?> ReadAttachmentAsync(Attachment a) => _storage.ReadAttachmentAsync(a);
+
+    // ------------------------------------------------------------ projects
+
+    public const int MaxProjectFiles = 10;
+
+    public List<Project> Projects { get; private set; } = new();
+
+    /// <summary>Project of the chat that is about to be created (a new chat started inside a project).</summary>
+    public string? DraftProjectId { get; private set; }
+
+    public Project? ProjectOf(Conversation? c) =>
+        c?.ProjectId == null ? null : Projects.FirstOrDefault(p => p.Id == c.ProjectId);
+
+    public Project? CurrentProject =>
+        Active != null ? ProjectOf(Active) : Projects.FirstOrDefault(p => p.Id == DraftProjectId);
+
+    public bool ProjectDialogOpen { get; private set; }
+    public Project? ProjectDialogTarget { get; private set; } // null = new project
+
+    public void OpenProjectDialog(Project? p)
+    {
+        ProjectDialogTarget = p;
+        ProjectDialogOpen = true;
+        if (IsNarrow) SidebarOpen = false;
+        Notify();
+    }
+
+    public void CloseProjectDialog()
+    {
+        ProjectDialogOpen = false;
+        ProjectDialogTarget = null;
+        Notify();
+    }
+
+    public async Task SaveProjectAsync(Project edited)
+    {
+        var copy = edited.Clone();
+        var idx = Projects.FindIndex(p => p.Id == copy.Id);
+        if (idx >= 0)
+        {
+            // files that were removed in the dialog are deleted from disk
+            var kept = copy.Files.Select(f => f.Id).ToHashSet();
+            _storage.DeleteAttachments(Projects[idx].Files.Where(f => !kept.Contains(f.Id)));
+            Projects[idx] = copy;
+        }
+        else
+        {
+            Projects.Add(copy);
+        }
+
+        Notify();
+        await _storage.SaveProjectsAsync(Projects);
+    }
+
+    /// <summary>Deletes the project and its files. Its conversations are kept and moved out of the project.</summary>
+    public async Task DeleteProjectAsync(Project p)
+    {
+        foreach (var c in Conversations.Where(c => c.ProjectId == p.Id)) c.ProjectId = null;
+        if (DraftProjectId == p.Id) DraftProjectId = null;
+
+        _storage.DeleteAttachments(p.Files);
+        Projects.RemoveAll(x => x.Id == p.Id);
+
+        Notify();
+        await _storage.SaveProjectsAsync(Projects);
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
+    public async Task MoveConversationAsync(Conversation c, string? projectId)
+    {
+        c.ProjectId = projectId;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
+    public void NewChatInProject(string projectId)
+    {
+        NewChat();
+        DraftProjectId = projectId;
+        Notify();
+    }
 
     public bool IsStreaming { get; private set; }
     public bool ShowSettings { get; private set; }
@@ -224,6 +316,7 @@ public class ChatState
         _initialized = true;
 
         Providers = await _storage.LoadProvidersAsync();
+        Projects = await _storage.LoadProjectsAsync();
         Conversations = (await _storage.LoadConversationsAsync() ?? new())
             .OrderByDescending(c => c.Updated).ToList();
 
@@ -367,6 +460,7 @@ public class ChatState
     {
         Stop();
         Active = null;
+        DraftProjectId = null;
         if (IsNarrow) SidebarOpen = false;
         Notify();
     }
@@ -451,7 +545,12 @@ public class ChatState
 
         if (Active == null)
         {
-            Active = new Conversation { Title = MakeTitle(text.Length > 0 ? text : attachments[0].Name) };
+            Active = new Conversation
+            {
+                Title = MakeTitle(text.Length > 0 ? text : attachments[0].Name),
+                ProjectId = DraftProjectId
+            };
+            DraftProjectId = null;
             Conversations.Insert(0, Active);
         }
 
@@ -501,6 +600,18 @@ public class ChatState
         var history = conv.Messages.TakeWhile(m => !ReferenceEquals(m, reply)).ToList();
         var impl = _factory.Create(provider.Type);
 
+        // project: extra instructions go to the system prompt, reference files go in front of the first message
+        var project = ProjectOf(conv);
+        var system = string.Join("\n\n",
+            new[] { SystemPrompt, project?.Instructions }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        if (project is { Files.Count: > 0 })
+            history.Insert(0, new ChatMessage
+            {
+                Role = "user",
+                Content = "(فایل‌های مرجع این پروژه)",
+                Attachments = project.Files
+            });
+
         try
         {
             // images generated by the model are stored as attachments of the reply
@@ -513,7 +624,7 @@ public class ChatState
                 Notify();
             }
 
-            await foreach (var chunk in impl.StreamAsync(provider, model, history, SystemPrompt, OnImage, ct))
+            await foreach (var chunk in impl.StreamAsync(provider, model, history, system, OnImage, ct))
             {
                 reply.Content += chunk;
 

@@ -56,6 +56,14 @@ public class StorageService
     public Task SaveConversationsAsync(List<Conversation> list) =>
         WriteAsync("conversations.json", JsonSerializer.Serialize(list, Json));
 
+    // ---- projects ----
+
+    public async Task<List<Project>> LoadProjectsAsync() =>
+        await ReadAsync<List<Project>>("projects.json") ?? new();
+
+    public Task SaveProjectsAsync(List<Project> list) =>
+        WriteAsync("projects.json", JsonSerializer.Serialize(list, Json));
+
     // ---- attachments ----
 
     static string AttachDir => Path.Combine(FileSystem.AppDataDirectory, "attachments");

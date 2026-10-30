@@ -455,3 +455,23 @@ select.inp option { background: var(--surface); color: var(--text); }
 .menu button:hover { background: var(--hover); }
 .menu button.danger { color: var(--danger); }
 .menu .sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* ===================== projects ===================== */
+.sb-section.with-action { display: flex; align-items: center; justify-content: space-between; padding-top: 6px; }
+.conv .del.vis { opacity: 1; }
+.conv.project { font-weight: 600; }
+.conv.project .folder { flex: none; color: var(--muted); }
+.conv.project .chev { flex: none; color: var(--muted); transition: transform .15s; transform: rotate(-90deg); }
+.conv.project.open .chev { transform: none; }
+.app[dir="rtl"] .conv.project:not(.open) .chev { transform: rotate(90deg); }
+.conv.indent { margin-inline-start: 18px; font-weight: 400; }
+.project-tag { color: var(--accent); font-size: 14px; margin: 0; }
+
+.menu .submenu { display: flex; flex-direction: column; padding-inline-start: 10px; border-inline-start: 2px solid var(--border); margin: 2px 8px; }
+.menu .submenu button.current { color: var(--accent); }
+
+.modal.narrow { max-width: 580px; height: auto; max-height: 90dvh; }
+.p-body { padding: 8px 20px 12px; overflow-y: auto; flex: 1; min-height: 0; }
+.p-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.p-foot .spacer { flex: 1; }
+.small { font-size: 13px; margin: 0 0 8px; }

@@ -89,8 +89,29 @@ public class Conversation
     public string? ProviderId { get; set; }
     public string Model { get; set; } = "";
     public bool Pinned { get; set; }
+    public string? ProjectId { get; set; }
     public DateTime Updated { get; set; } = DateTime.UtcNow;
     public List<ChatMessage> Messages { get; set; } = new();
+}
+
+public class Project
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "";
+
+    /// <summary>Added to the system prompt of every conversation in this project.</summary>
+    public string Instructions { get; set; } = "";
+
+    /// <summary>Reference files that are sent with the first message of every conversation in this project.</summary>
+    public List<Attachment> Files { get; set; } = new();
+
+    public Project Clone() => new()
+    {
+        Id = Id,
+        Name = Name,
+        Instructions = Instructions,
+        Files = new List<Attachment>(Files)
+    };
 }
 
 public record Preset(string Name, ProviderType Type, string BaseUrl);

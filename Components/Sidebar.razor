@@ -9,20 +9,49 @@
     </div>
 
     <div class="sb-list">
-        @if (State.Conversations.Count == 0)
-        {
-            <div class="sb-empty muted">هنوز گفتگویی ندارید</div>
-        }
         @foreach (var row in BuildRows())
         {
-            if (row.Header != null)
+            if (row.Kind == "projhead")
             {
-                <div class="sb-section">@row.Header</div>
+                <div class="sb-section with-action">
+                    <span>پروژه‌ها</span>
+                    <button class="del vis" title="پروژه جدید" @onclick="NewProject">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                    </button>
+                </div>
+                continue;
+            }
+
+            if (row.Kind == "header")
+            {
+                <div class="sb-section">@row.Text</div>
+                continue;
+            }
+
+            if (row.Kind == "project")
+            {
+                var proj = row.Proj!;
+                var open = _expanded.Contains(proj.Id);
+                <div class="conv project @(open ? "open" : "")" @onclick="() => ToggleProject(proj)">
+                    <svg class="folder" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></svg>
+                    <span class="title" dir="auto">@proj.Name</span>
+                    @if (_confirmProjId == proj.Id)
+                    {
+                        <button class="del confirm" @onclick="() => DeleteProject(proj)" @onclick:stopPropagation="true">حذف پروژه؟</button>
+                    }
+                    else
+                    {
+                        <button class="del" title="گزینه‌ها" @onclick="e => OpenProjMenu(proj, e)" @onclick:stopPropagation="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+                        </button>
+                    }
+                    <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                </div>
                 continue;
             }
 
             var conv = row.Conv!;
-            <div class="conv @(conv == State.Active ? "active" : "")" @onclick="() => State.OpenConversation(conv)">
+            <div class="conv @(conv == State.Active ? "active" : "") @(row.Indent ? "indent" : "")" @onclick="() => State.OpenConversation(conv)">
                 @if (_renamingId == conv.Id)
                 {
                     <input class="rename-input" dir="auto" maxlength="80" @ref="_renameInput"
@@ -51,15 +80,48 @@
                 }
             </div>
         }
+
+        @if (State.Conversations.Count == 0)
+        {
+            <div class="sb-empty muted">هنوز گفتگویی ندارید</div>
+        }
     </div>
 
     @if (_menuConv != null)
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
-        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 170px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 260px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
             <button @onclick="PinFromMenu">@(_menuConv.Pinned ? "برداشتن پین" : "پین کردن")</button>
             <button @onclick="RenameFromMenu">تغییر نام</button>
+            @if (State.Projects.Count > 0 || _menuConv.ProjectId != null)
+            {
+                <button @onclick="() => _moveOpen = !_moveOpen">انتقال به پروژه ‹</button>
+                @if (_moveOpen)
+                {
+                    <div class="submenu">
+                        @foreach (var p in State.Projects)
+                        {
+                            var target = p;
+                            <button class="@(_menuConv.ProjectId == target.Id ? "current" : "")" dir="auto" @onclick="() => MoveTo(target.Id)">📁 @target.Name</button>
+                        }
+                        @if (_menuConv.ProjectId != null)
+                        {
+                            <button @onclick="() => MoveTo(null)">بدون پروژه</button>
+                        }
+                    </div>
+                }
+            }
             <button class="danger" @onclick="DeleteFromMenu">حذف</button>
+        </div>
+    }
+
+    @if (_menuProj != null)
+    {
+        <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
+        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 200px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+            <button @onclick="NewChatInProjectFromMenu">گفتگوی جدید در این پروژه</button>
+            <button @onclick="EditProjectFromMenu">ویرایش پروژه (دستورالعمل و فایل‌ها)</button>
+            <button class="danger" @onclick="DeleteProjectFromMenu">حذف پروژه</button>
         </div>
     }
 
@@ -72,60 +134,144 @@
 </aside>
 
 @code {
-    // ---- menu & rows ----
+    // ---- rows ----
 
-    Conversation? _menuConv;
-    int _menuX, _menuY;
+    record Row(string Kind, string? Text = null, Conversation? Conv = null, Project? Proj = null, bool Indent = false);
 
-    record Row(string? Header, Conversation? Conv);
+    readonly HashSet<string> _expanded = new();
 
     List<Row> BuildRows()
     {
-        var rows = new List<Row>();
+        var rows = new List<Row> { new("projhead") };
+
+        foreach (var p in State.Projects)
+        {
+            rows.Add(new Row("project", Proj: p));
+            if (_expanded.Contains(p.Id))
+                rows.AddRange(State.Conversations
+                    .Where(c => c.ProjectId == p.Id && !c.Pinned)
+                    .Select(c => new Row("conv", Conv: c, Indent: true)));
+        }
+
         var pinned = State.Conversations.Where(c => c.Pinned).ToList();
-        var others = State.Conversations.Where(c => !c.Pinned).ToList();
+        var others = State.Conversations.Where(c => !c.Pinned && State.ProjectOf(c) == null).ToList();
 
         if (pinned.Count > 0)
         {
-            rows.Add(new Row("پین‌شده", null));
-            rows.AddRange(pinned.Select(c => new Row(null, c)));
-            if (others.Count > 0) rows.Add(new Row("گفتگوها", null));
+            rows.Add(new Row("header", "پین‌شده"));
+            rows.AddRange(pinned.Select(c => new Row("conv", Conv: c)));
         }
-        rows.AddRange(others.Select(c => new Row(null, c)));
+        if (others.Count > 0)
+        {
+            rows.Add(new Row("header", "گفتگوها"));
+            rows.AddRange(others.Select(c => new Row("conv", Conv: c)));
+        }
         return rows;
     }
+
+    void ToggleProject(Project p)
+    {
+        if (!_expanded.Remove(p.Id)) _expanded.Add(p.Id);
+    }
+
+    void NewProject() => State.OpenProjectDialog(null);
+
+    // ---- menus ----
+
+    Conversation? _menuConv;
+    Project? _menuProj;
+    bool _moveOpen;
+    int _menuX, _menuY;
 
     void OpenMenu(Conversation c, MouseEventArgs e)
     {
         _confirmId = null;
+        _confirmProjId = null;
+        _moveOpen = false;
+        _menuProj = null;
         _menuConv = c;
         _menuX = (int)e.ClientX;
         _menuY = (int)e.ClientY;
     }
 
-    void CloseMenu() => _menuConv = null;
+    void OpenProjMenu(Project p, MouseEventArgs e)
+    {
+        _confirmId = null;
+        _confirmProjId = null;
+        _menuConv = null;
+        _menuProj = p;
+        _menuX = (int)e.ClientX;
+        _menuY = (int)e.ClientY;
+    }
+
+    void CloseMenu()
+    {
+        _menuConv = null;
+        _menuProj = null;
+        _moveOpen = false;
+    }
 
     async Task PinFromMenu()
     {
         var c = _menuConv;
-        _menuConv = null;
+        CloseMenu();
         if (c != null) await State.TogglePinAsync(c);
     }
 
     void RenameFromMenu()
     {
         var c = _menuConv;
-        _menuConv = null;
+        CloseMenu();
         if (c != null) StartRename(c);
     }
 
     void DeleteFromMenu()
     {
         _confirmId = _menuConv?.Id;
-        _menuConv = null;
+        CloseMenu();
     }
 
+    async Task MoveTo(string? projectId)
+    {
+        var c = _menuConv;
+        CloseMenu();
+        if (c == null) return;
+        await State.MoveConversationAsync(c, projectId);
+        if (projectId != null) _expanded.Add(projectId);
+    }
+
+    void NewChatInProjectFromMenu()
+    {
+        var p = _menuProj;
+        CloseMenu();
+        if (p == null) return;
+        _expanded.Add(p.Id);
+        State.NewChatInProject(p.Id);
+    }
+
+    void EditProjectFromMenu()
+    {
+        var p = _menuProj;
+        CloseMenu();
+        if (p != null) State.OpenProjectDialog(p);
+    }
+
+    void DeleteProjectFromMenu()
+    {
+        _confirmProjId = _menuProj?.Id;
+        CloseMenu();
+    }
+
+    async Task DeleteProject(Project p)
+    {
+        _confirmProjId = null;
+        await State.DeleteProjectAsync(p);
+    }
+
+    // ---- delete / rename ----
+
     string? _confirmId;
+    string? _confirmProjId;
     string? _renamingId;
     string _renameText = string.Empty;
     bool _focusRename;

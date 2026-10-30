@@ -1,0 +1,153 @@
+@inherits StateComponent
+@using Microsoft.Maui.Storage
+
+<div class="modal-backdrop" @onclick="Cancel">
+    <div class="modal narrow" @onclick:stopPropagation="true">
+
+        <div class="modal-head">
+            <h2>@(_isNew ? "پروژه جدید" : "ویرایش پروژه")</h2>
+            <button class="icon-btn" title="بستن" @onclick="Cancel">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+        </div>
+
+        <div class="p-body">
+            <label class="lbl">نام پروژه</label>
+            <input class="inp" dir="auto" maxlength="60" @bind="_project.Name" @bind:event="oninput" placeholder="مثلاً: مقاله، پروژه‌ی برنامه‌نویسی، ..." />
+
+            <label class="lbl">دستورالعمل‌های پروژه</label>
+            <textarea class="inp" rows="6" dir="auto" @bind="_project.Instructions" @bind:event="oninput"
+                      placeholder="به همه‌ی گفتگوهای این پروژه اضافه می‌شود. مثلاً: همیشه به فارسی و رسمی پاسخ بده."></textarea>
+
+            <label class="lbl">فایل‌های پروژه (@_project.Files.Count از @ChatState.MaxProjectFiles)</label>
+            <p class="muted small">این فایل‌ها (عکس یا متن/کد) همراه اولین پیام هر گفتگوی پروژه برای مدل فرستاده می‌شوند. فایل‌های بزرگ توکن زیادی مصرف می‌کنند.</p>
+
+            @if (_project.Files.Count > 0)
+            {
+                <div class="att-row pending">
+                    @foreach (var f in _project.Files)
+                    {
+                        var file = f;
+                        <AttachmentChip @key="file" Attachment="file" Removable="true" OnRemove="() => RemoveFile(file)" />
+                    }
+                </div>
+            }
+
+            <div class="row">
+                <button class="btn" disabled="@(_project.Files.Count >= ChatState.MaxProjectFiles)" @onclick="AddFiles">+ افزودن فایل</button>
+            </div>
+
+            @if (_status != null)
+            {
+                <p class="status" dir="auto">@_status</p>
+            }
+        </div>
+
+        <div class="p-foot">
+            @if (!_isNew)
+            {
+                @if (_confirmDelete)
+                {
+                    <button class="btn danger" @onclick="DeleteProject">حذف قطعی (گفتگوها می‌مانند)</button>
+                }
+                else
+                {
+                    <button class="btn" @onclick="() => _confirmDelete = true">حذف پروژه</button>
+                }
+            }
+            <span class="spacer"></span>
+            <button class="btn" @onclick="Cancel">انصراف</button>
+            <button class="primary" @onclick="Save">ذخیره</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    Project _project = new();
+    Project? _original;
+    bool _isNew;
+    bool _confirmDelete;
+    string? _status;
+
+    // files uploaded during this dialog session (deleted again if the user cancels)
+    readonly List<Attachment> _added = new();
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _original = State.ProjectDialogTarget;
+        _isNew = _original == null;
+        _project = _original?.Clone() ?? new Project();
+    }
+
+    async Task AddFiles()
+    {
+        try
+        {
+            var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "فایل‌های پروژه" });
+            if (picked == null) return;
+
+            var errors = new List<string>();
+            foreach (var f in picked)
+            {
+                if (_project.Files.Count >= ChatState.MaxProjectFiles)
+                {
+                    errors.Add($"حداکثر {ChatState.MaxProjectFiles} فایل مجاز است.");
+                    break;
+                }
+
+                await using var stream = await f.OpenReadAsync();
+                var (att, error) = await State.CreateAttachmentAsync(f.FileName, stream);
+                if (att != null)
+                {
+                    _project.Files.Add(att);
+                    _added.Add(att);
+                }
+                else if (error != null)
+                {
+                    errors.Add(error);
+                }
+            }
+            _status = errors.Count > 0 ? string.Join(" ", errors) : null;
+        }
+        catch (Exception ex)
+        {
+            _status = "خطا در انتخاب فایل: " + ex.Message;
+        }
+    }
+
+    void RemoveFile(Attachment f)
+    {
+        _project.Files.Remove(f);
+        // a file added in this session is not part of any saved project yet, so delete it right away
+        if (_added.Remove(f)) State.DeleteAttachmentFiles(new[] { f });
+    }
+
+    async Task Save()
+    {
+        _project.Name = (_project.Name ?? string.Empty).Trim();
+        _project.Instructions = (_project.Instructions ?? string.Empty).Trim();
+        if (_project.Name.Length == 0)
+        {
+            _status = "نام پروژه را وارد کنید.";
+            return;
+        }
+
+        await State.SaveProjectAsync(_project);
+        State.CloseProjectDialog();
+    }
+
+    void Cancel()
+    {
+        State.DeleteAttachmentFiles(_added);
+        State.CloseProjectDialog();
+    }
+
+    async Task DeleteProject()
+    {
+        if (_original == null) return;
+        State.DeleteAttachmentFiles(_added.Where(a => !_original.Files.Any(o => o.Id == a.Id)));
+        State.CloseProjectDialog();
+        await State.DeleteProjectAsync(_original);
+    }
+}
