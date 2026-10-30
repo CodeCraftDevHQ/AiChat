@@ -8,8 +8,56 @@
         </button>
     </div>
 
+    <div class="sb-search">
+        <div class="sb-search-box">
+            <svg class="muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input dir="auto" placeholder="جست‌وجو در گفتگوها..." value="@_query" @oninput="OnQueryInput" @onkeydown="OnQueryKey" />
+            @if (_query.Length > 0)
+            {
+                <button class="del vis" title="پاک کردن" @onclick="ClearQuery">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            }
+        </div>
+        <div class="seg">
+            <button class="@(!State.SidebarSearchInContent ? "on" : "")" @onclick="() => State.SetSidebarSearchInContent(false)">نام گفتگوها</button>
+            <button class="@(State.SidebarSearchInContent ? "on" : "")" @onclick="() => State.SetSidebarSearchInContent(true)">متن گفتگوها</button>
+        </div>
+    </div>
+
     <div class="sb-list">
-        @foreach (var row in BuildRows())
+        @if (Searching)
+        {
+            var hits = State.SearchConversations(_query, State.SidebarSearchInContent);
+            if (hits.Count == 0)
+            {
+                <div class="sb-empty muted">نتیجه‌ای پیدا نشد</div>
+            }
+            else
+            {
+                <div class="sb-section">@(hits.Count) گفتگو</div>
+            }
+            foreach (var hit in hits)
+            {
+                var h = hit;
+                <div class="conv hit @(h.Conv == State.Active ? "active" : "")" @onclick="() => OpenHit(h)">
+                    <div class="hit-main">
+                        <span class="title" dir="auto">@h.Conv.Title</span>
+                        @if (State.SidebarSearchInContent && h.Count > 0)
+                        {
+                            <span class="badge" title="تعداد دفعات پیدا شدن">@h.Count</span>
+                        }
+                    </div>
+                    @if (h.Match != null)
+                    {
+                        <div class="snippet" dir="auto">@(h.Before)<mark>@(h.Match)</mark>@(h.After)</div>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+        foreach (var row in BuildRows())
         {
             if (row.Kind == "projhead")
             {
@@ -61,7 +109,7 @@
                 }
                 else
                 {
-                    @if (conv.Pinned)
+                    if (conv.Pinned)
                     {
                         <svg class="pin-mark" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3H8v2l1 1v6l-3 3v2h5v5h2v-5h5v-2l-3-3V6l1-1Z" /></svg>
                     }
@@ -84,6 +132,7 @@
         @if (State.Conversations.Count == 0)
         {
             <div class="sb-empty muted">هنوز گفتگویی ندارید</div>
+        }
         }
     </div>
 
@@ -134,6 +183,28 @@
 </aside>
 
 @code {
+    // ---- search ----
+
+    string _query = string.Empty;
+
+    bool Searching => _query.Trim().Length > 0;
+
+    void OnQueryInput(ChangeEventArgs e) => _query = e.Value?.ToString() ?? string.Empty;
+
+    void OnQueryKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") _query = string.Empty;
+    }
+
+    void ClearQuery() => _query = string.Empty;
+
+    void OpenHit(ChatState.SearchHit hit)
+    {
+        // content search: open the chat with the in-chat search bar already filled in
+        if (State.SidebarSearchInContent && hit.Count > 0) State.OpenConversationWithSearch(hit.Conv, _query.Trim());
+        else State.OpenConversation(hit.Conv);
+    }
+
     // ---- rows ----
 
     record Row(string Kind, string? Text = null, Conversation? Conv = null, Project? Proj = null, bool Indent = false);

@@ -271,6 +271,15 @@
         if (State.SearchOpen && !_wasSearchOpen)
         {
             _wasSearchOpen = true;
+
+            // opened from a sidebar search result: start with that text
+            if (State.PendingSearch != null)
+            {
+                _searchText = State.PendingSearch;
+                State.PendingSearch = null;
+                StateHasChanged();
+            }
+
             await _searchInput.FocusAsync();
             if (_searchText.Length > 0) await RunSearch();
         }

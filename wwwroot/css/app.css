@@ -574,3 +574,28 @@ select.inp option { background: var(--surface); color: var(--text); }
 
 ::highlight(search) { background-color: rgba(255, 213, 74, .45); color: inherit; }
 ::highlight(search-current) { background-color: rgba(255, 150, 20, .95); color: #000; }
+
+/* ===================== sidebar search ===================== */
+.sb-search { padding: 0 10px 6px; }
+.sb-search-box {
+    display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 10px; padding: 6px 10px;
+}
+.sb-search-box input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-size: 14.5px; }
+.seg { display: flex; gap: 4px; margin-top: 6px; background: var(--surface); border-radius: 10px; padding: 3px; }
+.seg button {
+    flex: 1; background: transparent; border: 0; border-radius: 8px; padding: 4px 6px; font-size: 12.5px; color: var(--muted);
+}
+.seg button.on { background: var(--bg); color: var(--text); }
+
+.conv.hit { flex-direction: column; align-items: stretch; gap: 2px; }
+.hit-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hit-main .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge {
+    flex: none; min-width: 22px; text-align: center; font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 999px;
+    background: var(--accent); color: #fff; line-height: 20px;
+}
+.snippet {
+    font-size: 12.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; overflow-wrap: anywhere;
+}
+.snippet mark { background: rgba(255, 213, 74, .45); color: var(--text); border-radius: 3px; padding: 0 1px; }

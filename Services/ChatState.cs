@@ -35,6 +35,60 @@ public class ChatState
     /// <summary>An image shown full-size in the viewer.</summary>
     public record ViewerImage(string Src, string Name, Attachment? Att);
 
+    // ------------------------------------------------------------ sidebar search (all chats)
+
+    public record SearchHit(Conversation Conv, int Count, bool TitleMatch, string? Before, string? Match, string? After);
+
+    /// <summary>true = search inside the messages of every chat, false = chat names only.</summary>
+    public bool SidebarSearchInContent { get; private set; } = Preferences.Default.Get("sidebar_search_content", true);
+
+    public void SetSidebarSearchInContent(bool value)
+    {
+        SidebarSearchInContent = value;
+        Preferences.Default.Set("sidebar_search_content", value);
+        Notify();
+    }
+
+    public List<SearchHit> SearchConversations(string query, bool inContent)
+    {
+        var q = SearchText.NormalizeQuery(query);
+        var hits = new List<SearchHit>();
+        if (q.Length == 0) return hits;
+
+        foreach (var c in Conversations)
+        {
+            var titleMatch = SearchText.Count(c.Title, q) > 0;
+            var count = 0;
+            (string, string, string)? snippet = null;
+
+            if (inContent)
+            {
+                foreach (var m in c.Messages)
+                {
+                    var n = SearchText.Count(m.Content, q);
+                    if (n == 0) continue;
+                    count += n;
+                    snippet ??= SearchText.Snippet(m.Content, q);
+                }
+            }
+
+            if (!titleMatch && count == 0) continue;
+            hits.Add(new SearchHit(c, count, titleMatch, snippet?.Item1, snippet?.Item2, snippet?.Item3));
+        }
+        return hits;
+    }
+
+    /// <summary>Text to put in the in-chat search bar when a chat is opened from a search result.</summary>
+    public string? PendingSearch { get; set; }
+
+    public void OpenConversationWithSearch(Conversation c, string query)
+    {
+        OpenConversation(c);
+        PendingSearch = query;
+        SearchOpen = true;
+        Notify();
+    }
+
     /// <summary>The "search in this chat" bar.</summary>
     public bool SearchOpen { get; private set; }
     public void OpenSearch() { SearchOpen = true; Notify(); }
