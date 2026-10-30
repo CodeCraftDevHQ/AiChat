@@ -74,7 +74,6 @@ window.chat = {
     initComposer(el, dotnet) {
         if (!el || el.__init) return;
         el.__init = true;
-        window.chat.dotnet = dotnet; // used by the delegated click handlers below
 
         // Ctrl+V with an image / file in the clipboard attaches it (plain text pastes normally).
         el.addEventListener('paste', (e) => {
@@ -144,45 +143,12 @@ window.chat = {
     }
 };
 
-const EXT = {
-    python: 'py', py: 'py', csharp: 'cs', cs: 'cs', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
-    json: 'json', html: 'html', css: 'css', xml: 'xml', yaml: 'yml', yml: 'yml', sql: 'sql',
-    bash: 'sh', sh: 'sh', shell: 'sh', powershell: 'ps1', ps1: 'ps1', java: 'java', cpp: 'cpp', c: 'c',
-    go: 'go', rust: 'rs', php: 'php', markdown: 'md', md: 'md', razor: 'razor', kotlin: 'kt',
-    swift: 'swift', ruby: 'rb', csv: 'csv', ini: 'ini', toml: 'toml', dockerfile: 'dockerfile'
-};
-
-// Delegated handlers: code blocks and images in answers are re-rendered while streaming,
-// so listeners are attached once on the document.
+// One delegated handler for every code-block "copy" button (the blocks are re-rendered while streaming).
 document.addEventListener('click', async (e) => {
-    const t = e.target;
-    if (!t || !t.closest) return;
-
-    // click on an image inside an answer -> open the viewer (with download)
-    const img = t.closest('.md-img');
-    if (img && window.chat.dotnet) {
-        window.chat.dotnet.invokeMethodAsync('OnOpenImage', img.currentSrc || img.src, img.alt || 'image');
-        return;
-    }
-
-    // save a code block as a file
-    const save = t.closest('.code-save');
-    if (save && window.chat.dotnet) {
-        const pre = save.parentElement;
-        const code = pre.querySelector('code');
-        const lang = (pre.getAttribute('data-lang') || '').toLowerCase();
-        const ext = EXT[lang] || 'txt';
-        window.chat.dotnet.invokeMethodAsync('OnSaveText', 'code.' + ext, code ? code.innerText : '');
-        return;
-    }
-
-    if (!t.closest('.code-copy')) return;
-    handleCopy(t.closest('.code-copy'));
-});
-
-async function handleCopy(btn) {
+    const btn = e.target.closest && e.target.closest('.code-copy');
+    if (!btn) return;
     const code = btn.parentElement.querySelector('code');
     const ok = await window.chat.copyText(code ? code.innerText : '');
     btn.textContent = ok ? 'کپی شد ✓' : 'ناموفق';
     setTimeout(() => { btn.textContent = 'کپی'; }, 1500);
-}
+});
