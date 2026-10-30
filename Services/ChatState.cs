@@ -35,6 +35,11 @@ public class ChatState
     /// <summary>An image shown full-size in the viewer.</summary>
     public record ViewerImage(string Src, string Name, Attachment? Att);
 
+    /// <summary>The "search in this chat" bar.</summary>
+    public bool SearchOpen { get; private set; }
+    public void OpenSearch() { SearchOpen = true; Notify(); }
+    public void CloseSearch() { SearchOpen = false; Notify(); }
+
     public bool ShowLogs { get; private set; }
     public void OpenLogs() { ShowLogs = true; Notify(); }
     public void CloseLogs() { ShowLogs = false; Notify(); }
@@ -451,6 +456,8 @@ public class ChatState
             return true;
         }
 
+        if (SearchOpen) { CloseSearch(); return true; }
+
         if (includeSidebar && IsNarrow && SidebarOpen == true) { CloseSidebar(); return true; }
         return false;
     }
@@ -569,6 +576,7 @@ public class ChatState
     public void NewChat()
     {
         Stop();
+        SearchOpen = false;
         Active = null;
         DraftProjectId = null;
         if (IsNarrow) SidebarOpen = false;
@@ -578,6 +586,7 @@ public class ChatState
     public void OpenConversation(Conversation c)
     {
         Stop();
+        SearchOpen = false;
         Active = c;
 
         var provider = Providers.FirstOrDefault(p => p.Id == c.ProviderId);

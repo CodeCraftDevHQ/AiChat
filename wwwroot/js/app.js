@@ -255,3 +255,120 @@ document.addEventListener('keydown', (e) => {
         window.chat.dotnet.invokeMethodAsync('OnEscape');
     }
 });
+
+// ===================== search inside the chat =====================
+// Matches are highlighted with the CSS Custom Highlight API, which does not touch the DOM
+// (Blazor owns the DOM, so wrapping matches in <mark> would break its diffing).
+(function () {
+    const S = { ranges: [], cur: -1 };
+
+    // Persian/Arabic-friendly normalisation. Returns the normalised text and, for every
+    // normalised character, the index of the original character (for building DOM ranges).
+    function normalize(text) {
+        let out = '';
+        const map = [];
+        for (let i = 0; i < text.length; i++) {
+            let c = text[i];
+            const code = c.charCodeAt(0);
+            if (code === 0x200c || code === 0x200d || code === 0x200e || code === 0x200f || code === 0x0640 ||
+                (code >= 0x064b && code <= 0x065f) || code === 0x0670) continue;      // ZWNJ, tatweel, diacritics
+            if (c === 'ي' || c === 'ى') c = 'ی';
+            else if (c === 'ك') c = 'ک';
+            else if (c === 'ة') c = 'ه';
+            else if (c === 'أ' || c === 'إ' || c === 'ٱ') c = 'ا';
+            else if (code >= 0x06f0 && code <= 0x06f9) c = String(code - 0x06f0);      // Persian digits
+            else if (code >= 0x0660 && code <= 0x0669) c = String(code - 0x0660);      // Arabic-Indic digits
+            for (const x of c.toLowerCase()) { out += x; map.push(i); }
+        }
+        return { out, map };
+    }
+
+    function textNodes() {
+        const root = document.querySelector('#messages .thread');
+        if (!root) return [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode(n) {
+                const p = n.parentElement;
+                if (!p || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                if (p.closest('button, .actions, .user-actions, .model-tag, textarea, .edit-box')) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        const list = [];
+        while (walker.nextNode()) list.push(walker.currentNode);
+        return list;
+    }
+
+    function paint() {
+        if (window.CSS && CSS.highlights) {
+            CSS.highlights.delete('search');
+            CSS.highlights.delete('search-current');
+            if (S.ranges.length) {
+                CSS.highlights.set('search', new Highlight(...S.ranges));
+                if (S.cur >= 0) CSS.highlights.set('search-current', new Highlight(S.ranges[S.cur]));
+            }
+        } else if (S.cur >= 0) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(S.ranges[S.cur]);
+        }
+    }
+
+    function reveal() {
+        if (S.cur < 0) return;
+        const el = S.ranges[S.cur].startContainer.parentElement;
+        const box = document.getElementById('messages');
+        if (box) box.__stick = false;
+        if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+
+    window.chat.searchRun = function (query) {
+        S.ranges = [];
+        S.cur = -1;
+        const q = normalize(query || '').out.trim();
+        if (q) {
+            for (const node of textNodes()) {
+                const { out, map } = normalize(node.nodeValue);
+                let from = 0, idx;
+                while ((idx = out.indexOf(q, from)) !== -1) {
+                    const r = document.createRange();
+                    r.setStart(node, map[idx]);
+                    r.setEnd(node, map[idx + q.length - 1] + 1);
+                    S.ranges.push(r);
+                    from = idx + q.length;
+                }
+            }
+        }
+        if (S.ranges.length) S.cur = S.ranges.length - 1;   // like Telegram: start from the newest match
+        paint();
+        reveal();
+        return [S.cur + 1, S.ranges.length];
+    };
+
+    // delta -1 = older match, +1 = newer match (wraps around)
+    window.chat.searchStep = function (delta) {
+        const n = S.ranges.length;
+        if (n === 0) return [0, 0];
+        S.cur = (S.cur + delta + n) % n;
+        paint();
+        reveal();
+        return [S.cur + 1, n];
+    };
+
+    window.chat.searchClear = function () {
+        S.ranges = [];
+        S.cur = -1;
+        if (window.CSS && CSS.highlights) {
+            CSS.highlights.delete('search');
+            CSS.highlights.delete('search-current');
+        }
+    };
+})();
+
+// Ctrl+F opens the in-chat search instead of the browser's find box.
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f' && window.chat.dotnet) {
+        e.preventDefault();
+        window.chat.dotnet.invokeMethodAsync('OnFind');
+    }
+});
