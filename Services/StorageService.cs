@@ -56,6 +56,61 @@ public class StorageService
     public Task SaveConversationsAsync(List<Conversation> list) =>
         WriteAsync("conversations.json", JsonSerializer.Serialize(list, Json));
 
+    // ---- attachments ----
+
+    static string AttachDir => Path.Combine(FileSystem.AppDataDirectory, "attachments");
+
+    static string AttachPath(Attachment a) => Path.Combine(AttachDir, a.StoredName);
+
+    public async Task<Attachment> SaveAttachmentAsync(string name, string mime, string kind, byte[] data)
+    {
+        Directory.CreateDirectory(AttachDir);
+        var att = new Attachment
+        {
+            Name = name,
+            Kind = kind,
+            MimeType = mime,
+            Size = data.LongLength
+        };
+        att.StoredName = att.Id + Path.GetExtension(name).ToLowerInvariant();
+        await File.WriteAllBytesAsync(AttachPath(att), data);
+        return att;
+    }
+
+    public static byte[]? ReadAttachmentSync(Attachment a)
+    {
+        try
+        {
+            var path = AttachPath(a);
+            return File.Exists(path) ? File.ReadAllBytes(path) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<byte[]?> ReadAttachmentAsync(Attachment a)
+    {
+        try
+        {
+            var path = AttachPath(a);
+            return File.Exists(path) ? await File.ReadAllBytesAsync(path) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public void DeleteAttachments(IEnumerable<Attachment> list)
+    {
+        foreach (var a in list)
+        {
+            try { File.Delete(AttachPath(a)); } catch { }
+        }
+    }
+
     // ---- helpers ----
 
     async Task<T?> ReadAsync<T>(string file)

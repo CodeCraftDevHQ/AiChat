@@ -1,4 +1,5 @@
 @inherits StateComponent
+@using Microsoft.Maui.Storage
 @inject IJSRuntime JS
 
 <div class="app" dir="@(State.IsRtl ? "rtl" : "ltr")">
@@ -82,7 +83,20 @@
             {
                 <div class="notice" @onclick="State.ClearNotice">@State.Notice</div>
             }
+            @if (State.Pending.Count > 0)
+            {
+                <div class="att-row pending">
+                    @foreach (var a in State.Pending)
+                    {
+                        var att = a;
+                        <AttachmentChip @key="att" Attachment="att" Removable="true" OnRemove="() => State.RemovePending(att)" />
+                    }
+                </div>
+            }
             <div class="box">
+                <button class="icon-btn attach" title="پیوست عکس یا فایل" @onclick="PickFiles">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
+                </button>
                 <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="send" placeholder="هر چیزی بپرسید..."></textarea>
                 @if (State.IsStreaming)
                 {
@@ -169,8 +183,28 @@
         }
 
         var text = await JS.InvokeAsync<string>("chat.takeValue", _input);
-        if (string.IsNullOrWhiteSpace(text)) return;
+        if (string.IsNullOrWhiteSpace(text) && State.Pending.Count == 0) return;
         await State.SendAsync(text);
+    }
+
+    async Task PickFiles()
+    {
+        try
+        {
+            var files = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "انتخاب عکس یا فایل" });
+            if (files == null) return;
+
+            foreach (var f in files)
+            {
+                await using var stream = await f.OpenReadAsync();
+                var err = await State.AddAttachmentAsync(f.FileName, stream);
+                if (err != null) State.SetNotice(err);
+            }
+        }
+        catch (Exception ex)
+        {
+            State.SetNotice("خطا در انتخاب فایل: " + ex.Message);
+        }
     }
 
     public override void Dispose()

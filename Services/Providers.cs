@@ -40,21 +40,60 @@ public class ProviderFactory
 
 static class HistoryHelper
 {
-    /// <summary>
-    /// Turns the stored messages into a clean (role, content) list:
-    /// drops empty/failed replies, merges consecutive messages from the same role,
-    /// and makes sure the list starts with a user message (Claude and Gemini require that).
-    /// </summary>
-    public static List<(string Role, string Content)> Build(IReadOnlyList<ChatMessage> history)
+    /// <summary>One request message: text plus (base64) images.</summary>
+    public class Turn
     {
-        var result = new List<(string Role, string Content)>();
+        public string Role = "user";
+        public string Text = "";
+        public List<(string Mime, string Base64)> Images = new();
+    }
+
+    /// <summary>
+    /// Turns the stored messages into a clean list:
+    /// text attachments are inlined into the text, image attachments become base64 images,
+    /// empty/failed replies are dropped, consecutive messages from the same role are merged,
+    /// and the list always starts with a user message (Claude and Gemini require that).
+    /// </summary>
+    public static List<Turn> Build(IReadOnlyList<ChatMessage> history)
+    {
+        var result = new List<Turn>();
         foreach (var m in history)
         {
-            if (string.IsNullOrWhiteSpace(m.Content)) continue;
+            var text = m.Content ?? "";
+            var images = new List<(string, string)>();
+
+            foreach (var a in m.Attachments)
+            {
+                var bytes = StorageService.ReadAttachmentSync(a);
+                if (bytes == null)
+                {
+                    text += $"\n\n[فایل «{a.Name}» دیگر در دسترس نیست]";
+                }
+                else if (a.Kind == "image")
+                {
+                    images.Add((a.MimeType, Convert.ToBase64String(bytes)));
+                }
+                else
+                {
+                    text += $"\n\n--- فایل: {a.Name} ---\n{Encoding.UTF8.GetString(bytes)}\n--- پایان فایل ---";
+                }
+            }
+
+            text = text.Trim();
+            if (text.Length == 0 && images.Count == 0) continue;
+
             if (result.Count > 0 && result[^1].Role == m.Role)
-                result[^1] = (m.Role, result[^1].Content + "\n\n" + m.Content);
+            {
+                var last = result[^1];
+                last.Text = last.Text.Length == 0 ? text : text.Length == 0 ? last.Text : last.Text + "\n\n" + text;
+                last.Images.AddRange(images);
+            }
             else
-                result.Add((m.Role, m.Content));
+            {
+                var t = new Turn { Role = m.Role, Text = text };
+                t.Images.AddRange(images);
+                result.Add(t);
+            }
         }
         while (result.Count > 0 && result[0].Role != "user") result.RemoveAt(0);
         return result;
@@ -136,8 +175,28 @@ public class OpenAiCompatibleProvider : IChatProvider
         var messages = new JsonArray();
         if (!string.IsNullOrWhiteSpace(systemPrompt))
             messages.Add(new JsonObject { ["role"] = "system", ["content"] = systemPrompt });
-        foreach (var (role, content) in HistoryHelper.Build(history))
-            messages.Add(new JsonObject { ["role"] = role, ["content"] = content });
+        foreach (var t in HistoryHelper.Build(history))
+        {
+            JsonNode content;
+            if (t.Images.Count == 0)
+            {
+                content = JsonValue.Create(t.Text)!;
+            }
+            else
+            {
+                var parts = new JsonArray();
+                if (t.Text.Length > 0)
+                    parts.Add(new JsonObject { ["type"] = "text", ["text"] = t.Text });
+                foreach (var (mime, b64) in t.Images)
+                    parts.Add(new JsonObject
+                    {
+                        ["type"] = "image_url",
+                        ["image_url"] = new JsonObject { ["url"] = $"data:{mime};base64,{b64}" }
+                    });
+                content = parts;
+            }
+            messages.Add(new JsonObject { ["role"] = t.Role, ["content"] = content });
+        }
 
         var body = new JsonObject { ["model"] = model, ["stream"] = true, ["messages"] = messages };
 
@@ -214,8 +273,19 @@ public class AnthropicProvider : IChatProvider
         IReadOnlyList<ChatMessage> history, string? systemPrompt, [EnumeratorCancellation] CancellationToken ct)
     {
         var messages = new JsonArray();
-        foreach (var (role, content) in HistoryHelper.Build(history))
-            messages.Add(new JsonObject { ["role"] = role, ["content"] = content });
+        foreach (var t in HistoryHelper.Build(history))
+        {
+            var parts = new JsonArray();
+            foreach (var (mime, b64) in t.Images)
+                parts.Add(new JsonObject
+                {
+                    ["type"] = "image",
+                    ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = mime, ["data"] = b64 }
+                });
+            if (t.Text.Length > 0)
+                parts.Add(new JsonObject { ["type"] = "text", ["text"] = t.Text });
+            messages.Add(new JsonObject { ["role"] = t.Role, ["content"] = parts });
+        }
 
         var body = new JsonObject
         {
@@ -300,12 +370,21 @@ public class GeminiProvider : IChatProvider
         IReadOnlyList<ChatMessage> history, string? systemPrompt, [EnumeratorCancellation] CancellationToken ct)
     {
         var contents = new JsonArray();
-        foreach (var (role, content) in HistoryHelper.Build(history))
+        foreach (var t in HistoryHelper.Build(history))
         {
+            var parts = new JsonArray();
+            foreach (var (mime, b64) in t.Images)
+                parts.Add(new JsonObject
+                {
+                    ["inlineData"] = new JsonObject { ["mimeType"] = mime, ["data"] = b64 }
+                });
+            if (t.Text.Length > 0)
+                parts.Add(new JsonObject { ["text"] = t.Text });
+
             contents.Add(new JsonObject
             {
-                ["role"] = role == "assistant" ? "model" : "user",
-                ["parts"] = new JsonArray(new JsonObject { ["text"] = content })
+                ["role"] = t.Role == "assistant" ? "model" : "user",
+                ["parts"] = parts
             });
         }
 

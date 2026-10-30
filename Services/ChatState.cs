@@ -37,6 +37,72 @@ public class ChatState
     public string CurrentModel { get; private set; } = "";
     public ProviderConfig? CurrentProvider => Providers.FirstOrDefault(p => p.Id == CurrentProviderId);
 
+    // ------------------------------------------------------------ attachments
+
+    public const int MaxAttachments = 6;
+    const int MaxImageBytes = 5 * 1024 * 1024; // Claude's per-image limit
+    const int MaxTextBytes = 512 * 1024;
+
+    static readonly Dictionary<string, string> ImageMimes = new()
+    {
+        [".png"] = "image/png",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".gif"] = "image/gif",
+        [".webp"] = "image/webp"
+    };
+
+    /// <summary>Files chosen for the next message.</summary>
+    public List<Attachment> Pending { get; } = new();
+
+    /// <summary>Adds a file to the next message. Returns an error text, or null on success.</summary>
+    public async Task<string?> AddAttachmentAsync(string name, Stream stream)
+    {
+        if (Pending.Count >= MaxAttachments) return $"حداکثر {MaxAttachments} فایل در هر پیام مجاز است.";
+
+        name = Path.GetFileName(name);
+        if (string.IsNullOrWhiteSpace(name)) name = "file";
+
+        var ext = Path.GetExtension(name).ToLowerInvariant();
+        var isImage = ImageMimes.TryGetValue(ext, out var mime);
+        var limit = isImage ? MaxImageBytes : MaxTextBytes;
+
+        using var ms = new MemoryStream();
+        var buffer = new byte[81920];
+        int n;
+        while ((n = await stream.ReadAsync(buffer)) > 0)
+        {
+            ms.Write(buffer, 0, n);
+            if (ms.Length > limit)
+                return $"«{name}» بزرگ‌تر از حد مجاز است (حداکثر {(isImage ? "5 مگابایت" : "512 کیلوبایت")}).";
+        }
+        var data = ms.ToArray();
+        if (data.Length == 0) return $"«{name}» خالی است.";
+
+        if (!isImage)
+        {
+            // anything with NUL bytes is binary (pdf, zip, docx, ...)
+            var head = Math.Min(data.Length, 8192);
+            for (var i = 0; i < head; i++)
+                if (data[i] == 0)
+                    return $"«{name}»: فقط عکس (png, jpg, gif, webp) و فایل‌های متنی/کد پشتیبانی می‌شوند.";
+            mime = "text/plain";
+        }
+
+        var att = await _storage.SaveAttachmentAsync(name, mime!, isImage ? "image" : "text", data);
+        Pending.Add(att);
+        Notify();
+        return null;
+    }
+
+    public void RemovePending(Attachment a)
+    {
+        if (Pending.Remove(a)) _storage.DeleteAttachments(new[] { a });
+        Notify();
+    }
+
+    public Task<byte[]?> ReadAttachmentAsync(Attachment a) => _storage.ReadAttachmentAsync(a);
+
     public bool IsStreaming { get; private set; }
     public bool ShowSettings { get; private set; }
     public bool? SidebarOpen { get; private set; }
@@ -242,6 +308,7 @@ public class ChatState
     {
         if (Active == c) { Stop(); Active = null; }
         Conversations.Remove(c);
+        _storage.DeleteAttachments(c.Messages.SelectMany(m => m.Attachments));
         Notify();
         await _storage.SaveConversationsAsync(Conversations);
     }
@@ -250,6 +317,9 @@ public class ChatState
     {
         Stop();
         Active = null;
+        _storage.DeleteAttachments(Conversations.SelectMany(c => c.Messages).SelectMany(m => m.Attachments));
+        _storage.DeleteAttachments(Pending);
+        Pending.Clear();
         Conversations.Clear();
         Notify();
         await _storage.SaveConversationsAsync(Conversations);
@@ -267,7 +337,7 @@ public class ChatState
     public async Task SendAsync(string text)
     {
         text = text.Trim();
-        if (IsStreaming || text.Length == 0) return;
+        if (IsStreaming || (text.Length == 0 && Pending.Count == 0)) return;
 
         var err = ValidateSend();
         if (err != null) { SetNotice(err); return; }
@@ -275,16 +345,19 @@ public class ChatState
         var provider = CurrentProvider!;
         Notice = null;
 
+        var attachments = Pending.ToList();
+        Pending.Clear();
+
         if (Active == null)
         {
-            Active = new Conversation { Title = MakeTitle(text) };
+            Active = new Conversation { Title = MakeTitle(text.Length > 0 ? text : attachments[0].Name) };
             Conversations.Insert(0, Active);
         }
 
         var conv = Active;
         conv.ProviderId = provider.Id;
         conv.Model = CurrentModel;
-        conv.Messages.Add(new ChatMessage { Role = "user", Content = text });
+        conv.Messages.Add(new ChatMessage { Role = "user", Content = text, Attachments = attachments });
 
         var reply = new ChatMessage { Role = "assistant", Model = $"{provider.Name} · {CurrentModel}" };
         conv.Messages.Add(reply);

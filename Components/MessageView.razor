@@ -4,7 +4,21 @@
 <div class="msg @Message.Role">
     @if (Message.Role == "user")
     {
-        <div class="user-bubble" dir="auto">@Message.Content</div>
+        <div class="user-wrap">
+            @if (Message.Attachments.Count > 0)
+            {
+                <div class="att-row">
+                    @foreach (var a in Message.Attachments)
+                    {
+                        <AttachmentChip @key="a" Attachment="a" />
+                    }
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(Message.Content))
+            {
+                <div class="user-bubble" dir="auto">@Message.Content</div>
+            }
+        </div>
     }
     else
     {

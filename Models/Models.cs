@@ -36,10 +36,31 @@ public class ProviderConfig
     };
 }
 
+public class Attachment
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "";
+    public string Kind { get; set; } = "text"; // "image" | "text"
+    public string MimeType { get; set; } = "text/plain";
+    public long Size { get; set; }
+
+    /// <summary>File name inside the app's attachments folder.</summary>
+    public string StoredName { get; set; } = "";
+
+    /// <summary>Lazily loaded data: URI for showing images (never saved).</summary>
+    [JsonIgnore]
+    public string? DataUri { get; set; }
+
+    [JsonIgnore]
+    public string SizeText => Size >= 1024 * 1024 ? $"{Size / 1024d / 1024d:0.#} MB"
+        : Size >= 1024 ? $"{Size / 1024d:0.#} KB" : $"{Size} B";
+}
+
 public class ChatMessage
 {
     public string Role { get; set; } = "user"; // "user" | "assistant"
     public string Content { get; set; } = "";
+    public List<Attachment> Attachments { get; set; } = new();
     public string? ErrorText { get; set; }
     public string? Model { get; set; } // "Provider · model" caption for assistant messages
 
