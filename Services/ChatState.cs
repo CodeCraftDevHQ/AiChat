@@ -389,6 +389,13 @@ public class ChatState
         Notify();
     }
 
+    public async Task TogglePinAsync(Conversation c)
+    {
+        c.Pinned = !c.Pinned;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
     public async Task RenameConversationAsync(Conversation c, string title)
     {
         title = (title ?? string.Empty).Trim();

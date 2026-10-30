@@ -13,9 +13,15 @@
         {
             <div class="sb-empty muted">هنوز گفتگویی ندارید</div>
         }
-        @foreach (var c in State.Conversations)
+        @foreach (var row in BuildRows())
         {
-            var conv = c;
+            if (row.Header != null)
+            {
+                <div class="sb-section">@row.Header</div>
+                continue;
+            }
+
+            var conv = row.Conv!;
             <div class="conv @(conv == State.Active ? "active" : "")" @onclick="() => State.OpenConversation(conv)">
                 @if (_renamingId == conv.Id)
                 {
@@ -26,6 +32,10 @@
                 }
                 else
                 {
+                    @if (conv.Pinned)
+                    {
+                        <svg class="pin-mark" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3H8v2l1 1v6l-3 3v2h5v5h2v-5h5v-2l-3-3V6l1-1Z" /></svg>
+                    }
                     <span class="title" dir="auto" title="برای تغییر نام دوبار کلیک کنید"
                           @ondblclick="() => StartRename(conv)">@conv.Title</span>
                     @if (_confirmId == conv.Id)
@@ -34,17 +44,24 @@
                     }
                     else
                     {
-                        <button class="del" title="تغییر نام" @onclick="() => StartRename(conv)" @onclick:stopPropagation="true">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                        </button>
-                        <button class="del" title="حذف" @onclick="() => _confirmId = conv.Id" @onclick:stopPropagation="true">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
+                        <button class="del" title="گزینه‌ها" @onclick="e => OpenMenu(conv, e)" @onclick:stopPropagation="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
                         </button>
                     }
                 }
             </div>
         }
     </div>
+
+    @if (_menuConv != null)
+    {
+        <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
+        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 170px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+            <button @onclick="PinFromMenu">@(_menuConv.Pinned ? "برداشتن پین" : "پین کردن")</button>
+            <button @onclick="RenameFromMenu">تغییر نام</button>
+            <button class="danger" @onclick="DeleteFromMenu">حذف</button>
+        </div>
+    }
 
     <div class="sb-bottom">
         <button class="settings-btn" @onclick="State.OpenSettings">
@@ -55,6 +72,59 @@
 </aside>
 
 @code {
+    // ---- menu & rows ----
+
+    Conversation? _menuConv;
+    int _menuX, _menuY;
+
+    record Row(string? Header, Conversation? Conv);
+
+    List<Row> BuildRows()
+    {
+        var rows = new List<Row>();
+        var pinned = State.Conversations.Where(c => c.Pinned).ToList();
+        var others = State.Conversations.Where(c => !c.Pinned).ToList();
+
+        if (pinned.Count > 0)
+        {
+            rows.Add(new Row("پین‌شده", null));
+            rows.AddRange(pinned.Select(c => new Row(null, c)));
+            if (others.Count > 0) rows.Add(new Row("گفتگوها", null));
+        }
+        rows.AddRange(others.Select(c => new Row(null, c)));
+        return rows;
+    }
+
+    void OpenMenu(Conversation c, MouseEventArgs e)
+    {
+        _confirmId = null;
+        _menuConv = c;
+        _menuX = (int)e.ClientX;
+        _menuY = (int)e.ClientY;
+    }
+
+    void CloseMenu() => _menuConv = null;
+
+    async Task PinFromMenu()
+    {
+        var c = _menuConv;
+        _menuConv = null;
+        if (c != null) await State.TogglePinAsync(c);
+    }
+
+    void RenameFromMenu()
+    {
+        var c = _menuConv;
+        _menuConv = null;
+        if (c != null) StartRename(c);
+    }
+
+    void DeleteFromMenu()
+    {
+        _confirmId = _menuConv?.Id;
+        _menuConv = null;
+    }
+
     string? _confirmId;
     string? _renamingId;
     string _renameText = string.Empty;

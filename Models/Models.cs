@@ -88,6 +88,7 @@ public class Conversation
     public string Title { get; set; } = "گفتگوی جدید";
     public string? ProviderId { get; set; }
     public string Model { get; set; } = "";
+    public bool Pinned { get; set; }
     public DateTime Updated { get; set; } = DateTime.UtcNow;
     public List<ChatMessage> Messages { get; set; } = new();
 }

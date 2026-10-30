@@ -129,7 +129,6 @@ button { cursor: pointer; }
 .conv:hover .del, .conv.active .del, .conv .del.confirm { opacity: 1; }
 .conv .del:hover { color: var(--danger); }
 .conv .del.confirm { color: var(--danger); font-size: 13px; padding: 2px 8px; }
-.conv .del:first-of-type:not(.confirm):hover { color: var(--text); }
 .rename-input {
     flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--accent); border-radius: 6px;
     padding: 2px 8px; outline: 0; font-size: 14.5px;
@@ -193,6 +192,33 @@ button { cursor: pointer; }
 .user-bubble {
     background: var(--surface); border-radius: 22px; max-width: 100%;
     padding: 10px 18px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* ===================== images in answers, viewer, toast ===================== */
+.md-img { max-width: min(100%, 420px); max-height: 360px; border-radius: 12px; cursor: zoom-in; display: block; margin: 6px 0; }
+.att-row.start { justify-content: flex-start; margin-top: 8px; }
+.att-img { cursor: zoom-in; }
+.att-file { cursor: pointer; }
+
+.viewer {
+    position: fixed; inset: 0; z-index: 300; background: rgba(0, 0, 0, .88);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+}
+.viewer-bar {
+    width: 100%; max-width: 900px; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #fff;
+}
+.viewer-bar .btn { color: #fff; border-color: rgba(255, 255, 255, .35); }
+.viewer-bar .btn:hover { background: rgba(255, 255, 255, .12); }
+.viewer-bar .icon-btn { color: #fff; }
+.viewer-bar .icon-btn:hover { background: rgba(255, 255, 255, .12); }
+.viewer-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.viewer-img { max-width: 100%; max-height: calc(100dvh - 90px); object-fit: contain; border-radius: 8px; background: #fff1; }
+
+.toast {
+    position: fixed; bottom: calc(90px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    z-index: 400; background: var(--text); color: var(--bg); padding: 8px 18px; border-radius: 999px;
+    font-size: 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, .3);
 }
 
 /* ===================== drag & drop overlay ===================== */
@@ -292,6 +318,11 @@ body.dragging .drop-overlay { display: flex; }
     display: block; background: transparent; padding: 4px 16px 14px; border-radius: 0;
     overflow-x: auto; white-space: pre; font-size: 13.5px; line-height: 1.55;
 }
+.code-save {
+    position: absolute; top: 5px; right: 62px; z-index: 1; border: 0; background: transparent; color: var(--muted);
+    font-size: 12.5px; padding: 4px 10px; border-radius: 8px;
+}
+.code-save:hover { background: var(--surface-2); color: var(--text); }
 .code-copy {
     position: absolute; top: 5px; right: 8px; z-index: 1; border: 0; background: transparent; color: var(--muted);
     font-size: 12.5px; padding: 4px 10px; border-radius: 8px;
@@ -408,3 +439,19 @@ select.inp option { background: var(--surface); color: var(--text); }
     .s-list { border-inline-end: 0; border-bottom: 1px solid var(--border); overflow: visible; }
     .s-editor { overflow: visible; }
 }
+
+/* ===================== sidebar sections, pins, context menu ===================== */
+.sb-section { font-size: 12px; color: var(--muted); padding: 12px 12px 4px; font-weight: 600; }
+.pin-mark { flex: none; color: var(--muted); transform: rotate(35deg); }
+
+.menu-backdrop { position: fixed; inset: 0; z-index: 90; }
+.menu {
+    position: fixed; z-index: 91; min-width: 190px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); display: flex; flex-direction: column;
+}
+.menu button {
+    background: transparent; border: 0; border-radius: 8px; padding: 9px 12px; text-align: start; font-size: 14.5px;
+}
+.menu button:hover { background: var(--hover); }
+.menu button.danger { color: var(--danger); }
+.menu .sep { height: 1px; background: var(--border); margin: 4px 0; }
