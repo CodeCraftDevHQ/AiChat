@@ -327,12 +327,46 @@ public class ChatState
         var pid = Preferences.Default.Get("provider", "");
         var provider = Providers.FirstOrDefault(p => p.Id == pid) ?? Providers.FirstOrDefault();
         CurrentProviderId = provider?.Id;
+
+        LoadModelMap();
         var model = Preferences.Default.Get("model", "");
-        CurrentModel = !string.IsNullOrWhiteSpace(model) && provider != null && ModelsFor(provider).Contains(model)
-            ? model
-            : FirstModel(provider);
+        if (provider != null && !_modelByProvider.ContainsKey(provider.Id) && !string.IsNullOrWhiteSpace(model))
+            _modelByProvider[provider.Id] = model; // older versions only remembered one global model
+        CurrentModel = PickModel(provider);
 
         Notify();
+    }
+
+    // ------------------------------------------------------------ remembered model per provider
+
+    Dictionary<string, string> _modelByProvider = new();
+
+    void LoadModelMap()
+    {
+        try
+        {
+            var json = Preferences.Default.Get("models_by_provider", "");
+            _modelByProvider = string.IsNullOrWhiteSpace(json)
+                ? new()
+                : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+        }
+        catch
+        {
+            _modelByProvider = new();
+        }
+    }
+
+    void SaveModelMap() =>
+        Preferences.Default.Set("models_by_provider", System.Text.Json.JsonSerializer.Serialize(_modelByProvider));
+
+    /// <summary>The model last chosen for this provider; falls back to its default if it no longer exists.</summary>
+    string PickModel(ProviderConfig? p)
+    {
+        if (p == null) return "";
+        if (_modelByProvider.TryGetValue(p.Id, out var m) && !string.IsNullOrWhiteSpace(m) &&
+            (m == p.DefaultModel || p.Models.Contains(m)))
+            return m;
+        return FirstModel(p);
     }
 
     static string FirstModel(ProviderConfig? p) =>
@@ -386,7 +420,7 @@ public class ChatState
         var p = Providers.FirstOrDefault(x => x.Id == id);
         if (p == null) return;
         CurrentProviderId = p.Id;
-        CurrentModel = FirstModel(p);
+        CurrentModel = PickModel(p);
         PersistSelection();
         Notify();
     }
@@ -394,6 +428,11 @@ public class ChatState
     public void SelectModel(string? model)
     {
         CurrentModel = model ?? "";
+        if (CurrentProviderId != null && !string.IsNullOrWhiteSpace(CurrentModel))
+        {
+            _modelByProvider[CurrentProviderId] = CurrentModel;
+            SaveModelMap();
+        }
         PersistSelection();
         Notify();
     }
@@ -438,12 +477,13 @@ public class ChatState
     {
         Providers.RemoveAll(p => p.Id == id);
         _storage.DeleteSecret(id);
+        if (_modelByProvider.Remove(id)) SaveModelMap();
 
         if (CurrentProviderId == id)
         {
             var next = Providers.FirstOrDefault();
             CurrentProviderId = next?.Id;
-            CurrentModel = FirstModel(next);
+            CurrentModel = PickModel(next);
             PersistSelection();
         }
 
