@@ -17,16 +17,30 @@
         {
             var conv = c;
             <div class="conv @(conv == State.Active ? "active" : "")" @onclick="() => State.OpenConversation(conv)">
-                <span class="title" dir="auto">@conv.Title</span>
-                @if (_confirmId == conv.Id)
+                @if (_renamingId == conv.Id)
                 {
-                    <button class="del confirm" @onclick="() => Delete(conv)" @onclick:stopPropagation="true">حذف؟</button>
+                    <input class="rename-input" dir="auto" maxlength="80" @ref="_renameInput"
+                           @bind="_renameText" @bind:event="oninput"
+                           @onkeydown="OnRenameKey" @onblur="CommitRename"
+                           @onclick:stopPropagation="true" />
                 }
                 else
                 {
-                    <button class="del" title="حذف" @onclick="() => _confirmId = conv.Id" @onclick:stopPropagation="true">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
-                    </button>
+                    <span class="title" dir="auto" title="برای تغییر نام دوبار کلیک کنید"
+                          @ondblclick="() => StartRename(conv)">@conv.Title</span>
+                    @if (_confirmId == conv.Id)
+                    {
+                        <button class="del confirm" @onclick="() => Delete(conv)" @onclick:stopPropagation="true">حذف؟</button>
+                    }
+                    else
+                    {
+                        <button class="del" title="تغییر نام" @onclick="() => StartRename(conv)" @onclick:stopPropagation="true">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                        </button>
+                        <button class="del" title="حذف" @onclick="() => _confirmId = conv.Id" @onclick:stopPropagation="true">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
+                        </button>
+                    }
                 }
             </div>
         }
@@ -42,6 +56,53 @@
 
 @code {
     string? _confirmId;
+    string? _renamingId;
+    string _renameText = string.Empty;
+    bool _focusRename;
+    bool _cancelRename;
+    ElementReference _renameInput;
+
+    void StartRename(Conversation c)
+    {
+        _confirmId = null;
+        _renamingId = c.Id;
+        _renameText = c.Title;
+        _cancelRename = false;
+        _focusRename = true;
+    }
+
+    async Task OnRenameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitRename();
+        }
+        else if (e.Key == "Escape")
+        {
+            _cancelRename = true;
+            _renamingId = null;
+        }
+    }
+
+    async Task CommitRename()
+    {
+        var id = _renamingId;
+        if (id == null) return; // already finished (Enter pressed, then blur fired)
+        _renamingId = null;
+
+        if (_cancelRename) return;
+        var conv = State.Conversations.FirstOrDefault(x => x.Id == id);
+        if (conv != null) await State.RenameConversationAsync(conv, _renameText);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusRename && _renamingId != null)
+        {
+            _focusRename = false;
+            await _renameInput.FocusAsync();
+        }
+    }
 
     async Task Delete(Conversation c)
     {

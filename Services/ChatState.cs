@@ -218,6 +218,15 @@ public class ChatState
         Notify();
     }
 
+    public async Task RenameConversationAsync(Conversation c, string title)
+    {
+        title = (title ?? string.Empty).Trim();
+        if (title.Length == 0 || title == c.Title) return;
+        c.Title = title.Length > 80 ? title[..80] : title;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
     public async Task DeleteConversationAsync(Conversation c)
     {
         if (Active == c) { Stop(); Active = null; }
