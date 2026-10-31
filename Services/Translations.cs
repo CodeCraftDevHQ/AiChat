@@ -34,6 +34,8 @@ public static class Translations
         ["هر مدل یک پیام کوتاه می\u200cگیرد (هزینه\u200cی ناچیز)"] = "Each model gets one short message (negligible cost)",
         ["تست مدل\u200cها"] = "Test models",
         ["فقط مدل\u200cهای کارا"] = "Working models only",
+        ["محدودیت درخواست سرویس؛ ادامه\u200cی تست تا {0} ثانیه\u200cی دیگر..."] = "Rate limit reached; the test continues in {0} s...",
+        ["سهمیه\u200cی روزانه یا طولانی\u200cمدت این API تمام شده است؛ تست متوقف شد."] = "The daily (or long-term) quota of this API is used up; the test was stopped.",
         ["API ها"] = "APIs",
         ["LM Studio (محلی)"] = "LM Studio (local)",
         ["Ollama (محلی)"] = "Ollama (local)",

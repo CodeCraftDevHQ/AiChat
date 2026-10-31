@@ -178,7 +178,32 @@ static class ProviderHttp
     {
         if (resp.IsSuccessStatusCode) return;
         var body = await resp.Content.ReadAsStringAsync(ct);
-        throw new HttpRequestException($"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {ExtractError(body)}");
+        var ex = new HttpRequestException($"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {ExtractError(body)}", null, resp.StatusCode);
+        var ra = resp.Headers.RetryAfter;
+        if (ra?.Delta != null) ex.Data["RetryAfter"] = (int)Math.Ceiling(ra.Delta.Value.TotalSeconds);
+        else if (ra?.Date != null) ex.Data["RetryAfter"] = (int)Math.Max(1, Math.Ceiling((ra.Date.Value - DateTimeOffset.UtcNow).TotalSeconds));
+        throw ex;
+    }
+
+    /// <summary>Is this error a "too many requests" one? Also returns the server's wait hint and whether it looks like a daily quota.</summary>
+    public static (bool Limited, int? RetrySeconds, bool Daily) RateInfo(Exception ex)
+    {
+        var limited = false;
+        int? retry = null;
+        var text = new StringBuilder();
+        for (var e = ex; e != null; e = e.InnerException)
+        {
+            if (e is HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests }) limited = true;
+            if (e.Data["RetryAfter"] is int s) retry = s;
+            text.Append(e.Message).Append(' ');
+        }
+        var t = text.ToString().ToLowerInvariant();
+        if (t.Contains("429") || t.Contains("rate limit") || t.Contains("rate-limit") || t.Contains("ratelimit") ||
+            t.Contains("too many requests") || t.Contains("resource_exhausted") || t.Contains("quota") ||
+            t.Contains("requests per"))
+            limited = true;
+        var daily = limited && (t.Contains("per day") || t.Contains("perday") || t.Contains("per_day") || t.Contains("daily"));
+        return (limited, retry, daily);
     }
 
     public static string ExtractError(string body)

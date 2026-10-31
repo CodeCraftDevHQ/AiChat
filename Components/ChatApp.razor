@@ -63,6 +63,10 @@
                             {
                                 <button class="btn sm" title="@L["هر مدل یک پیام کوتاه می‌گیرد (هزینه‌ی ناچیز)"]" @onclick="() => State.TestModelsAsync(items)">🧪 @L["تست مدل‌ها"]</button>
                             }
+                            @if (State.TestMessage != null)
+                            {
+                                <span class="pdf-warn">⏳ @State.TestMessage</span>
+                            }
                             @if (items.Count > 0 || State.OnlyWorkingModels)
                             {
                                 <label class="check small">
@@ -84,7 +88,7 @@
                             var current = isModel ? value == State.CurrentModel : value == State.CurrentProviderId;
                             var test = isModel ? State.TestResultOf(value) : null;
                             <button class="sheet-item @(current ? "current" : "") @(test is { Ok: false } ? "failed" : "")" dir="auto" title="@(test?.Error ?? "")" @onclick="() => PickItem(value)">
-                                <span>@(test == null ? "" : test.Ok ? "✅ " : "❌ ")@label</span>@if (current) { <span>✓</span> }
+                                <span>@(test == null ? "" : test.Ok ? "✅ " : test.RateLimited ? "⏳ " : "❌ ")@label</span>@if (current) { <span>✓</span> }
                             </button>
                         }
                         @if (!isModel)
