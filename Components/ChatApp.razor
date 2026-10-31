@@ -9,11 +9,37 @@
     <div class="scrim @(State.SidebarOpen == true ? "show" : "")" @onclick="State.CloseSidebar"></div>
 
     <main class="main">
+        @if (State.PdfPrompt != null)
+        {
+            <div class="modal-backdrop" @onclick='() => State.ChoosePdfMode("text")'>
+                <div class="sheet pdf-choice" @onclick:stopPropagation="true">
+                    <div class="sheet-head"><strong>📄 @State.PdfPrompt.Name</strong></div>
+                    <div class="pdf-body">
+                        <p>@L["PDF چگونه ارسال شود؟"]</p>
+                        <button class="btn pdf-opt" @onclick='() => State.ChoosePdfMode("text")'>
+                            <b>@L["ارسال متن استخراج‌شده"]</b>
+                            <small>@L["با همه‌ی سرویس‌ها کار می‌کند. تصویر و جدول‌ها دیده نمی‌شوند."]</small>
+                        </button>
+                        <button class="btn pdf-opt" @onclick='() => State.ChoosePdfMode("file")'>
+                            <b>@L["ارسال خود فایل PDF"]</b>
+                            <small>@L["فقط Claude و Gemini؛ در سرویس‌های دیگر به‌جایش متن فرستاده می‌شود. مدل صفحه‌ها را هم می‌بیند."]</small>
+                        </button>
+                        @if (State.PdfPromptTruncated)
+                        {
+                            <p class="pdf-warn">⚠ @L["متن این PDF خیلی طولانی است و در حالت متن، بخش آخر آن بریده می‌شود."]</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
         @if (State.Picker != null)
         {
             var isModel = State.Picker == "model";
             var items = isModel
-                ? State.ModelsFor(State.CurrentProvider).Where(m => m.Contains(State.PickerFilter, StringComparison.OrdinalIgnoreCase)).ToList()
+                ? State.ModelsFor(State.CurrentProvider)
+                    .Where(m => m.Contains(State.PickerFilter, StringComparison.OrdinalIgnoreCase))
+                    .Where(m => !State.OnlyWorkingModels || State.TestResultOf(m)?.Ok == true).ToList()
                 : State.Providers.Select(p => p.Id).ToList();
             <div class="modal-backdrop" @onclick="State.ClosePicker">
                 <div class="sheet" @onclick:stopPropagation="true">
@@ -25,6 +51,27 @@
                     {
                         <input class="inp sheet-search" dir="auto" placeholder="@L["جست‌وجوی مدل..."]" value="@State.PickerFilter" @oninput="OnPickerFilter" />
                     }
+                    @if (isModel)
+                    {
+                        <div class="sheet-tools">
+                            @if (State.TestingModels)
+                            {
+                                <span class="muted">@State.TestDone / @State.TestTotal</span>
+                                <button class="btn sm" @onclick="State.StopModelTest">@L["توقف"]</button>
+                            }
+                            else
+                            {
+                                <button class="btn sm" title="@L["هر مدل یک پیام کوتاه می‌گیرد (هزینه‌ی ناچیز)"]" @onclick="() => State.TestModelsAsync(items)">🧪 @L["تست مدل‌ها"]</button>
+                            }
+                            @if (items.Count > 0 || State.OnlyWorkingModels)
+                            {
+                                <label class="check small">
+                                    <input type="checkbox" checked="@State.OnlyWorkingModels" @onchange="e => { State.OnlyWorkingModels = e.Value is true; State.SetPickerFilter(State.PickerFilter); }" />
+                                    <span>@L["فقط مدل‌های کارا"]</span>
+                                </label>
+                            }
+                        </div>
+                    }
                     <div class="sheet-list">
                         @if (items.Count == 0)
                         {
@@ -35,9 +82,14 @@
                             var value = id;
                             var label = isModel ? value : State.Providers.First(p => p.Id == value).Name;
                             var current = isModel ? value == State.CurrentModel : value == State.CurrentProviderId;
-                            <button class="sheet-item @(current ? "current" : "")" dir="auto" @onclick="() => PickItem(value)">
-                                <span>@label</span>@if (current) { <span>✓</span> }
+                            var test = isModel ? State.TestResultOf(value) : null;
+                            <button class="sheet-item @(current ? "current" : "") @(test is { Ok: false } ? "failed" : "")" dir="auto" title="@(test?.Error ?? "")" @onclick="() => PickItem(value)">
+                                <span>@(test == null ? "" : test.Ok ? "✅ " : "❌ ")@label</span>@if (current) { <span>✓</span> }
                             </button>
+                        }
+                        @if (!isModel)
+                        {
+                            <button class="sheet-item add" @onclick="State.OpenNewApi">+ @L["افزودن API"]</button>
                         }
                     </div>
                 </div>

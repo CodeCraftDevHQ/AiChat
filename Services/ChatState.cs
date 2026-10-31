@@ -228,6 +228,7 @@ public class ChatState
         if (att == null) return error;
 
         Pending.Add(att);
+        if (att.Kind == "pdf") await AskPdfModeAsync(att);
         Notify();
         return null;
     }
@@ -279,6 +280,24 @@ public class ChatState
     }
 
     public void DeleteAttachmentFiles(IEnumerable<Attachment> files) => _storage.DeleteAttachments(files.ToList());
+
+    /// <summary>PDF waiting for the user's choice: extracted text or the original file.</summary>
+    public Attachment? PdfPrompt { get; private set; }
+    public bool PdfPromptTruncated { get; private set; }
+
+    async Task AskPdfModeAsync(Attachment pdf)
+    {
+        var bytes = await _storage.ReadAttachmentAsync(pdf);
+        PdfPromptTruncated = bytes != null && PdfHelper.ExtractText(bytes, pdf.Id).EndsWith("[... text truncated ...]");
+        PdfPrompt = pdf;
+    }
+
+    public void ChoosePdfMode(string mode)
+    {
+        if (PdfPrompt != null) PdfPrompt.PdfMode = mode == "file" ? "file" : "text";
+        PdfPrompt = null;
+        Notify();
+    }
 
     public void RemovePending(Attachment a)
     {
@@ -545,12 +564,91 @@ public class ChatState
     /// <summary>"provider" / "model" while the centered picker sheet is open.</summary>
     public string? Picker { get; private set; }
     public string PickerFilter { get; private set; } = "";
+    public bool NewApiRequested { get; set; }
+    public void OpenNewApi() { Picker = null; NewApiRequested = true; OpenSettingsAt("api"); }
+
+    // ---- model test: which models of the current API actually answer
+    public record ModelTestResult(bool Ok, string? Error);
+    public Dictionary<string, ModelTestResult> ModelTests { get; } = new();
+    public bool TestingModels { get; private set; }
+    public int TestDone { get; private set; }
+    public int TestTotal { get; private set; }
+    public bool OnlyWorkingModels { get; set; }
+    CancellationTokenSource? _testCts;
+
+    public static string TestKey(string providerId, string model) => providerId + "|" + model;
+
+    public ModelTestResult? TestResultOf(string model) =>
+        CurrentProviderId != null && ModelTests.TryGetValue(TestKey(CurrentProviderId, model), out var r) ? r : null;
+
+    public void StopModelTest() => _testCts?.Cancel();
+
+    public async Task TestModelsAsync(List<string> models)
+    {
+        var provider = CurrentProvider;
+        if (provider == null || models.Count == 0 || TestingModels) return;
+
+        TestingModels = true;
+        TestDone = 0;
+        TestTotal = models.Count;
+        _testCts = new CancellationTokenSource();
+        var all = _testCts.Token;
+        var impl = _factory.Create(provider.Type);
+        var gate = new SemaphoreSlim(4);
+        _log.Info($"Model test: {provider.Name}, {models.Count} models");
+        Notify();
+
+        async Task One(string model)
+        {
+            try
+            {
+                await gate.WaitAsync(all);
+            }
+            catch (OperationCanceledException) { return; }
+
+            ModelTestResult? result = null;
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(all);
+                cts.CancelAfter(TimeSpan.FromSeconds(30));
+                var hi = new List<ChatMessage> { new() { Role = "user", Content = "Hi" } };
+                try
+                {
+                    await foreach (var _ in impl.StreamAsync(provider, model, hi, "Reply with one word.", null, cts.Token))
+                    { result = new ModelTestResult(true, null); break; }
+                    result ??= new ModelTestResult(true, null); // finished without error
+                }
+                catch (OperationCanceledException) when (!all.IsCancellationRequested)
+                {
+                    result = new ModelTestResult(false, "Timeout (30 s)");
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { result = new ModelTestResult(false, ProviderHttp.Describe(ex)); }
+            finally { gate.Release(); }
+
+            if (result != null) ModelTests[TestKey(provider.Id, model)] = result;
+            TestDone++;
+            Notify();
+        }
+
+        try { await Task.WhenAll(models.Select(One)); }
+        finally
+        {
+            TestingModels = false;
+            _testCts?.Dispose();
+            _testCts = null;
+            Notify();
+        }
+    }
+
     public void OpenPicker(string kind) { Picker = kind; PickerFilter = ""; Notify(); }
     public void ClosePicker() { Picker = null; Notify(); }
     public void SetPickerFilter(string f) { PickerFilter = f; Notify(); }
 
     public bool HandleBack(bool includeSidebar = true)
     {
+        if (PdfPrompt != null) { ChoosePdfMode("text"); return true; }
         if (Picker != null) { ClosePicker(); return true; }
         if (Viewer != null) { CloseViewer(); return true; }
         if (ShowLogs) { CloseLogs(); return true; }

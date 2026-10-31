@@ -255,7 +255,8 @@
     protected override void OnInitialized()
     {
         base.OnInitialized();
-        if (State.Providers.Count == 0) StartNew();
+        if (State.NewApiRequested) { State.NewApiRequested = false; StartNew(); }
+        else if (State.Providers.Count == 0) StartNew();
         else Edit(State.CurrentProvider ?? State.Providers[0]);
     }
 

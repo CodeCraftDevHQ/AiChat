@@ -50,6 +50,9 @@ public class Attachment
     /// </summary>
     public bool Excluded { get; set; }
 
+    /// <summary>PDF only: "text" = send extracted text (default), "file" = send the original PDF (Claude / Gemini).</summary>
+    public string PdfMode { get; set; } = "text";
+
     /// <summary>File name inside the app's attachments folder.</summary>
     public string StoredName { get; set; } = "";
 

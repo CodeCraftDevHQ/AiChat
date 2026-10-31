@@ -46,6 +46,7 @@ static class HistoryHelper
         public string Role = "user";
         public string Text = "";
         public List<(string Mime, string Base64)> Images = new();
+        public List<string> Pdfs = new(); // base64, original files (providers with native PDF support only)
     }
 
     /// <summary>
@@ -54,13 +55,14 @@ static class HistoryHelper
     /// empty/failed replies are dropped, consecutive messages from the same role are merged,
     /// and the list always starts with a user message (Claude and Gemini require that).
     /// </summary>
-    public static List<Turn> Build(IReadOnlyList<ChatMessage> history)
+    public static List<Turn> Build(IReadOnlyList<ChatMessage> history, bool nativePdf = false)
     {
         var result = new List<Turn>();
         foreach (var m in history)
         {
             var text = m.Content ?? "";
             var images = new List<(string, string)>();
+            var pdfs = new List<string>();
 
             foreach (var a in m.Attachments)
             {
@@ -73,6 +75,11 @@ static class HistoryHelper
                 if (bytes == null)
                 {
                     text += $"\n\n[File \"{a.Name}\" is no longer available]";
+                }
+                else if (a.Kind == "pdf" && a.PdfMode == "file" && nativePdf)
+                {
+                    pdfs.Add(Convert.ToBase64String(bytes));
+                    text += $"\n\n[Attached PDF: {a.Name}]";
                 }
                 else if (a.Kind == "pdf")
                 {
@@ -89,18 +96,20 @@ static class HistoryHelper
             }
 
             text = text.Trim();
-            if (text.Length == 0 && images.Count == 0) continue;
+            if (text.Length == 0 && images.Count == 0 && pdfs.Count == 0) continue;
 
             if (result.Count > 0 && result[^1].Role == m.Role)
             {
                 var last = result[^1];
                 last.Text = last.Text.Length == 0 ? text : text.Length == 0 ? last.Text : last.Text + "\n\n" + text;
                 last.Images.AddRange(images);
+                last.Pdfs.AddRange(pdfs);
             }
             else
             {
                 var t = new Turn { Role = m.Role, Text = text };
                 t.Images.AddRange(images);
+                t.Pdfs.AddRange(pdfs);
                 result.Add(t);
             }
         }
@@ -381,7 +390,7 @@ public class AnthropicProvider : IChatProvider
         IReadOnlyList<ChatMessage> history, string? systemPrompt, Func<string, byte[], Task>? onImage, [EnumeratorCancellation] CancellationToken ct)
     {
         var messages = new JsonArray();
-        foreach (var t in HistoryHelper.Build(history))
+        foreach (var t in HistoryHelper.Build(history, nativePdf: true))
         {
             var parts = new JsonArray();
             foreach (var (mime, b64) in t.Images)
@@ -389,6 +398,12 @@ public class AnthropicProvider : IChatProvider
                 {
                     ["type"] = "image",
                     ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = mime, ["data"] = b64 }
+                });
+            foreach (var pdf in t.Pdfs)
+                parts.Add(new JsonObject
+                {
+                    ["type"] = "document",
+                    ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = "application/pdf", ["data"] = pdf }
                 });
             if (t.Text.Length > 0)
                 parts.Add(new JsonObject { ["type"] = "text", ["text"] = t.Text });
@@ -480,13 +495,18 @@ public class GeminiProvider : IChatProvider
         IReadOnlyList<ChatMessage> history, string? systemPrompt, Func<string, byte[], Task>? onImage, [EnumeratorCancellation] CancellationToken ct)
     {
         var contents = new JsonArray();
-        foreach (var t in HistoryHelper.Build(history))
+        foreach (var t in HistoryHelper.Build(history, nativePdf: true))
         {
             var parts = new JsonArray();
             foreach (var (mime, b64) in t.Images)
                 parts.Add(new JsonObject
                 {
                     ["inlineData"] = new JsonObject { ["mimeType"] = mime, ["data"] = b64 }
+                });
+            foreach (var pdf in t.Pdfs)
+                parts.Add(new JsonObject
+                {
+                    ["inlineData"] = new JsonObject { ["mimeType"] = "application/pdf", ["data"] = pdf }
                 });
             if (t.Text.Length > 0)
                 parts.Add(new JsonObject { ["text"] = t.Text });

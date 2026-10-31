@@ -178,6 +178,16 @@ button { cursor: pointer; }
 }
 .sheet-item:hover { background: var(--hover); }
 .sheet-item.current { color: var(--accent); font-weight: 600; }
+.pdf-body { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.pdf-body p { margin: 4px 0; }
+.pdf-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: start; padding: 10px 12px; }
+.pdf-opt small { color: var(--muted); font-weight: 400; }
+.pdf-warn { color: var(--danger); font-size: 13px; }
+.sheet-tools { display: flex; align-items: center; gap: 12px; padding: 0 14px 8px; flex-wrap: wrap; }
+.sheet-tools .btn.sm { padding: 4px 12px; font-size: 13px; }
+.check.small { font-size: 13px; }
+.sheet-item.failed { color: var(--muted); }
+.sheet-item.add { color: var(--accent); border-top: 1px solid var(--border); border-radius: 0 0 10px 10px; margin-top: 6px; }
 .sheet-empty { padding: 16px; text-align: center; color: var(--muted); }
 .picker option { background: var(--surface); color: var(--text); }
 .picker.model { font-weight: 500; color: var(--muted); direction: ltr; }
