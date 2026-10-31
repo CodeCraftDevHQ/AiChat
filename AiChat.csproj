@@ -36,6 +36,7 @@
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.*" />
 		<PackageReference Include="Markdig" Version="0.*" />
+		<PackageReference Include="PdfPig" Version="0.1.*" />
 	</ItemGroup>
 
 </Project>

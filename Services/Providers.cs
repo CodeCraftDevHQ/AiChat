@@ -74,6 +74,10 @@ static class HistoryHelper
                 {
                     text += $"\n\n[File \"{a.Name}\" is no longer available]";
                 }
+                else if (a.Kind == "pdf")
+                {
+                    text += $"\n\n--- PDF: {a.Name} ---\n{PdfHelper.ExtractText(bytes, a.Id)}\n--- End of PDF ---";
+                }
                 else if (a.Kind == "image")
                 {
                     images.Add((a.MimeType, Convert.ToBase64String(bytes)));

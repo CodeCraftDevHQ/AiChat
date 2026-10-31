@@ -205,6 +205,7 @@ public class ChatState
     public const int MaxAttachments = 6;
     const int MaxImageBytes = 5 * 1024 * 1024; // Claude's per-image limit
     const int MaxTextBytes = 512 * 1024;
+    const int MaxPdfBytes = 20 * 1024 * 1024;
 
     static readonly Dictionary<string, string> ImageMimes = new()
     {
@@ -239,7 +240,8 @@ public class ChatState
 
         var ext = Path.GetExtension(name).ToLowerInvariant();
         var isImage = ImageMimes.TryGetValue(ext, out var mime);
-        var limit = isImage ? MaxImageBytes : MaxTextBytes;
+        var isPdf = ext == ".pdf";
+        var limit = isImage ? MaxImageBytes : isPdf ? MaxPdfBytes : MaxTextBytes;
 
         using var ms = new MemoryStream();
         var buffer = new byte[81920];
@@ -248,10 +250,19 @@ public class ChatState
         {
             ms.Write(buffer, 0, n);
             if (ms.Length > limit)
-                return (null, L.F("«{0}» بزرگ‌تر از حد مجاز است (حداکثر {1}).", name, isImage ? L["5 مگابایت"] : L["512 کیلوبایت"]));
+                return (null, L.F("«{0}» بزرگ‌تر از حد مجاز است (حداکثر {1}).", name, isImage ? L["5 مگابایت"] : isPdf ? L["20 مگابایت"] : L["512 کیلوبایت"]));
         }
         var data = ms.ToArray();
         if (data.Length == 0) return (null, L.F("«{0}» خالی است.", name));
+
+        if (isPdf)
+        {
+            if (!PdfHelper.LooksLikePdf(data)) return (null, L.F("«{0}» یک فایل PDF معتبر نیست.", name));
+            if (PdfHelper.ExtractText(data).Length == 0)
+                return (null, L.F("«{0}» متنی ندارد (احتمالاً اسکن‌شده است).", name));
+            var pdf = await _storage.SaveAttachmentAsync(name, "application/pdf", "pdf", data);
+            return (pdf, null);
+        }
 
         if (!isImage)
         {
@@ -259,7 +270,7 @@ public class ChatState
             var head = Math.Min(data.Length, 8192);
             for (var i = 0; i < head; i++)
                 if (data[i] == 0)
-                    return (null, L.F("«{0}»: فقط عکس (png, jpg, gif, webp) و فایل‌های متنی/کد پشتیبانی می‌شوند.", name));
+                    return (null, L.F("«{0}»: فقط عکس (png, jpg, gif, webp)، PDF و فایل‌های متنی/کد پشتیبانی می‌شوند.", name));
             mime = "text/plain";
         }
 
