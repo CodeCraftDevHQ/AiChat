@@ -1,51 +1,88 @@
-# AI Chat — چت چندسرویسی (ChatGPT-style) با .NET MAUI Blazor Hybrid
+# 🚀 AI Chat Application
 
-یک برنامه‌ی C# برای ویندوز و اندروید که چند API هوش مصنوعی را در یک محیط چت شبیه ChatGPT کنار هم نگه می‌دارد.
+A modern, cross-platform ChatGPT-style application built for **Windows** and **Android** using C# and .NET 10 (.NET MAUI Blazor Hybrid). Connect your own API keys, seamlessly switch between AI providers, and keep all your chat history stored locally on your device.
 
-## امکانات
-- سرویس‌دهنده‌ها: **OpenAI-compatible** (OpenAI، OpenRouter، DeepSeek، Groq، Mistral، xAI، Together، Ollama، LM Studio و ...)، **Anthropic (Claude)** و **Google Gemini**
-- ثبت چند API و جابه‌جایی سریع بین سرویس و مدل از نوار بالا (حتی وسط یک گفتگو)
-- دریافت خودکار لیست مدل‌ها از هر سرویس + امکان نوشتن دستی نام مدل
-- نمایش زنده پاسخ (Streaming) و دکمه‌ی توقف و تولید مجدد
-- رندر Markdown، جدول و بلوک کد با دکمه‌ی کپی
-- پشتیبانی کامل فارسی/راست‌به‌چپ (هر پاراگراف جهت خودش را تشخیص می‌دهد)
-- ذخیره‌ی تاریخچه‌ی گفتگوها روی دستگاه؛ کلید API ها در SecureStorage
-- تم تیره/روشن خودکار، رابط واکنش‌گرا (سایدبار کشویی در موبایل)
+---
 
-## پیش‌نیازها
-1. Visual Studio 2026 با workload **«.NET Multi-platform App UI development»** (MAUI) و **.NET 10 SDK**
-2. برای اندروید: Android SDK و یک امولاتور یا گوشی (USB Debugging روشن)
+## ✨ Features
 
-## اجرا
-1. پوشه‌ی `AiChat` را با Visual Studio باز کنید (`AiChat.csproj`).
-2. بالای صفحه هدف اجرا را انتخاب کنید:
-   - **Windows Machine** برای ویندوز
-   - یک **Android Emulator / Device** برای اندروید
-3. `F5` را بزنید.
-4. در برنامه: **تنظیمات و API ها ← افزودن API جدید** → الگوی آماده را انتخاب کنید، کلید را بگذارید، «دریافت خودکار لیست مدل‌ها» را بزنید و ذخیره کنید.
+### 🔌 Multi-Provider Support
+* **OpenAI-Compatible APIs:** OpenAI, OpenRouter, DeepSeek, Groq, Mistral, xAI, Together, Ollama, LM Studio, or any custom endpoint using `/chat/completions`.
+* **Direct Integrations:** Anthropic (Claude) and Google Gemini.
+* **Flexible Management:** Configure multiple providers simultaneously, fetch model lists automatically, and retain model choices per provider.
+* **Model Health Check:** Built-in "Test Models" utility to verify model functionality and rate limits before starting conversations.
 
-## نکات
-- **ارسال پیام**: در ویندوز `Enter` ارسال و `Shift+Enter` خط جدید است. در موبایل `Enter` خط جدید می‌سازد و با دکمه‌ی ارسال، پیام می‌رود.
-- **Ollama / LM Studio**: روی ویندوز آدرس `http://localhost:11434/v1` کار می‌کند. در **امولاتور اندروید** به‌جای `localhost` از `http://10.0.2.2:11434/v1` استفاده کنید؛ روی گوشی واقعی از IP کامپیوتر در شبکه (و Ollama را با `OLLAMA_HOST=0.0.0.0` اجرا کنید).
-- **جهت رابط**: از تنظیمات می‌توانید بین راست‌به‌چپ و چپ‌به‌راست جابه‌جا شوید.
-- **ذخیره‌ی کلیدها**: اگر SecureStorage روی دستگاهی در دسترس نباشد، برنامه به‌صورت خودکار از Preferences استفاده می‌کند.
-- داده‌ها در پوشه‌ی `FileSystem.AppDataDirectory` (فایل‌های `providers.json` و `conversations.json`) ذخیره می‌شوند.
+### 💬 Chat Experience
+* Real-time text streaming, full Markdown rendering, and code blocks with quick-copy/export options.
+* Full support for RTL (Persian, Arabic) and LTR (English) languages.
+* Edit sent messages with full version tracking (navigate history using `‹ n/N ›`).
+* Organize chats with pinning, custom titles, full-text search across all conversations, and dynamic message navigation rails.
+* **Projects:** Group chats together with shared system instructions and context files.
 
-## ساختار
+### 📎 Attachments & File Handling
+* Attach images, documents (PDFs), and plain text via drag-and-drop, clipboard paste, or file selection (supports camera input on mobile).
+* Smart PDF parsing: Send as raw extracted text or as native documents (supported by Claude and Gemini).
+* Auto-fallback for image rejection if a provider does not support vision capabilities.
+
+### 🎨 Personalization & Privacy
+* Interface localized in Persian and English.
+* Dark, Light, and System theme modes.
+* Complete visual control: customize typography, layout width, line spacing, and font sizes.
+* **Privacy First:** API keys are stored in native secure storage (Android Keystore / Windows Credential Vault). All conversation logs and attachments remain strictly on your local device.
+
+---
+
+## 🛠️ Build & Installation
+
+### Prerequisites
+* Visual Studio 2022 / 2026 with **.NET Multi-platform App UI** workload.
+* **.NET 10 SDK** installed.
+
+### Build via CLI
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/your-repo-name.git
+cd your-repo-name
+
+# Build for Windows
+dotnet build -f net10.0-windows10.0.19041.0
+
+# Build for Android
+dotnet build -f net10.0-android
 ```
-AiChat/
-  AiChat.csproj
-  MauiProgram.cs / App.xaml / MainPage.xaml      ← میزبان BlazorWebView
-  Models/Models.cs                               ← مدل‌ها و الگوهای آماده
-  Services/
-    Providers.cs                                 ← OpenAI / Claude / Gemini (Streaming + لیست مدل‌ها)
-    ChatState.cs                                 ← وضعیت برنامه، ارسال، توقف، تاریخچه
-    StorageService.cs                            ← ذخیره‌سازی JSON + SecureStorage
-    MarkdownRenderer.cs                          ← Markdown امن (HTML خام غیرفعال)
-  Components/                                    ← ChatApp، Sidebar، MessageView، SettingsDialog
-  wwwroot/ (index.html، css/app.css، js/app.js)  ← ظاهر شبیه ChatGPT
-  Platforms/Android, Platforms/Windows
-```
 
-## افزودن سرویس جدید
-اگر سرویسی API سازگار با OpenAI دارد، فقط در تنظیمات با نوع «سازگار با OpenAI» و Base URL آن اضافه‌اش کنید. برای APIهای با فرمت متفاوت، یک کلاس جدید با رابط `IChatProvider` در `Services/Providers.cs` بنویسید و در `ProviderFactory` ثبت کنید.
+Alternatively, open `AiChat.csproj` in Visual Studio, select your target platform (**Windows Machine** or an **Android Emulator**), and press `F5` to run.
+
+---
+
+## 🚀 Getting Started
+
+1. Navigate to **Settings → APIs → Add API**.
+2. Pick a preset or choose **OpenAI-compatible** to input a custom Base URL.
+3. Enter your API Key, fetch the available models, and save.
+4. Select your preferred provider and model from the top navigation bar to start chatting!
+
+---
+
+## 📁 Project Architecture
+
+| Directory | Description |
+| :--- | :--- |
+| `Services/` | Core business logic, API client handlers, state management, storage, and localization. |
+| `Components/` | Razor components for UI rendering (Chat view, Sidebar, Modals, Settings). |
+| `Models/` | Strongly typed data models and entity definitions. |
+| `wwwroot/` | Static assets, global CSS styling, and JavaScript interoperability scripts. |
+| `Platforms/` | Native platform-specific implementations for Android and Windows. |
+
+---
+
+## 🌐 Localization
+
+To add support for a new language, append your translation key-value mappings inside `Services/Translations.cs`.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
