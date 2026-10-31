@@ -152,10 +152,27 @@
                     }
                 </div>
             }
+            @if (_plusMenu)
+            {
+                <div class="menu-backdrop" @onclick="() => _plusMenu = false"></div>
+                <div class="menu" style="top:auto; bottom:84px; left:14px; right:auto">
+                    <button @onclick="PickFromMenu">📎 @L["فایل یا عکس"]</button>
+                    <button @onclick="TakePhoto">📷 @L["دوربین"]</button>
+                </div>
+            }
             <div class="box">
-                <button class="icon-btn attach" title="@L["پیوست عکس یا فایل"]" @onclick="PickFiles">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
-                </button>
+                @if (IsMobile)
+                {
+                    <button class="icon-btn attach" title="@L["پیوست عکس یا فایل"]" @onclick="() => _plusMenu = !_plusMenu">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                    </button>
+                }
+                else
+                {
+                    <button class="icon-btn attach" title="@L["پیوست عکس یا فایل"]" @onclick="PickFiles">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
+                    </button>
+                }
                 <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="enter" placeholder="@L["هر چیزی بپرسید..."]"></textarea>
                 @if (State.IsStreaming)
                 {
@@ -450,6 +467,47 @@
         await State.SendAsync(text);
     }
 
+    static async Task<Stream> DownscaleIfImage(string name, Stream stream)
+    {
+        var ext = Path.GetExtension(name).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg")) return stream;
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        return new MemoryStream(PhotoHelper.Downscale(ms.ToArray()));
+    }
+
+    async Task<string?> AddPickedAsync(string name, Stream stream)
+    {
+        await using var s = await DownscaleIfImage(name, stream);
+        return await State.AddAttachmentAsync(name, s);
+    }
+
+    static bool IsMobile => DeviceInfo.Current.Platform == DevicePlatform.Android || DeviceInfo.Current.Platform == DevicePlatform.iOS;
+    bool _plusMenu;
+
+    async Task PickFromMenu()
+    {
+        _plusMenu = false;
+        await PickFiles();
+    }
+
+    async Task TakePhoto()
+    {
+        _plusMenu = false;
+        try
+        {
+            var photo = await PhotoHelper.CapturePhotoAsync();
+            if (photo == null) return;
+            using var ms = new MemoryStream(photo.Value.Data);
+            var err = await State.AddAttachmentAsync(photo.Value.Name, ms);
+            if (err != null) State.SetNotice(err);
+        }
+        catch (Exception ex)
+        {
+            State.SetNotice(L["خطا در گرفتن عکس: "] + ex.Message);
+        }
+    }
+
     async Task PickFiles()
     {
         try
@@ -460,7 +518,7 @@
             foreach (var f in files)
             {
                 await using var stream = await f.OpenReadAsync();
-                var err = await State.AddAttachmentAsync(f.FileName, stream);
+                var err = await AddPickedAsync(f.FileName, stream);
                 if (err != null) State.SetNotice(err);
             }
         }
