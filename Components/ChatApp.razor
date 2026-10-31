@@ -261,6 +261,7 @@
     int _lastCount;
     Conversation? _lastActive;
     string? _appliedTheme;
+    string? _appliedUi;
     string? _appliedLang;
 
     // ---------------- search in this chat
@@ -412,6 +413,12 @@
         {
             _appliedLang = State.Language;
             await JS.InvokeVoidAsync("chat.setLang", State.Language);
+        }
+
+        if (_appliedUi != State.UiSignature)
+        {
+            _appliedUi = State.UiSignature;
+            await JS.InvokeVoidAsync("chat.setUi", State.UiFontSize, State.UiWidth, State.UiLineHeight, State.UiFont);
         }
 
         if (_appliedTheme != State.Theme)

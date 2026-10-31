@@ -68,9 +68,9 @@ html, body {
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: "Segoe UI", Vazirmatn, Tahoma, system-ui, -apple-system, Roboto, "Noto Sans Arabic", sans-serif;
-    font-size: 16px;
-    line-height: 1.6;
+    font-family: var(--ui-font, "Segoe UI", Vazirmatn, Tahoma, system-ui, -apple-system, Roboto, "Noto Sans Arabic", sans-serif);
+    font-size: var(--ui-fs, 16px);
+    line-height: var(--ui-lh, 1.6);
     overflow: hidden;
 }
 
@@ -188,7 +188,7 @@ button { cursor: pointer; }
 
 /* ===================== messages ===================== */
 .messages { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
-.thread { max-width: 768px; margin: 0 auto; padding: 8px 16px 24px; }
+.thread { max-width: var(--ui-w, 768px); margin: 0 auto; padding: 8px 16px 24px; }
 
 .welcome {
     height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -350,7 +350,7 @@ body.dragging .drop-overlay { display: flex; }
 
 /* ===================== composer ===================== */
 .composer {
-    width: 100%; max-width: 768px; margin: 0 auto;
+    width: 100%; max-width: var(--ui-w, 768px); margin: 0 auto;
     padding: 6px 16px calc(8px + env(safe-area-inset-bottom));
 }
 .composer .box {
@@ -618,3 +618,4 @@ select.inp option { background: var(--surface); color: var(--text); }
     overflow: hidden; overflow-wrap: anywhere;
 }
 .snippet mark { background: rgba(255, 213, 74, .45); color: var(--text); border-radius: 3px; padding: 0 1px; }
+.range { width: 100%; accent-color: var(--accent); margin: 4px 0; }

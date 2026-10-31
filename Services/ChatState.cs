@@ -365,6 +365,29 @@ public class ChatState
     public string? Notice { get; private set; }
 
     /// <summary>"system", "light" or "dark".</summary>
+    // appearance
+    public int UiFontSize { get; private set; } = 16;
+    public int UiWidth { get; private set; } = 768;   // 0 = full width
+    public int UiLineHeight { get; private set; } = 160; // percent
+    public string UiFont { get; private set; } = "default";
+
+    public string UiSignature => $"{UiFontSize}|{UiWidth}|{UiLineHeight}|{UiFont}";
+
+    public void SetUi(int? fontSize = null, int? width = null, int? lineHeight = null, string? font = null)
+    {
+        if (fontSize != null) UiFontSize = Math.Clamp(fontSize.Value, 12, 26);
+        if (width != null) UiWidth = width.Value <= 0 ? 0 : Math.Clamp(width.Value, 480, 1400);
+        if (lineHeight != null) UiLineHeight = Math.Clamp(lineHeight.Value, 120, 220);
+        if (font != null) UiFont = font;
+        Preferences.Default.Set("ui_fs", UiFontSize);
+        Preferences.Default.Set("ui_w", UiWidth);
+        Preferences.Default.Set("ui_lh", UiLineHeight);
+        Preferences.Default.Set("ui_font", UiFont);
+        Notify();
+    }
+
+    public void ResetUi() => SetUi(16, 768, 160, "default");
+
     public string Theme { get; private set; } = "system";
 
     public void SetTheme(string theme)
@@ -401,6 +424,10 @@ public class ChatState
 
         L.SetLanguage(Preferences.Default.Get("lang", "fa"));
         Theme = Preferences.Default.Get("theme", "system");
+        UiFontSize = Preferences.Default.Get("ui_fs", 16);
+        UiWidth = Preferences.Default.Get("ui_w", 768);
+        UiLineHeight = Preferences.Default.Get("ui_lh", 160);
+        UiFont = Preferences.Default.Get("ui_font", "default");
         IsRtl = Preferences.Default.Get("rtl", true);
         SystemPrompt = Preferences.Default.Get("system_prompt", "");
 

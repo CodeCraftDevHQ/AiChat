@@ -60,6 +60,31 @@
                             </label>
                             break;
 
+                        case "appearance":
+                            <label class="lbl first">@L["اندازه‌ی متن"]: @State.UiFontSize px</label>
+                            <input type="range" class="range" min="12" max="26" step="1" value="@State.UiFontSize" @oninput="e => State.SetUi(fontSize: ToInt(e))" />
+
+                            <label class="lbl">@L["عرض خطوط (عرض محتوا)"]: @(State.UiWidth == 0 ? L["تمام‌عرض"] : State.UiWidth + " px")</label>
+                            <input type="range" class="range" min="480" max="1400" step="20" value="@(State.UiWidth == 0 ? 1400 : State.UiWidth)" @oninput="e => State.SetUi(width: ToInt(e))" />
+                            <label class="check" style="margin-top:8px">
+                                <input type="checkbox" checked="@(State.UiWidth == 0)" @onchange="OnFullWidth" />
+                                <span>@L["تمام‌عرض"]</span>
+                            </label>
+
+                            <label class="lbl">@L["فاصله‌ی خطوط"]: @(State.UiLineHeight / 100.0) </label>
+                            <input type="range" class="range" min="120" max="220" step="5" value="@State.UiLineHeight" @oninput="e => State.SetUi(lineHeight: ToInt(e))" />
+
+                            <label class="lbl">@L["قلم"]</label>
+                            <select class="inp" value="@State.UiFont" @onchange="OnFontChanged">
+                                <option value="default">@L["پیش‌فرض"]</option>
+                                <option value="tahoma">Tahoma</option>
+                                <option value="serif">@L["سریف"]</option>
+                                <option value="mono">@L["تک‌فاصله"]</option>
+                            </select>
+
+                            <button class="btn" style="margin-top:20px" @onclick="State.ResetUi">@L["بازنشانی ظاهر"]</button>
+                            break;
+
                         case "api":
                             <div class="chips">
                                 @foreach (var p in State.Providers)
@@ -179,6 +204,7 @@
     SectionItem[] Sections => new[]
     {
         new SectionItem("general", L["عمومی"]),
+        new SectionItem("appearance", L["ظاهر"]),
         new SectionItem("api", L["API ها"]),
         new SectionItem("chat", L["گفتگو"]),
         new SectionItem("data", L["داده‌ها و لاگ"]),
@@ -199,6 +225,10 @@
     void OnSystemPromptInput(ChangeEventArgs e) => State.SetSystemPrompt(e.Value?.ToString() ?? string.Empty);
 
     void OnRtlChanged(ChangeEventArgs e) => State.SetRtl(e.Value is true);
+
+    static int ToInt(ChangeEventArgs e) => int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+    void OnFullWidth(ChangeEventArgs e) => State.SetUi(width: e.Value is true ? 0 : 768);
+    void OnFontChanged(ChangeEventArgs e) => State.SetUi(font: e.Value?.ToString() ?? "default");
 
     void OnLanguageChanged(ChangeEventArgs e) => State.SetLanguage(e.Value?.ToString() ?? "fa");
 

@@ -4,6 +4,20 @@ window.chat = {
         document.documentElement.setAttribute('data-theme', theme || 'system');
     },
 
+    // appearance: font size (px), content width (px, 0 = full), line height (percent), font key
+    setUi(fs, w, lh, font) {
+        const s = document.documentElement.style;
+        const fonts = {
+            tahoma: 'Tahoma, "Segoe UI", sans-serif',
+            serif: 'Georgia, "Times New Roman", "Noto Naskh Arabic", serif',
+            mono: '"Cascadia Code", Consolas, monospace'
+        };
+        s.setProperty('--ui-fs', fs + 'px');
+        s.setProperty('--ui-w', w > 0 ? w + 'px' : '100%');
+        s.setProperty('--ui-lh', String(lh / 100));
+        if (fonts[font]) s.setProperty('--ui-font', fonts[font]); else s.removeProperty('--ui-font');
+    },
+
     setLang(lang) {
         document.documentElement.setAttribute('lang', lang || 'fa');
     },
