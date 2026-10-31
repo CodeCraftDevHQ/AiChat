@@ -5,22 +5,22 @@
     <div class="modal narrow" @onclick:stopPropagation="true">
 
         <div class="modal-head">
-            <h2>@(_isNew ? "پروژه جدید" : "ویرایش پروژه")</h2>
-            <button class="icon-btn" title="بستن" @onclick="Cancel">
+            <h2>@(_isNew ? L["پروژه جدید"] : L["ویرایش پروژه"])</h2>
+            <button class="icon-btn" title="@L["بستن"]" @onclick="Cancel">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
             </button>
         </div>
 
         <div class="p-body">
-            <label class="lbl">نام پروژه</label>
-            <input class="inp" dir="auto" maxlength="60" @bind="_project.Name" @bind:event="oninput" placeholder="مثلاً: مقاله، پروژه‌ی برنامه‌نویسی، ..." />
+            <label class="lbl">@L["نام پروژه"]</label>
+            <input class="inp" dir="auto" maxlength="60" @bind="_project.Name" @bind:event="oninput" placeholder="@L["مثلاً: مقاله، پروژه‌ی برنامه‌نویسی، ..."]" />
 
-            <label class="lbl">دستورالعمل‌های پروژه</label>
+            <label class="lbl">@L["دستورالعمل‌های پروژه"]</label>
             <textarea class="inp" rows="6" dir="auto" @bind="_project.Instructions" @bind:event="oninput"
-                      placeholder="به همه‌ی گفتگوهای این پروژه اضافه می‌شود. مثلاً: همیشه به فارسی و رسمی پاسخ بده."></textarea>
+                      placeholder="@L["به همه‌ی گفتگوهای این پروژه اضافه می‌شود. مثلاً: همیشه به فارسی و رسمی پاسخ بده."]"></textarea>
 
-            <label class="lbl">فایل‌های پروژه (@_project.Files.Count از @ChatState.MaxProjectFiles)</label>
-            <p class="muted small">این فایل‌ها (عکس یا متن/کد) همراه اولین پیام هر گفتگوی پروژه برای مدل فرستاده می‌شوند. فایل‌های بزرگ توکن زیادی مصرف می‌کنند.</p>
+            <label class="lbl">@L.F("فایل‌های پروژه ({0} از {1})", _project.Files.Count, ChatState.MaxProjectFiles)</label>
+            <p class="muted small">@L["این فایل‌ها (عکس یا متن/کد) همراه اولین پیام هر گفتگوی پروژه برای مدل فرستاده می‌شوند. فایل‌های بزرگ توکن زیادی مصرف می‌کنند."]</p>
 
             @if (_project.Files.Count > 0)
             {
@@ -34,7 +34,7 @@
             }
 
             <div class="row">
-                <button class="btn" disabled="@(_project.Files.Count >= ChatState.MaxProjectFiles)" @onclick="AddFiles">+ افزودن فایل</button>
+                <button class="btn" disabled="@(_project.Files.Count >= ChatState.MaxProjectFiles)" @onclick="AddFiles">@L["+ افزودن فایل"]</button>
             </div>
 
             @if (_status != null)
@@ -48,16 +48,16 @@
             {
                 @if (_confirmDelete)
                 {
-                    <button class="btn danger" @onclick="DeleteProject">حذف قطعی (گفتگوها می‌مانند)</button>
+                    <button class="btn danger" @onclick="DeleteProject">@L["حذف قطعی (گفتگوها می‌مانند)"]</button>
                 }
                 else
                 {
-                    <button class="btn" @onclick="() => _confirmDelete = true">حذف پروژه</button>
+                    <button class="btn" @onclick="() => _confirmDelete = true">@L["حذف پروژه"]</button>
                 }
             }
             <span class="spacer"></span>
-            <button class="btn" @onclick="Cancel">انصراف</button>
-            <button class="primary" @onclick="Save">ذخیره</button>
+            <button class="btn" @onclick="Cancel">@L["انصراف"]</button>
+            <button class="primary" @onclick="Save">@L["ذخیره"]</button>
         </div>
     </div>
 </div>
@@ -91,7 +91,7 @@
     {
         try
         {
-            var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "فایل‌های پروژه" });
+            var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = L["فایل‌های پروژه"] });
             if (picked == null) return;
 
             var errors = new List<string>();
@@ -99,7 +99,7 @@
             {
                 if (_project.Files.Count >= ChatState.MaxProjectFiles)
                 {
-                    errors.Add($"حداکثر {ChatState.MaxProjectFiles} فایل مجاز است.");
+                    errors.Add(L.F("حداکثر {0} فایل مجاز است.", ChatState.MaxProjectFiles));
                     break;
                 }
 
@@ -119,7 +119,7 @@
         }
         catch (Exception ex)
         {
-            _status = "خطا در انتخاب فایل: " + ex.Message;
+            _status = L["خطا در انتخاب فایل: "] + ex.Message;
         }
     }
 
@@ -136,7 +136,7 @@
         _project.Instructions = (_project.Instructions ?? string.Empty).Trim();
         if (_project.Name.Length == 0)
         {
-            _status = "نام پروژه را وارد کنید.";
+            _status = L["نام پروژه را وارد کنید."];
             return;
         }
 

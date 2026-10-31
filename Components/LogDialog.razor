@@ -7,8 +7,8 @@
     <div class="modal narrow log" @onclick:stopPropagation="true">
 
         <div class="modal-head">
-            <h2>لاگ برنامه <small class="muted">(@Log.Count از @LogService.MaxLines خط)</small></h2>
-            <button class="icon-btn" title="بستن" @onclick="State.CloseLogs">
+            <h2>@L["لاگ برنامه"] <small class="muted">(@L.F("{0} از {1} خط", Log.Count, LogService.MaxLines))</small></h2>
+            <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseLogs">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
             </button>
         </div>
@@ -16,10 +16,10 @@
         <pre id="logbox" class="logbox" dir="ltr">@(Log.Count == 0 ? "(empty)" : Log.GetText())</pre>
 
         <div class="p-foot">
-            <button class="btn" @onclick="CopyAsync">@(_copied ? "کپی شد ✓" : "کپی")</button>
-            <button class="btn" @onclick="Log.Clear">پاک کردن</button>
+            <button class="btn" @onclick="CopyAsync">@(_copied ? L["کپی شد ✓"] : L["کپی"])</button>
+            <button class="btn" @onclick="Log.Clear">@L["پاک کردن"]</button>
             <span class="spacer"></span>
-            <button class="primary" @onclick="State.CloseLogs">بستن</button>
+            <button class="primary" @onclick="State.CloseLogs">@L["بستن"]</button>
         </div>
     </div>
 </div>

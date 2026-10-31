@@ -10,27 +10,27 @@
 
     <main class="main">
         <header class="topbar">
-            <button class="icon-btn" title="منو" @onclick="State.ToggleSidebar">
+            <button class="icon-btn" title="@L["منو"]" @onclick="State.ToggleSidebar">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
             </button>
 
             <div class="pickers">
                 @if (State.Providers.Count == 0)
                 {
-                    <button class="chip" @onclick="OpenApiSettings">+ افزودن API</button>
+                    <button class="chip" @onclick="OpenApiSettings">@L["+ افزودن API"]</button>
                 }
                 else
                 {
-                    <select class="picker" value="@State.CurrentProviderId" @onchange="OnProviderChanged" title="سرویس‌دهنده">
+                    <select class="picker" value="@State.CurrentProviderId" @onchange="OnProviderChanged" title="@L["سرویس‌دهنده"]">
                         @foreach (var p in State.Providers)
                         {
                             <option value="@p.Id">@p.Name</option>
                         }
                     </select>
-                    <select class="picker model" value="@State.CurrentModel" @onchange="OnModelChanged" title="مدل">
+                    <select class="picker model" value="@State.CurrentModel" @onchange="OnModelChanged" title="@L["مدل"]">
                         @if (string.IsNullOrWhiteSpace(State.CurrentModel))
                         {
-                            <option value="">— مدل —</option>
+                            <option value="">@L["— مدل —"]</option>
                         }
                         @foreach (var m in State.ModelsFor(State.CurrentProvider))
                         {
@@ -42,16 +42,16 @@
 
             @if (State.Active != null && State.Active.Messages.Count > 0)
             {
-                <button class="icon-btn" title="جست‌وجو در گفتگو (Ctrl+F)" @onclick="State.OpenSearch">
+                <button class="icon-btn" title="@L["جست‌وجو در گفتگو (Ctrl+F)"]" @onclick="State.OpenSearch">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
                 </button>
             }
 
-            <button class="icon-btn" title="تغییر تم تاریک/روشن" @onclick="ToggleTheme">
+            <button class="icon-btn" title="@L["تغییر تم تاریک/روشن"]" @onclick="ToggleTheme">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
             </button>
 
-            <button class="icon-btn" title="گفتگوی جدید" @onclick="State.NewChat">
+            <button class="icon-btn" title="@L["گفتگوی جدید"]" @onclick="State.NewChat">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
             </button>
         </header>
@@ -61,15 +61,15 @@
             <div class="searchbar">
                 <svg class="muted" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
                 <input class="search-input" dir="auto" @ref="_searchInput" value="@_searchText"
-                       placeholder="جست‌وجو در این گفتگو..." @oninput="OnSearchInput" @onkeydown="OnSearchKey" />
+                       placeholder="@L["جست‌وجو در این گفتگو..."]" @oninput="OnSearchInput" @onkeydown="OnSearchKey" />
                 <span class="search-count muted" dir="ltr">@SearchCounter</span>
-                <button class="icon-btn sm" title="قدیمی‌تر" disabled="@(_searchTotal == 0)" @onclick="() => SearchStep(-1)">
+                <button class="icon-btn sm" title="@L["قدیمی‌تر"]" disabled="@(_searchTotal == 0)" @onclick="() => SearchStep(-1)">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6" /></svg>
                 </button>
-                <button class="icon-btn sm" title="جدیدتر" disabled="@(_searchTotal == 0)" @onclick="() => SearchStep(1)">
+                <button class="icon-btn sm" title="@L["جدیدتر"]" disabled="@(_searchTotal == 0)" @onclick="() => SearchStep(1)">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
                 </button>
-                <button class="icon-btn sm" title="بستن" @onclick="State.CloseSearch">
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="State.CloseSearch">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                 </button>
             </div>
@@ -80,15 +80,15 @@
             {
                 <div class="welcome">
                     <div class="logo">AI</div>
-                    <h1>امروز چه کمکی از من برمی‌آید؟</h1>
+                    <h1>@L["امروز چه کمکی از من برمی‌آید؟"]</h1>
                     @if (State.CurrentProject != null)
                     {
-                        <p class="project-tag" dir="auto">📁 پروژه: @State.CurrentProject.Name</p>
+                        <p class="project-tag" dir="auto">📁 @(L["پروژه"]): @State.CurrentProject.Name</p>
                     }
                     @if (State.Providers.Count == 0)
                     {
-                        <p class="muted">برای شروع، کلید API سرویس مورد نظرتان را اضافه کنید.</p>
-                        <button class="primary" @onclick="OpenApiSettings">افزودن API</button>
+                        <p class="muted">@L["برای شروع، کلید API سرویس مورد نظرتان را اضافه کنید."]</p>
+                        <button class="primary" @onclick="OpenApiSettings">@L["افزودن API"]</button>
                     }
                     else
                     {
@@ -122,7 +122,7 @@
                         </button>
                     }
                 </div>
-                <button class="qdashes" title="سوال‌های شما" @onclick="ToggleRail">
+                <button class="qdashes" title="@L["سوال‌های شما"]" @onclick="ToggleRail">
                     @foreach (var q in Questions)
                     {
                         <i class="qd @(q.Index == _activeQ ? "active" : "")"></i>
@@ -134,7 +134,7 @@
         <div class="composer">
             @if (!_atBottom && State.Active != null && State.Active.Messages.Count > 0)
             {
-                <button class="to-bottom" title="رفتن به آخر گفتگو" @onclick="ScrollToBottom">
+                <button class="to-bottom" title="@L["رفتن به آخر گفتگو"]" @onclick="ScrollToBottom">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
                 </button>
             }
@@ -153,24 +153,24 @@
                 </div>
             }
             <div class="box">
-                <button class="icon-btn attach" title="پیوست عکس یا فایل" @onclick="PickFiles">
+                <button class="icon-btn attach" title="@L["پیوست عکس یا فایل"]" @onclick="PickFiles">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
                 </button>
-                <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="send" placeholder="هر چیزی بپرسید..."></textarea>
+                <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="send" placeholder="@L["هر چیزی بپرسید..."]"></textarea>
                 @if (State.IsStreaming)
                 {
-                    <button class="send" title="توقف" @onclick="State.Stop">
+                    <button class="send" title="@L["توقف"]" @onclick="State.Stop">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
                     </button>
                 }
                 else
                 {
-                    <button class="send" title="ارسال" @onclick="SendClick">
+                    <button class="send" title="@L["ارسال"]" @onclick="SendClick">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg>
                     </button>
                 }
             </div>
-            <div class="hint">پاسخ‌ها ممکن است اشتباه باشند. اطلاعات مهم را بررسی کنید.</div>
+            <div class="hint">@L["پاسخ‌ها ممکن است اشتباه باشند. اطلاعات مهم را بررسی کنید."]</div>
         </div>
     </main>
 
@@ -179,8 +179,8 @@
         <div class="viewer" @onclick="State.CloseViewer">
             <div class="viewer-bar" @onclick:stopPropagation="true">
                 <span class="viewer-name" dir="auto">@State.Viewer.Name</span>
-                <button class="btn" @onclick="State.SaveViewerAsync">ذخیره / دانلود</button>
-                <button class="icon-btn" title="بستن" @onclick="State.CloseViewer">
+                <button class="btn" @onclick="State.SaveViewerAsync">@L["ذخیره / دانلود"]</button>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseViewer">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                 </button>
             </div>
@@ -196,8 +196,8 @@
     <div class="drop-overlay">
         <div class="drop-box">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
-            <div>فایل یا عکس را اینجا رها کنید</div>
-            <small class="muted">عکس (png, jpg, gif, webp) و فایل‌های متنی/کد</small>
+            <div>@L["فایل یا عکس را اینجا رها کنید"]</div>
+            <small class="muted">@L["عکس (png, jpg, gif, webp) و فایل‌های متنی/کد"]</small>
         </div>
     </div>
 
@@ -223,6 +223,7 @@
     int _lastCount;
     Conversation? _lastActive;
     string? _appliedTheme;
+    string? _appliedLang;
 
     // ---------------- search in this chat
 
@@ -232,7 +233,7 @@
     bool _wasSearchOpen;
 
     string SearchCounter =>
-        _searchText.Trim().Length == 0 ? "" : _searchTotal == 0 ? "بدون نتیجه" : $"{_searchCur} / {_searchTotal}";
+        _searchText.Trim().Length == 0 ? "" : _searchTotal == 0 ? L["بدون نتیجه"] : $"{_searchCur} / {_searchTotal}";
 
     async Task OnSearchInput(ChangeEventArgs e)
     {
@@ -369,6 +370,12 @@
 
         await SyncSearchBarAsync();
 
+        if (_appliedLang != State.Language)
+        {
+            _appliedLang = State.Language;
+            await JS.InvokeVoidAsync("chat.setLang", State.Language);
+        }
+
         if (_appliedTheme != State.Theme)
         {
             _appliedTheme = State.Theme;
@@ -403,7 +410,7 @@
         }
         catch (Exception ex)
         {
-            State.SetNotice("خطا در افزودن فایل: " + ex.Message);
+            State.SetNotice(L["خطا در افزودن فایل: "] + ex.Message);
         }
     }
 
@@ -424,7 +431,7 @@
 
     [JSInvokable]
     public void OnFileTooBig(string name) =>
-        State.SetNotice($"«{name}» بزرگ‌تر از حد مجاز است.");
+        State.SetNotice(L.F("«{0}» بزرگ‌تر از حد مجاز است.", name));
 
     async Task SendClick()
     {
@@ -447,7 +454,7 @@
     {
         try
         {
-            var files = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = "انتخاب عکس یا فایل" });
+            var files = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = L["انتخاب عکس یا فایل"] });
             if (files == null) return;
 
             foreach (var f in files)
@@ -459,7 +466,7 @@
         }
         catch (Exception ex)
         {
-            State.SetNotice("خطا در انتخاب فایل: " + ex.Message);
+            State.SetNotice(L["خطا در انتخاب فایل: "] + ex.Message);
         }
     }
 

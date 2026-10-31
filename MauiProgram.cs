@@ -21,6 +21,7 @@ public static class MauiProgram
         // cancellation is handled per request.
         builder.Services.AddSingleton(new HttpClient { Timeout = Timeout.InfiniteTimeSpan });
         builder.Services.AddSingleton<ProviderFactory>();
+        builder.Services.AddSingleton<Loc>();
         builder.Services.AddSingleton<LogService>();
         builder.Services.AddSingleton<StorageService>();
         builder.Services.AddSingleton<FileExportService>();

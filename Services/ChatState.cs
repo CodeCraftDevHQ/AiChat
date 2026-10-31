@@ -9,25 +9,27 @@ namespace AiChat.Services;
 /// </summary>
 public class ChatState
 {
-    const string DefaultTitle = "گفتگوی جدید";
+    string DefaultTitle => L["گفتگوی جدید"];
 
     readonly StorageService _storage;
     readonly ProviderFactory _factory;
     readonly FileExportService _export;
     readonly HttpClient _http;
     readonly LogService _log;
+    public Loc L { get; }
 
     CancellationTokenSource? _cts;
     bool _initialized;
     DateTime _lastNotify = DateTime.MinValue;
 
-    public ChatState(StorageService storage, ProviderFactory factory, FileExportService export, HttpClient http, LogService log)
+    public ChatState(StorageService storage, ProviderFactory factory, FileExportService export, HttpClient http, LogService log, Loc loc)
     {
         _storage = storage;
         _factory = factory;
         _export = export;
         _http = http;
         _log = log;
+        L = loc;
     }
 
     // ------------------------------------------------------------ viewer, saving, toast
@@ -126,12 +128,12 @@ public class ChatState
         try
         {
             var where = await _export.SaveAsync(name, data);
-            if (where != null) ShowToast("ذخیره شد ✓");
+            if (where != null) ShowToast(L["ذخیره شد ✓"]);
         }
         catch (Exception ex)
         {
             _log.Error($"Saving file '{name}' failed", ex);
-            SetNotice("ذخیره ناموفق بود: " + ex.Message);
+            SetNotice(L["ذخیره ناموفق بود: "] + ex.Message);
         }
     }
 
@@ -141,7 +143,7 @@ public class ChatState
     public async Task SaveAttachmentAsync(Attachment a)
     {
         var bytes = await _storage.ReadAttachmentAsync(a);
-        if (bytes == null) { SetNotice("فایل دیگر در دسترس نیست."); return; }
+        if (bytes == null) { SetNotice(L["فایل دیگر در دسترس نیست."]); return; }
         await SaveBytesAsync(a.Name, bytes);
     }
 
@@ -162,7 +164,7 @@ public class ChatState
             {
                 var comma = v.Src.IndexOf(',');
                 var semi = v.Src.IndexOf(';');
-                if (comma < 0) throw new InvalidOperationException("تصویر نامعتبر است.");
+                if (comma < 0) throw new InvalidOperationException("Invalid image data.");
                 if (semi > 5 && semi < comma) mime = v.Src[5..semi];
                 bytes = Convert.FromBase64String(v.Src[(comma + 1)..]);
             }
@@ -181,7 +183,7 @@ public class ChatState
         catch (Exception ex)
         {
             _log.Error("Downloading image failed", ex);
-            SetNotice("دانلود تصویر ناموفق بود: " + ex.Message);
+            SetNotice(L["دانلود تصویر ناموفق بود: "] + ex.Message);
         }
     }
 
@@ -219,7 +221,7 @@ public class ChatState
     /// <summary>Adds a file to the next message. Returns an error text, or null on success.</summary>
     public async Task<string?> AddAttachmentAsync(string name, Stream stream)
     {
-        if (Pending.Count >= MaxAttachments) return $"حداکثر {MaxAttachments} فایل در هر پیام مجاز است.";
+        if (Pending.Count >= MaxAttachments) return L.F("حداکثر {0} فایل در هر پیام مجاز است.", MaxAttachments);
 
         var (att, error) = await CreateAttachmentAsync(name, stream);
         if (att == null) return error;
@@ -246,10 +248,10 @@ public class ChatState
         {
             ms.Write(buffer, 0, n);
             if (ms.Length > limit)
-                return (null, $"«{name}» بزرگ‌تر از حد مجاز است (حداکثر {(isImage ? "5 مگابایت" : "512 کیلوبایت")}).");
+                return (null, L.F("«{0}» بزرگ‌تر از حد مجاز است (حداکثر {1}).", name, isImage ? L["5 مگابایت"] : L["512 کیلوبایت"]));
         }
         var data = ms.ToArray();
-        if (data.Length == 0) return (null, $"«{name}» خالی است.");
+        if (data.Length == 0) return (null, L.F("«{0}» خالی است.", name));
 
         if (!isImage)
         {
@@ -257,7 +259,7 @@ public class ChatState
             var head = Math.Min(data.Length, 8192);
             for (var i = 0; i < head; i++)
                 if (data[i] == 0)
-                    return (null, $"«{name}»: فقط عکس (png, jpg, gif, webp) و فایل‌های متنی/کد پشتیبانی می‌شوند.");
+                    return (null, L.F("«{0}»: فقط عکس (png, jpg, gif, webp) و فایل‌های متنی/کد پشتیبانی می‌شوند.", name));
             mime = "text/plain";
         }
 
@@ -372,6 +374,16 @@ public class ChatState
         Notify();
     }
 
+    public string Language => L.Language;
+
+    /// <summary>Switches the UI language; the layout direction follows it (it can still be changed in settings).</summary>
+    public void SetLanguage(string lang)
+    {
+        L.SetLanguage(lang);
+        Preferences.Default.Set("lang", L.Language);
+        SetRtl(L.Language == "fa");
+    }
+
     public bool IsRtl { get; private set; } = true;
     public string SystemPrompt { get; private set; } = "";
 
@@ -387,6 +399,7 @@ public class ChatState
         Conversations = (await _storage.LoadConversationsAsync() ?? new())
             .OrderByDescending(c => c.Updated).ToList();
 
+        L.SetLanguage(Preferences.Default.Get("lang", "fa"));
         Theme = Preferences.Default.Get("theme", "system");
         IsRtl = Preferences.Default.Get("rtl", true);
         SystemPrompt = Preferences.Default.Get("system_prompt", "");
@@ -789,8 +802,8 @@ public class ChatState
 
     public string? ValidateSend()
     {
-        if (CurrentProvider == null) return "ابتدا از بخش تنظیمات یک API اضافه کنید.";
-        if (string.IsNullOrWhiteSpace(CurrentModel)) return "یک مدل انتخاب کنید (یا نام مدل را در تنظیمات وارد کنید).";
+        if (CurrentProvider == null) return L["ابتدا از بخش تنظیمات یک API اضافه کنید."];
+        if (string.IsNullOrWhiteSpace(CurrentModel)) return L["یک مدل انتخاب کنید (یا نام مدل را در تنظیمات وارد کنید)."];
         return null;
     }
 
@@ -876,7 +889,7 @@ public class ChatState
             history.Insert(0, new ChatMessage
             {
                 Role = "user",
-                Content = "(فایل‌های مرجع این پروژه)",
+                Content = "(Reference files of this project)",
                 Attachments = project.Files
             });
 

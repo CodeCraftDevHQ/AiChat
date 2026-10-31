@@ -20,7 +20,7 @@ public class FileExportService
 
         var window = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Handler?.PlatformView
             as Microsoft.Maui.MauiWinUIWindow;
-        if (window == null) throw new InvalidOperationException("پنجره‌ی برنامه پیدا نشد.");
+        if (window == null) throw new InvalidOperationException("The app window was not found.");
         WinRT.Interop.InitializeWithWindow.Initialize(picker, window.WindowHandle);
 
         var ext = Path.GetExtension(suggestedName);

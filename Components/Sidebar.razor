@@ -4,24 +4,24 @@
     <div class="sb-top">
         <button class="new-chat" @onclick="State.NewChat">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
-            <span>گفتگوی جدید</span>
+            <span>@L["گفتگوی جدید"]</span>
         </button>
     </div>
 
     <div class="sb-search">
         <div class="sb-search-box">
             <svg class="muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-            <input dir="auto" placeholder="جست‌وجو در گفتگوها..." value="@_query" @oninput="OnQueryInput" @onkeydown="OnQueryKey" />
+            <input dir="auto" placeholder="@L["جست‌وجو در گفتگوها..."]" value="@_query" @oninput="OnQueryInput" @onkeydown="OnQueryKey" />
             @if (_query.Length > 0)
             {
-                <button class="del vis" title="پاک کردن" @onclick="ClearQuery">
+                <button class="del vis" title="@L["پاک کردن"]" @onclick="ClearQuery">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                 </button>
             }
         </div>
         <div class="seg">
-            <button class="@(!State.SidebarSearchInContent ? "on" : "")" @onclick="() => State.SetSidebarSearchInContent(false)">نام گفتگوها</button>
-            <button class="@(State.SidebarSearchInContent ? "on" : "")" @onclick="() => State.SetSidebarSearchInContent(true)">متن گفتگوها</button>
+            <button class="@(!State.SidebarSearchInContent ? "on" : "")" @onclick="() => State.SetSidebarSearchInContent(false)">@L["نام گفتگوها"]</button>
+            <button class="@(State.SidebarSearchInContent ? "on" : "")" @onclick="() => State.SetSidebarSearchInContent(true)">@L["متن گفتگوها"]</button>
         </div>
     </div>
 
@@ -31,11 +31,11 @@
             var hits = State.SearchConversations(_query, State.SidebarSearchInContent);
             if (hits.Count == 0)
             {
-                <div class="sb-empty muted">نتیجه‌ای پیدا نشد</div>
+                <div class="sb-empty muted">@L["نتیجه‌ای پیدا نشد"]</div>
             }
             else
             {
-                <div class="sb-section">@(hits.Count) گفتگو</div>
+                <div class="sb-section">@(hits.Count) @L["گفتگو"]</div>
             }
             foreach (var hit in hits)
             {
@@ -45,7 +45,7 @@
                         <span class="title" dir="auto">@h.Conv.Title</span>
                         @if (State.SidebarSearchInContent && h.Count > 0)
                         {
-                            <span class="badge" title="تعداد دفعات پیدا شدن">@h.Count</span>
+                            <span class="badge" title="@L["تعداد دفعات پیدا شدن"]">@h.Count</span>
                         }
                     </div>
                     @if (h.Match != null)
@@ -62,8 +62,8 @@
             if (row.Kind == "projhead")
             {
                 <div class="sb-section with-action">
-                    <span>پروژه‌ها</span>
-                    <button class="del vis" title="پروژه جدید" @onclick="NewProject">
+                    <span>@L["پروژه‌ها"]</span>
+                    <button class="del vis" title="@L["پروژه جدید"]" @onclick="NewProject">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
                     </button>
                 </div>
@@ -85,11 +85,11 @@
                     <span class="title" dir="auto">@proj.Name</span>
                     @if (_confirmProjId == proj.Id)
                     {
-                        <button class="del confirm" @onclick="() => DeleteProject(proj)" @onclick:stopPropagation="true">حذف پروژه؟</button>
+                        <button class="del confirm" @onclick="() => DeleteProject(proj)" @onclick:stopPropagation="true">@L["حذف پروژه؟"]</button>
                     }
                     else
                     {
-                        <button class="del" title="گزینه‌ها" @onclick="e => OpenProjMenu(proj, e)" @onclick:stopPropagation="true">
+                        <button class="del" title="@L["گزینه‌ها"]" @onclick="e => OpenProjMenu(proj, e)" @onclick:stopPropagation="true">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
                         </button>
                     }
@@ -113,15 +113,15 @@
                     {
                         <svg class="pin-mark" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3H8v2l1 1v6l-3 3v2h5v5h2v-5h5v-2l-3-3V6l1-1Z" /></svg>
                     }
-                    <span class="title" dir="auto" title="برای تغییر نام دوبار کلیک کنید"
+                    <span class="title" dir="auto" title="@L["برای تغییر نام دوبار کلیک کنید"]"
                           @ondblclick="() => StartRename(conv)">@conv.Title</span>
                     @if (_confirmId == conv.Id)
                     {
-                        <button class="del confirm" @onclick="() => Delete(conv)" @onclick:stopPropagation="true">حذف؟</button>
+                        <button class="del confirm" @onclick="() => Delete(conv)" @onclick:stopPropagation="true">@L["حذف؟"]</button>
                     }
                     else
                     {
-                        <button class="del" title="گزینه‌ها" @onclick="e => OpenMenu(conv, e)" @onclick:stopPropagation="true">
+                        <button class="del" title="@L["گزینه‌ها"]" @onclick="e => OpenMenu(conv, e)" @onclick:stopPropagation="true">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
                         </button>
                     }
@@ -131,7 +131,7 @@
 
         @if (State.Conversations.Count == 0)
         {
-            <div class="sb-empty muted">هنوز گفتگویی ندارید</div>
+            <div class="sb-empty muted">@L["هنوز گفتگویی ندارید"]</div>
         }
         }
     </div>
@@ -140,11 +140,11 @@
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
         <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 260px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
-            <button @onclick="PinFromMenu">@(_menuConv.Pinned ? "برداشتن پین" : "پین کردن")</button>
-            <button @onclick="RenameFromMenu">تغییر نام</button>
+            <button @onclick="PinFromMenu">@(_menuConv.Pinned ? L["برداشتن پین"] : L["پین کردن"])</button>
+            <button @onclick="RenameFromMenu">@L["تغییر نام"]</button>
             @if (State.Projects.Count > 0 || _menuConv.ProjectId != null)
             {
-                <button @onclick="() => _moveOpen = !_moveOpen">انتقال به پروژه ‹</button>
+                <button @onclick="() => _moveOpen = !_moveOpen">@L["انتقال به پروژه ‹"]</button>
                 @if (_moveOpen)
                 {
                     <div class="submenu">
@@ -155,12 +155,12 @@
                         }
                         @if (_menuConv.ProjectId != null)
                         {
-                            <button @onclick="() => MoveTo(null)">بدون پروژه</button>
+                            <button @onclick="() => MoveTo(null)">@L["بدون پروژه"]</button>
                         }
                     </div>
                 }
             }
-            <button class="danger" @onclick="DeleteFromMenu">حذف</button>
+            <button class="danger" @onclick="DeleteFromMenu">@L["حذف"]</button>
         </div>
     }
 
@@ -168,16 +168,16 @@
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
         <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 200px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
-            <button @onclick="NewChatInProjectFromMenu">گفتگوی جدید در این پروژه</button>
-            <button @onclick="EditProjectFromMenu">ویرایش پروژه (دستورالعمل و فایل‌ها)</button>
-            <button class="danger" @onclick="DeleteProjectFromMenu">حذف پروژه</button>
+            <button @onclick="NewChatInProjectFromMenu">@L["گفتگوی جدید در این پروژه"]</button>
+            <button @onclick="EditProjectFromMenu">@L["ویرایش پروژه (دستورالعمل و فایل‌ها)"]</button>
+            <button class="danger" @onclick="DeleteProjectFromMenu">@L["حذف پروژه"]</button>
         </div>
     }
 
     <div class="sb-bottom">
         <button class="settings-btn" @onclick="State.OpenSettings">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></svg>
-            <span>تنظیمات و API ها</span>
+            <span>@L["تنظیمات و API ها"]</span>
         </button>
     </div>
 </aside>
@@ -229,12 +229,12 @@
 
         if (pinned.Count > 0)
         {
-            rows.Add(new Row("header", "پین‌شده"));
+            rows.Add(new Row("header", L["پین‌شده"]));
             rows.AddRange(pinned.Select(c => new Row("conv", Conv: c)));
         }
         if (others.Count > 0)
         {
-            rows.Add(new Row("header", "گفتگوها"));
+            rows.Add(new Row("header", L["گفتگوها"]));
             rows.AddRange(others.Select(c => new Row("conv", Conv: c)));
         }
         return rows;

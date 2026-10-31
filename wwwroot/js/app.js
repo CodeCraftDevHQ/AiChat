@@ -4,6 +4,10 @@ window.chat = {
         document.documentElement.setAttribute('data-theme', theme || 'system');
     },
 
+    setLang(lang) {
+        document.documentElement.setAttribute('lang', lang || 'fa');
+    },
+
     isDark() {
         const t = document.documentElement.getAttribute('data-theme');
         if (t === 'dark') return true;
@@ -238,8 +242,10 @@ document.addEventListener('click', async (e) => {
 async function handleCopy(btn) {
     const code = btn.parentElement.querySelector('code');
     const ok = await window.chat.copyText(code ? code.innerText : '');
-    btn.textContent = ok ? 'کپی شد ✓' : 'ناموفق';
-    setTimeout(() => { btn.textContent = 'کپی'; }, 1500);
+    const orig = btn.getAttribute('data-orig') || btn.textContent;
+    btn.setAttribute('data-orig', orig);
+    btn.textContent = ok ? (btn.dataset.done || 'Copied') : (btn.dataset.fail || 'Failed');
+    setTimeout(() => { btn.textContent = orig; }, 1500);
 }
 
 // Report uncaught JavaScript errors to the in-app log.

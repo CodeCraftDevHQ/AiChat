@@ -22,8 +22,20 @@ public static class MarkdownRenderer
 
     static readonly Regex ImgTag = new(@"<img ", RegexOptions.Compiled);
 
-    const string CopyButton =
-        "<button type=\"button\" class=\"code-save\">ذخیره</button><button type=\"button\" class=\"code-copy\">کپی</button>";
+    static string _copy = "کپی", _save = "ذخیره", _copied = "کپی شد ✓", _failed = "ناموفق";
+
+    /// <summary>Changes whenever the button labels change, so cached HTML can be rebuilt.</summary>
+    public static int LabelsVersion { get; private set; }
+
+    public static void SetLabels(string copy, string save, string copied, string failed)
+    {
+        _copy = copy; _save = save; _copied = copied; _failed = failed;
+        LabelsVersion++;
+    }
+
+    static string CopyButton =>
+        $"<button type=\"button\" class=\"code-save\">{_save}</button>" +
+        $"<button type=\"button\" class=\"code-copy\" data-done=\"{_copied}\" data-fail=\"{_failed}\">{_copy}</button>";
 
     public static string ToHtml(string? markdown)
     {

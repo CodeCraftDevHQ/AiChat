@@ -81,16 +81,18 @@ public class ChatMessage
 
     string? _htmlFor;
     string? _html;
+    int _htmlLabels = -1;
 
     [JsonIgnore]
     public string Html
     {
         get
         {
-            if (_html == null || _htmlFor != Content)
+            if (_html == null || _htmlFor != Content || _htmlLabels != MarkdownRenderer.LabelsVersion)
             {
                 _html = MarkdownRenderer.ToHtml(Content);
                 _htmlFor = Content;
+                _htmlLabels = MarkdownRenderer.LabelsVersion;
             }
             return _html;
         }

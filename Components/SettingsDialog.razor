@@ -6,12 +6,12 @@
         <div class="modal-head">
             @if (State.IsNarrow && Section != null)
             {
-                <button class="icon-btn" title="بازگشت" @onclick="Back">
+                <button class="icon-btn" title="@L["بازگشت"]" @onclick="Back">
                     <svg class="flip-rtl" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6" /></svg>
                 </button>
             }
             <h2>@Title</h2>
-            <button class="icon-btn" title="بستن" @onclick="State.CloseSettings">
+            <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseSettings">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
             </button>
         </div>
@@ -41,16 +41,22 @@
                     @switch (Section)
                     {
                         case "general":
-                            <label class="lbl first">تم برنامه</label>
+                            <label class="lbl first">@L["زبان برنامه"]</label>
+                            <select class="inp" value="@State.Language" @onchange="OnLanguageChanged">
+                                <option value="fa">فارسی</option>
+                                <option value="en">English</option>
+                            </select>
+
+                            <label class="lbl">@L["تم برنامه"]</label>
                             <select class="inp" value="@State.Theme" @onchange="OnThemeChanged">
-                                <option value="system">مطابق سیستم</option>
-                                <option value="dark">تاریک</option>
-                                <option value="light">روشن</option>
+                                <option value="system">@L["مطابق سیستم"]</option>
+                                <option value="dark">@L["تاریک"]</option>
+                                <option value="light">@L["روشن"]</option>
                             </select>
 
                             <label class="check" style="margin-top:18px">
                                 <input type="checkbox" checked="@State.IsRtl" @onchange="OnRtlChanged" />
-                                <span>رابط راست‌به‌چپ (فارسی)</span>
+                                <span>@L["رابط راست‌به‌چپ (فارسی)"]</span>
                             </label>
                             break;
 
@@ -61,53 +67,53 @@
                                     var prov = p;
                                     <button class="pill @(_editing?.Id == prov.Id && !_isNew ? "active" : "")" dir="auto" @onclick="() => Edit(prov)">@prov.Name</button>
                                 }
-                                <button class="pill add @(_isNew ? "active" : "")" @onclick="StartNew">+ افزودن API</button>
+                                <button class="pill add @(_isNew ? "active" : "")" @onclick="StartNew">@L["+ افزودن API"]</button>
                             </div>
 
                             @if (_editing == null)
                             {
-                                <p class="muted">یک API را انتخاب کنید یا مورد جدیدی اضافه کنید.</p>
+                                <p class="muted">@L["یک API را انتخاب کنید یا مورد جدیدی اضافه کنید."]</p>
                             }
                             else
                             {
-                                <label class="lbl">الگوی آماده</label>
+                                <label class="lbl">@L["الگوی آماده"]</label>
                                 <select class="inp" @onchange="OnPreset">
-                                    <option value="">— انتخاب کنید (اختیاری) —</option>
+                                    <option value="">@L["— انتخاب کنید (اختیاری) —"]</option>
                                     @foreach (var pr in ProviderDefaults.Presets)
                                     {
-                                        <option value="@pr.Name">@pr.Name</option>
+                                        <option value="@pr.Name">@L[pr.Name]</option>
                                     }
                                 </select>
 
-                                <label class="lbl">نام نمایشی</label>
+                                <label class="lbl">@L["نام نمایشی"]</label>
                                 <input class="inp" dir="auto" @bind="_editing.Name" @bind:event="oninput" />
 
-                                <label class="lbl">نوع API</label>
+                                <label class="lbl">@L["نوع API"]</label>
                                 <select class="inp" @bind="_editing.Type" @bind:after="OnTypeChanged">
                                     @foreach (var t in Enum.GetValues<ProviderType>())
                                     {
-                                        <option value="@t">@ProviderDefaults.TypeLabel(t)</option>
+                                        <option value="@t">@L[ProviderDefaults.TypeLabel(t)]</option>
                                     }
                                 </select>
 
-                                <label class="lbl">آدرس پایه (Base URL)</label>
+                                <label class="lbl">@L["آدرس پایه (Base URL)"]</label>
                                 <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_editing.BaseUrl" @bind:event="oninput" />
 
-                                <label class="lbl">کلید API</label>
+                                <label class="lbl">@L["کلید API"]</label>
                                 <div class="row">
                                     <input class="inp" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false"
                                            type="@(_showKey ? "text" : "password")" @bind="_editing.ApiKey" @bind:event="oninput" />
-                                    <button class="btn" type="button" @onclick="() => _showKey = !_showKey">@(_showKey ? "پنهان" : "نمایش")</button>
+                                    <button class="btn" type="button" @onclick="() => _showKey = !_showKey">@(_showKey ? L["پنهان"] : L["نمایش"])</button>
                                 </div>
 
-                                <label class="lbl">مدل‌ها (هر خط یک مدل)</label>
+                                <label class="lbl">@L["مدل‌ها (هر خط یک مدل)"]</label>
                                 <textarea class="inp" rows="6" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_modelsText" @bind:event="oninput"></textarea>
 
                                 <div class="row">
-                                    <button class="btn" disabled="@_busy" @onclick="FetchModels">دریافت خودکار لیست مدل‌ها</button>
+                                    <button class="btn" disabled="@_busy" @onclick="FetchModels">@L["دریافت خودکار لیست مدل‌ها"]</button>
                                 </div>
 
-                                <label class="lbl">مدل پیش‌فرض</label>
+                                <label class="lbl">@L["مدل پیش‌فرض"]</label>
                                 <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_editing.DefaultModel" @bind:event="oninput" />
 
                                 @if (_status != null)
@@ -120,45 +126,45 @@
                                     {
                                         @if (_confirmDelete)
                                         {
-                                            <button class="btn danger" @onclick="DeleteProvider">حذف قطعی</button>
+                                            <button class="btn danger" @onclick="DeleteProvider">@L["حذف قطعی"]</button>
                                         }
                                         else
                                         {
-                                            <button class="btn" @onclick="() => _confirmDelete = true">حذف</button>
+                                            <button class="btn" @onclick="() => _confirmDelete = true">@L["حذف"]</button>
                                         }
                                     }
-                                    <button class="primary" @onclick="Save">ذخیره</button>
+                                    <button class="primary" @onclick="Save">@L["ذخیره"]</button>
                                 </div>
                             }
                             break;
 
                         case "chat":
-                            <label class="lbl first">پیام سیستمی (اختیاری، برای همه مدل‌ها)</label>
-                            <textarea class="inp" rows="6" dir="auto" placeholder="مثلاً: همیشه به فارسی پاسخ بده."
+                            <label class="lbl first">@L["پیام سیستمی (اختیاری، برای همه مدل‌ها)"]</label>
+                            <textarea class="inp" rows="6" dir="auto" placeholder="@L["مثلاً: همیشه به فارسی پاسخ بده."]"
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
-                            <p class="muted small" style="margin-top:8px">دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود.</p>
+                            <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
                             break;
 
                         case "data":
-                            <label class="lbl first">لاگ برنامه</label>
-                            <p class="muted small">اگر برنامه خطا داد، لاگ را کپی کنید و بفرستید. کلید API و متن پیام‌ها در لاگ نمی‌آید.</p>
-                            <button class="btn" @onclick="State.OpenLogs">مشاهده لاگ‌ها</button>
+                            <label class="lbl first">@L["لاگ برنامه"]</label>
+                            <p class="muted small">@L["اگر برنامه خطا داد، لاگ را کپی کنید و بفرستید. کلید API و متن پیام‌ها در لاگ نمی‌آید."]</p>
+                            <button class="btn" @onclick="State.OpenLogs">@L["مشاهده لاگ‌ها"]</button>
 
-                            <label class="lbl">گفتگوها</label>
+                            <label class="lbl">@L["گفتگوها"]</label>
                             @if (_confirmClear)
                             {
-                                <button class="btn danger" @onclick="ClearAll">مطمئنید؟ همه گفتگوها پاک می‌شود</button>
+                                <button class="btn danger" @onclick="ClearAll">@L["مطمئنید؟ همه گفتگوها پاک می‌شود"]</button>
                             }
                             else
                             {
-                                <button class="btn" @onclick="() => _confirmClear = true">پاک کردن همه گفتگوها</button>
+                                <button class="btn" @onclick="() => _confirmClear = true">@L["پاک کردن همه گفتگوها"]</button>
                             }
                             break;
 
                         case "about":
                             <label class="lbl first">AI Chat</label>
-                            <p>نسخه @AppInfo.Current.VersionString</p>
-                            <p class="muted small">چت چندسرویسی با پشتیبانی از OpenAI-compatible، Claude و Gemini.</p>
+                            <p>@L["نسخه"] @AppInfo.Current.VersionString</p>
+                            <p class="muted small">@L["چت چندسرویسی با پشتیبانی از OpenAI-compatible، Claude و Gemini."]</p>
                             break;
                     }
                 </div>
@@ -170,20 +176,20 @@
 @code {
     record SectionItem(string Key, string Title);
 
-    static readonly SectionItem[] Sections =
+    SectionItem[] Sections => new[]
     {
-        new SectionItem("general", "عمومی"),
-        new SectionItem("api", "API ها"),
-        new SectionItem("chat", "گفتگو"),
-        new SectionItem("data", "داده‌ها و لاگ"),
-        new SectionItem("about", "درباره")
+        new SectionItem("general", L["عمومی"]),
+        new SectionItem("api", L["API ها"]),
+        new SectionItem("chat", L["گفتگو"]),
+        new SectionItem("data", L["داده‌ها و لاگ"]),
+        new SectionItem("about", L["درباره"])
     };
 
     // on a wide window a section is always selected; on a phone null = the list of sections
     string? Section => State.SettingsSection ?? (State.IsNarrow ? null : "general");
 
     string Title => Section == null
-        ? "تنظیمات"
+        ? L["تنظیمات"]
         : Sections.First(x => x.Key == Section).Title;
 
     void Back() => State.SetSettingsSection(null);
@@ -193,6 +199,8 @@
     void OnSystemPromptInput(ChangeEventArgs e) => State.SetSystemPrompt(e.Value?.ToString() ?? string.Empty);
 
     void OnRtlChanged(ChangeEventArgs e) => State.SetRtl(e.Value is true);
+
+    void OnLanguageChanged(ChangeEventArgs e) => State.SetLanguage(e.Value?.ToString() ?? "fa");
 
     void OnThemeChanged(ChangeEventArgs e) => State.SetTheme(e.Value?.ToString() ?? "system");
 
@@ -250,7 +258,7 @@
     {
         var preset = ProviderDefaults.Presets.FirstOrDefault(p => p.Name == e.Value?.ToString());
         if (preset == null || _editing == null) return;
-        _editing.Name = preset.Name;
+        _editing.Name = L[preset.Name];
         _editing.Type = preset.Type;
         _editing.BaseUrl = preset.BaseUrl;
     }
@@ -272,7 +280,7 @@
             _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
 
         _busy = true;
-        _status = "در حال دریافت...";
+        _status = L["در حال دریافت..."];
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -280,11 +288,11 @@
             _modelsText = string.Join("\n", list);
             if (string.IsNullOrWhiteSpace(_editing.DefaultModel) && list.Count > 0)
                 _editing.DefaultModel = list[0];
-            _status = $"{list.Count} مدل دریافت شد. برای نگه‌داشتن، ذخیره را بزنید.";
+            _status = L.F("{0} مدل دریافت شد. برای نگه‌داشتن، ذخیره را بزنید.", list.Count);
         }
         catch (Exception ex)
         {
-            _status = "خطا: " + ex.Message;
+            _status = L["خطا: "] + ex.Message;
         }
         finally
         {
@@ -297,7 +305,7 @@
         if (_editing == null) return;
         if (string.IsNullOrWhiteSpace(_editing.Name))
         {
-            _status = "نام را وارد کنید.";
+            _status = L["نام را وارد کنید."];
             return;
         }
 
@@ -317,7 +325,7 @@
 
         await State.SaveProviderAsync(_editing);
         _isNew = false;
-        _status = "ذخیره شد ✓";
+        _status = L["ذخیره شد ✓"];
     }
 
     async Task DeleteProvider()

@@ -67,7 +67,7 @@ static class HistoryHelper
                 var bytes = StorageService.ReadAttachmentSync(a);
                 if (bytes == null)
                 {
-                    text += $"\n\n[فایل «{a.Name}» دیگر در دسترس نیست]";
+                    text += $"\n\n[File \"{a.Name}\" is no longer available]";
                 }
                 else if (a.Kind == "image")
                 {
@@ -75,7 +75,7 @@ static class HistoryHelper
                 }
                 else
                 {
-                    text += $"\n\n--- فایل: {a.Name} ---\n{Encoding.UTF8.GetString(bytes)}\n--- پایان فایل ---";
+                    text += $"\n\n--- File: {a.Name} ---\n{Encoding.UTF8.GetString(bytes)}\n--- End of file ---";
                 }
             }
 
