@@ -13,6 +13,8 @@ public static class Translations
         ["فایل یا عکس"] = "File or photo",
         ["دوربین"] = "Camera",
         ["جست\u200cوجوی مدل..."] = "Search models...",
+        ["این مدل عکس را پشتیبانی نمی\u200cکند. عکس\u200cها از ادامه\u200cی گفتگو کنار گذاشته شدند؛ می\u200cتوانید پیام متنی بفرستید یا مدل دیگری را انتخاب کنید."] = "This model does not support images. Images were excluded from the rest of this chat; you can send a text message or pick another model.",
+        ["ارسال نمی\u200cشود (مدل عکس را پشتیبانی نمی\u200cکند)"] = "Not sent (the model does not support images)",
         ["API ها"] = "APIs",
         ["LM Studio (محلی)"] = "LM Studio (local)",
         ["Ollama (محلی)"] = "Ollama (local)",

@@ -44,6 +44,12 @@ public class Attachment
     public string MimeType { get; set; } = "text/plain";
     public long Size { get; set; }
 
+    /// <summary>
+    /// Set after the model rejected images: the file stays visible in the chat but is no longer
+    /// sent, so later text-only messages work again.
+    /// </summary>
+    public bool Excluded { get; set; }
+
     /// <summary>File name inside the app's attachments folder.</summary>
     public string StoredName { get; set; } = "";
 

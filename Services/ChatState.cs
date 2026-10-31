@@ -876,6 +876,31 @@ public class ChatState
 
     public void Stop() => _cts?.Cancel();
 
+    static bool LooksLikeImageRejection(string error)
+    {
+        var e = error.ToLowerInvariant();
+        return e.Contains("image") || e.Contains("vision") || e.Contains("multimodal") || e.Contains("multi-modal") ||
+               e.Contains("modalit") || e.Contains("visual");
+    }
+
+    /// <summary>Stops sending the images of this chat (and its project) after the model refused them.</summary>
+    async Task<bool> ExcludeImagesAsync(List<ChatMessage> history, Project? project)
+    {
+        var any = false;
+        foreach (var a in history.SelectMany(m => m.Attachments).Where(a => a.Kind == "image" && !a.Excluded))
+        { a.Excluded = true; any = true; }
+
+        // versions of edited messages keep their own snapshots; leave those alone (they are not sent)
+        if (project != null)
+        {
+            var changed = false;
+            foreach (var a in project.Files.Where(a => a.Kind == "image" && !a.Excluded)) { a.Excluded = true; changed = true; }
+            if (changed) { any = true; await _storage.SaveProjectsAsync(Projects); }
+        }
+        if (any) _log.Warn("Model rejected images; image attachments are excluded from now on.");
+        return any;
+    }
+
     async Task RunAsync(Conversation conv, ChatMessage reply, ProviderConfig provider, string model)
     {
         IsStreaming = true;
@@ -932,6 +957,8 @@ public class ChatState
         catch (Exception ex)
         {
             reply.ErrorText = ProviderHttp.Describe(ex);
+            if (LooksLikeImageRejection(reply.ErrorText) && await ExcludeImagesAsync(history, project))
+                reply.ErrorText += "\n\n" + L["این مدل عکس را پشتیبانی نمی‌کند. عکس‌ها از ادامه‌ی گفتگو کنار گذاشته شدند؛ می‌توانید پیام متنی بفرستید یا مدل دیگری را انتخاب کنید."];
             _log.Error($"Request to {provider.Name} ({provider.Type}) / {model} failed", ex);
         }
         finally

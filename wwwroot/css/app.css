@@ -257,6 +257,7 @@ body.dragging .drop-overlay { display: flex; }
 .att-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .att-row.pending { justify-content: flex-start; padding: 0 4px 8px; }
 
+.att-img.excluded, .att-file.excluded { opacity: .45; filter: grayscale(1); }
 .att-img { position: relative; border-radius: 12px; overflow: hidden; background: var(--surface); }
 .att-img img { display: block; max-height: 180px; max-width: min(260px, 70vw); object-fit: cover; }
 .att-row.pending .att-img img { height: 64px; width: 64px; max-height: none; }

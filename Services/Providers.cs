@@ -64,6 +64,11 @@ static class HistoryHelper
 
             foreach (var a in m.Attachments)
             {
+                if (a.Excluded)
+                {
+                    text += $"\n\n[Attachment \"{a.Name}\" was not sent: the model does not support this file type]";
+                    continue;
+                }
                 var bytes = StorageService.ReadAttachmentSync(a);
                 if (bytes == null)
                 {
