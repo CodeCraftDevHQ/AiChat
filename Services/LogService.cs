@@ -40,7 +40,14 @@ public class LogService
     public void Warn(string message) => Add("WRN", message);
 
     public void Error(string message, Exception? ex = null) =>
-        Add("ERR", ex == null ? message : $"{message} | {ex.GetType().Name}: {ex.Message}");
+        Add("ERR", ex == null ? message : $"{message} | {ProviderHttp.Describe(ex)}\n{Trim(ex.StackTrace)}");
+
+    static string Trim(string? st)
+    {
+        if (string.IsNullOrEmpty(st)) return "";
+        var lines = st.Split('\n').Take(6);
+        return string.Join("\n", lines).TrimEnd();
+    }
 
     public string GetText()
     {

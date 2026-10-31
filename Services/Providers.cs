@@ -137,6 +137,14 @@ static class ImageHelper
     }
 }
 
+/// <summary>Disposes without ever throwing (native Android streams can throw on Dispose).</summary>
+readonly struct SafeDispose : IDisposable
+{
+    readonly IDisposable? _d;
+    public SafeDispose(IDisposable? d) => _d = d;
+    public void Dispose() { try { _d?.Dispose(); } catch { } }
+}
+
 static class ProviderHttp
 {
     public static string Url(ProviderConfig cfg, string path)
@@ -181,17 +189,55 @@ static class ProviderHttp
     public static async IAsyncEnumerable<(string? Event, string Data)> ReadSseAsync(
         HttpResponseMessage resp, [EnumeratorCancellation] CancellationToken ct)
     {
-        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        string? ev = null;
-        while (true)
+        var stream = await resp.Content.ReadAsStreamAsync(ct);
+        var reader = new StreamReader(stream, Encoding.UTF8);
+        try
         {
-            var line = await reader.ReadLineAsync(ct);
-            if (line == null) yield break;
-            if (line.Length == 0) { ev = null; continue; }
-            if (line.StartsWith("event:", StringComparison.Ordinal)) ev = line[6..].Trim();
-            else if (line.StartsWith("data:", StringComparison.Ordinal)) yield return (ev, line[5..].Trim());
+            string? ev = null;
+            var gotData = false;
+            while (true)
+            {
+                string? line;
+                try
+                {
+                    line = await reader.ReadLineAsync(ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException && gotData)
+                {
+                    // On Android the native HTTP stack can throw a Java exception when the server
+                    // closes the connection right after the last chunk. The answer is complete then.
+                    yield break;
+                }
+                if (line == null) yield break;
+                if (line.Length == 0) { ev = null; continue; }
+                if (line.StartsWith("event:", StringComparison.Ordinal)) ev = line[6..].Trim();
+                else if (line.StartsWith("data:", StringComparison.Ordinal))
+                {
+                    gotData = true;
+                    yield return (ev, line[5..].Trim());
+                }
+            }
         }
+        finally
+        {
+            // Disposing a half-closed native stream may throw; it must never hide the real result.
+            try { reader.Dispose(); } catch { }
+            try { stream.Dispose(); } catch { }
+        }
+    }
+
+    /// <summary>Error text with the exception type and the inner messages (native errors often have an empty message).</summary>
+    public static string Describe(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var e = ex; e != null; e = e.InnerException)
+        {
+            var m = string.IsNullOrWhiteSpace(e.Message) ? "" : e.Message.Trim();
+            var t = e.GetType().Name;
+            var s = m.Length == 0 ? t : (m.Contains(t) ? m : $"{t}: {m}");
+            if (!parts.Contains(s)) parts.Add(s);
+        }
+        return string.Join(" → ", parts);
     }
 }
 
@@ -244,7 +290,8 @@ public class OpenAiCompatibleProvider : IChatProvider
         if (!string.IsNullOrWhiteSpace(cfg.ApiKey))
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.ApiKey.Trim());
 
-        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
 
         await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
@@ -297,7 +344,8 @@ public class OpenAiCompatibleProvider : IChatProvider
         if (!string.IsNullOrWhiteSpace(cfg.ApiKey))
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.ApiKey.Trim());
 
-        using var resp = await _http.SendAsync(req, ct);
+        var resp = await _http.SendAsync(req, ct);
+        using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
 
@@ -354,7 +402,8 @@ public class AnthropicProvider : IChatProvider
         req.Headers.Add("x-api-key", cfg.ApiKey.Trim());
         req.Headers.Add("anthropic-version", Version);
 
-        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
 
         await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
@@ -395,7 +444,8 @@ public class AnthropicProvider : IChatProvider
         req.Headers.Add("x-api-key", cfg.ApiKey.Trim());
         req.Headers.Add("anthropic-version", Version);
 
-        using var resp = await _http.SendAsync(req, ct);
+        var resp = await _http.SendAsync(req, ct);
+        using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
 
@@ -452,7 +502,8 @@ public class GeminiProvider : IChatProvider
         using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = ProviderHttp.JsonBody(body) };
         req.Headers.Add("x-goog-api-key", cfg.ApiKey.Trim());
 
-        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
 
         await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
@@ -508,7 +559,8 @@ public class GeminiProvider : IChatProvider
         using var req = new HttpRequestMessage(HttpMethod.Get, ProviderHttp.Url(cfg, "models?pageSize=1000"));
         req.Headers.Add("x-goog-api-key", cfg.ApiKey.Trim());
 
-        using var resp = await _http.SendAsync(req, ct);
+        var resp = await _http.SendAsync(req, ct);
+        using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
 

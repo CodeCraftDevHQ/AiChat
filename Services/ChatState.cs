@@ -923,7 +923,7 @@ public class ChatState
         }
         catch (Exception ex)
         {
-            reply.ErrorText = ex.Message;
+            reply.ErrorText = ProviderHttp.Describe(ex);
             _log.Error($"Request to {provider.Name} ({provider.Type}) / {model} failed", ex);
         }
         finally

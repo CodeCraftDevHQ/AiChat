@@ -156,7 +156,7 @@
                 <button class="icon-btn attach" title="@L["پیوست عکس یا فایل"]" @onclick="PickFiles">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
                 </button>
-                <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="send" placeholder="@L["هر چیزی بپرسید..."]"></textarea>
+                <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="enter" placeholder="@L["هر چیزی بپرسید..."]"></textarea>
                 @if (State.IsStreaming)
                 {
                     <button class="send" title="@L["توقف"]" @onclick="State.Stop">
