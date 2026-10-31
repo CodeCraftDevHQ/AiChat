@@ -9,6 +9,41 @@
     <div class="scrim @(State.SidebarOpen == true ? "show" : "")" @onclick="State.CloseSidebar"></div>
 
     <main class="main">
+        @if (State.Picker != null)
+        {
+            var isModel = State.Picker == "model";
+            var items = isModel
+                ? State.ModelsFor(State.CurrentProvider).Where(m => m.Contains(State.PickerFilter, StringComparison.OrdinalIgnoreCase)).ToList()
+                : State.Providers.Select(p => p.Id).ToList();
+            <div class="modal-backdrop" @onclick="State.ClosePicker">
+                <div class="sheet" @onclick:stopPropagation="true">
+                    <div class="sheet-head">
+                        <strong>@(isModel ? L["مدل"] : L["سرویس‌دهنده"])</strong>
+                        <button class="icon-btn sm" title="@L["بستن"]" @onclick="State.ClosePicker">✕</button>
+                    </div>
+                    @if (isModel && State.ModelsFor(State.CurrentProvider).Count > 8)
+                    {
+                        <input class="inp sheet-search" dir="auto" placeholder="@L["جست‌وجوی مدل..."]" value="@State.PickerFilter" @oninput="OnPickerFilter" />
+                    }
+                    <div class="sheet-list">
+                        @if (items.Count == 0)
+                        {
+                            <div class="sheet-empty">@L["نتیجه‌ای پیدا نشد"]</div>
+                        }
+                        @foreach (var id in items)
+                        {
+                            var value = id;
+                            var label = isModel ? value : State.Providers.First(p => p.Id == value).Name;
+                            var current = isModel ? value == State.CurrentModel : value == State.CurrentProviderId;
+                            <button class="sheet-item @(current ? "current" : "")" dir="auto" @onclick="() => PickItem(value)">
+                                <span>@label</span>@if (current) { <span>✓</span> }
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
         <header class="topbar">
             <button class="icon-btn" title="@L["منو"]" @onclick="State.ToggleSidebar">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
@@ -21,22 +56,8 @@
                 }
                 else
                 {
-                    <select class="picker" value="@State.CurrentProviderId" @onchange="OnProviderChanged" title="@L["سرویس‌دهنده"]">
-                        @foreach (var p in State.Providers)
-                        {
-                            <option value="@p.Id">@p.Name</option>
-                        }
-                    </select>
-                    <select class="picker model" value="@State.CurrentModel" @onchange="OnModelChanged" title="@L["مدل"]">
-                        @if (string.IsNullOrWhiteSpace(State.CurrentModel))
-                        {
-                            <option value="">@L["— مدل —"]</option>
-                        }
-                        @foreach (var m in State.ModelsFor(State.CurrentProvider))
-                        {
-                            <option value="@m">@m</option>
-                        }
-                    </select>
+                    <button class="picker" title="@L["سرویس‌دهنده"]" @onclick='() => State.OpenPicker("provider")'>@State.CurrentProvider?.Name <span class="caret">▾</span></button>
+                    <button class="picker model" title="@L["مدل"]" @onclick='() => State.OpenPicker("model")'>@(string.IsNullOrWhiteSpace(State.CurrentModel) ? L["— مدل —"] : State.CurrentModel) <span class="caret">▾</span></button>
                 }
             </div>
 
@@ -408,8 +429,14 @@
             await JS.InvokeVoidAsync("chat.scroll", "messages", force);
     }
 
-    void OnProviderChanged(ChangeEventArgs e) => State.SelectProvider(e.Value?.ToString());
-    void OnModelChanged(ChangeEventArgs e) => State.SelectModel(e.Value?.ToString());
+    void OnPickerFilter(ChangeEventArgs e) => State.SetPickerFilter(e.Value?.ToString() ?? "");
+
+    void PickItem(string value)
+    {
+        if (State.Picker == "model") State.SelectModel(value);
+        else State.SelectProvider(value);
+        State.ClosePicker();
+    }
 
     [JSInvokable]
     public Task OnEnter() => InvokeAsync(SendClick);

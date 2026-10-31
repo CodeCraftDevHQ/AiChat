@@ -12,6 +12,7 @@ public static class Translations
         ["خطا در گرفتن عکس: "] = "Error taking photo: ",
         ["فایل یا عکس"] = "File or photo",
         ["دوربین"] = "Camera",
+        ["جست\u200cوجوی مدل..."] = "Search models...",
         ["API ها"] = "APIs",
         ["LM Studio (محلی)"] = "LM Studio (local)",
         ["Ollama (محلی)"] = "Ollama (local)",

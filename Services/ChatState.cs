@@ -504,8 +504,16 @@ public class ChatState
     /// Closes the top-most layer (viewer, dialogs, settings page, sidebar).
     /// Returns false when nothing was open, so the caller can let the app go to the background.
     /// </summary>
+    /// <summary>"provider" / "model" while the centered picker sheet is open.</summary>
+    public string? Picker { get; private set; }
+    public string PickerFilter { get; private set; } = "";
+    public void OpenPicker(string kind) { Picker = kind; PickerFilter = ""; Notify(); }
+    public void ClosePicker() { Picker = null; Notify(); }
+    public void SetPickerFilter(string f) { PickerFilter = f; Notify(); }
+
     public bool HandleBack(bool includeSidebar = true)
     {
+        if (Picker != null) { ClosePicker(); return true; }
         if (Viewer != null) { CloseViewer(); return true; }
         if (ShowLogs) { CloseLogs(); return true; }
 
