@@ -56,7 +56,7 @@
                         <div class="sheet-tools">
                             @if (State.TestingModels)
                             {
-                                <span class="muted">@State.TestDone / @State.TestTotal</span>
+                                <span class="muted" dir="ltr">@State.TestDone / @State.TestTotal</span>
                                 <button class="btn sm" @onclick="State.StopModelTest">@L["توقف"]</button>
                             }
                             else

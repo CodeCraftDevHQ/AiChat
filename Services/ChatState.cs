@@ -592,6 +592,16 @@ public class ChatState
 
     public void StopModelTest() => _testCts?.Cancel();
 
+    /// <summary>After a pause: tells the user the test goes on, slower (or clears the message).</summary>
+    void SetPacingMessage()
+    {
+        if (_abortReason != null) return;
+        if (_pauseUntil > DateTime.UtcNow) return;
+        TestMessage = _interval > TimeSpan.Zero
+            ? L.F("تست ادامه دارد؛ بین درخواست‌ها {0} ثانیه فاصله می‌افتد تا به محدودیت نخورد.", (int)Math.Ceiling(_interval.TotalSeconds))
+            : null;
+    }
+
     /// <summary>Waits until a request may start (global pause + learned spacing).</summary>
     async Task WaitTurnAsync(CancellationToken ct)
     {
@@ -605,12 +615,16 @@ public class ChatState
         while (true)
         {
             var wait = start - DateTime.UtcNow;
-            if (wait <= TimeSpan.Zero || _abortReason != null) return;
-            if (_pauseUntil > DateTime.UtcNow)
+            if (wait <= TimeSpan.Zero || _abortReason != null)
             {
-                TestMessage = L.F("محدودیت درخواست سرویس؛ ادامه‌ی تست تا {0} ثانیه‌ی دیگر...", (int)Math.Ceiling((_pauseUntil - DateTime.UtcNow).TotalSeconds));
-                Notify();
+                SetPacingMessage();
+                return;
             }
+            if (_pauseUntil > DateTime.UtcNow)
+                TestMessage = L.F("محدودیت درخواست سرویس؛ ادامه‌ی تست تا {0} ثانیه‌ی دیگر...", (int)Math.Ceiling((_pauseUntil - DateTime.UtcNow).TotalSeconds));
+            else
+                SetPacingMessage();
+            Notify();
             await Task.Delay(wait < TimeSpan.FromSeconds(1) ? wait : TimeSpan.FromSeconds(1), ct);
         }
     }
