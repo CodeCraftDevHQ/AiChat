@@ -64,7 +64,7 @@ A modern, cross-platform ChatGPT-style application built for **Windows** and **A
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/your-repo-name.git
+git clone https://github.com/CodeCraftDevHQ/AiChat.git
 cd your-repo-name
 
 # Build for Windows
