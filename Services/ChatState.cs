@@ -1006,7 +1006,7 @@ public class ChatState
         }
     }
 
-    static string MakeTitle(string text)
+    string MakeTitle(string text)
     {
         var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault() ?? DefaultTitle;
