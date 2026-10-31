@@ -50,7 +50,11 @@ A modern, cross-platform ChatGPT-style application built for **Windows** and **A
 
 * Complete visual control: customize typography, layout width, line spacing, and font sizes.
 
-* **Privacy First:** API keys are stored in native secure storage (Android Keystore / Windows Credential Vault). All conversation logs and attachments remain strictly on your local device.
+* **Privacy First:** API keys are stored in native secure storage (Android Keystore / Windows Credential Vault). Chats, projects and attachments are saved only on your device; message text and attached files are sent only to the AI services you configure yourself.
+
+## ⬇️ Download
+
+Ready-to-install builds (Windows installer and Android APK) are available on the [Releases](../../releases) page.
 
 ## 🛠️ Build & Installation
 
@@ -65,7 +69,7 @@ A modern, cross-platform ChatGPT-style application built for **Windows** and **A
 ```bash
 # Clone the repository
 git clone https://github.com/CodeCraftDevHQ/AiChat.git
-cd your-repo-name
+cd AiChat
 
 # Build for Windows
 dotnet build -f net10.0-windows10.0.19041.0
@@ -98,7 +102,13 @@ Alternatively, open `AiChat.csproj` in Visual Studio, select your target platfor
 
 ## 🌐 Localization
 
-To add support for a new language, append your translation key-value mappings inside `Services/Translations.cs`.
+UI texts use the Persian text as the key, for example `L["گفتگوی جدید"]`. English translations live in `Services/Translations.cs`:
+
+```csharp
+["گفتگوی جدید"] = "New chat",
+```
+
+Add or fix an entry there; a missing entry simply falls back to the Persian text. Adding a completely new language also needs a second dictionary and a language option in `Services/Loc.cs` and the settings dialog.
 
 ## 📄 License
 
