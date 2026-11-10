@@ -179,14 +179,71 @@ static class ProviderHttp
         if (resp.IsSuccessStatusCode) return;
         var body = await resp.Content.ReadAsStringAsync(ct);
         var ex = new HttpRequestException($"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {ExtractError(body)}", null, resp.StatusCode);
-        var ra = resp.Headers.RetryAfter;
-        if (ra?.Delta != null) ex.Data["RetryAfter"] = (int)Math.Ceiling(ra.Delta.Value.TotalSeconds);
-        else if (ra?.Date != null) ex.Data["RetryAfter"] = (int)Math.Max(1, Math.Ceiling((ra.Date.Value - DateTimeOffset.UtcNow).TotalSeconds));
+        var wait = HeaderWaitSeconds(resp);
+        if (wait != null) ex.Data["RetryAfter"] = wait.Value;
         throw ex;
     }
 
-    /// <summary>Is this error a "too many requests" one? Also returns the server's wait hint and whether it looks like a daily quota.</summary>
-    public static (bool Limited, int? RetrySeconds, bool Daily) RateInfo(Exception ex)
+    /// <summary>Wait hint from the response headers (Retry-After, retry-after-ms, x-ratelimit-reset*).</summary>
+    static int? HeaderWaitSeconds(HttpResponseMessage resp)
+    {
+        var ra = resp.Headers.RetryAfter;
+        if (ra?.Delta != null) return (int)Math.Ceiling(ra.Delta.Value.TotalSeconds);
+        if (ra?.Date != null) return (int)Math.Max(1, Math.Ceiling((ra.Date.Value - DateTimeOffset.UtcNow).TotalSeconds));
+
+        foreach (var (name, ms) in new[] { ("retry-after-ms", true), ("x-ratelimit-reset-requests", false), ("x-ratelimit-reset", false), ("ratelimit-reset", false) })
+        {
+            if (!resp.Headers.TryGetValues(name, out var vals)) continue;
+            var v = vals.FirstOrDefault()?.Trim();
+            if (string.IsNullOrEmpty(v)) continue;
+            if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var n))
+            {
+                if (ms) return (int)Math.Ceiling(n / 1000);
+                if (n > 1e12) return (int)Math.Max(1, Math.Ceiling((n / 1000) - DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+                if (n > 1e9) return (int)Math.Max(1, Math.Ceiling(n - DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+                return (int)Math.Ceiling(n);
+            }
+            var go = ParseGoDuration(v);
+            if (go != null) return go;
+        }
+        return null;
+    }
+
+    // "1s", "6m0s", "20ms", "1h2m3s"
+    static int? ParseGoDuration(string v)
+    {
+        var m = System.Text.RegularExpressions.Regex.Matches(v, @"(\d+(?:\.\d+)?)(ms|h|m|s)");
+        if (m.Count == 0) return null;
+        double total = 0;
+        foreach (System.Text.RegularExpressions.Match x in m)
+        {
+            var n = double.Parse(x.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            total += x.Groups[2].Value switch { "ms" => n / 1000, "s" => n, "m" => n * 60, _ => n * 3600 };
+        }
+        return (int)Math.Ceiling(total);
+    }
+
+    public record RateDetection(bool Limited, int? RetrySeconds, bool Daily, string Text);
+
+    static readonly string[] LimitWords =
+    {
+        "rate limit", "rate-limit", "ratelimit", "rate_limit", "rate limited", "rate-limited", "too many requests", "too_many_requests",
+        "resource_exhausted", "resource exhausted", "quota", "requests per", "per minute", "per min", "perminute", "rpm", "tpm",
+        "try again in", "retry in", "retry after", "retry-after", "slow down", "throttl", "overloaded", "at capacity",
+        "free-models-per", "usage limit", "limit reached"
+    };
+
+    static readonly string[] DailyWords =
+    {
+        "per day", "perday", "per_day", "per-day", "daily", "free-models-per-day", "insufficient_quota", "billing details",
+        "exceeded your current quota", "resets at midnight"
+    };
+
+    /// <summary>
+    /// Is this error a "too many requests" one? Looks at the HTTP status, the Retry-After style headers, wait hints inside
+    /// the message (retryDelay, "try again in 20s", X-RateLimit-Reset) and well-known wording, plus the user's own keywords.
+    /// </summary>
+    public static RateDetection RateInfo(Exception ex, IReadOnlyList<string>? extraWords = null)
     {
         var limited = false;
         int? retry = null;
@@ -197,13 +254,44 @@ static class ProviderHttp
             if (e.Data["RetryAfter"] is int s) retry = s;
             text.Append(e.Message).Append(' ');
         }
-        var t = text.ToString().ToLowerInvariant();
-        if (t.Contains("429") || t.Contains("rate limit") || t.Contains("rate-limit") || t.Contains("ratelimit") ||
-            t.Contains("too many requests") || t.Contains("resource_exhausted") || t.Contains("quota") ||
-            t.Contains("requests per"))
-            limited = true;
-        var daily = limited && (t.Contains("per day") || t.Contains("perday") || t.Contains("per_day") || t.Contains("daily"));
-        return (limited, retry, daily);
+        var raw = text.ToString();
+        var t = raw.ToLowerInvariant();
+
+        // "HTTP 429" / "429 Too Many" / "code":429
+        if (System.Text.RegularExpressions.Regex.IsMatch(t, @"(^|[^\d])429([^\d]|$)")) limited = true;
+        if (LimitWords.Any(t.Contains)) limited = true;
+        if (extraWords != null && extraWords.Any(w => w.Length > 0 && t.Contains(w.ToLowerInvariant()))) limited = true;
+
+        if (limited && retry == null) retry = WaitFromText(raw);
+
+        var daily = limited && DailyWords.Any(t.Contains) &&
+                    !(t.Contains("per minute") || t.Contains("perminute") || t.Contains("per min"));
+        return new RateDetection(limited, retry, daily, raw.Trim());
+    }
+
+    static int? WaitFromText(string raw)
+    {
+        var rx = System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+        var m = System.Text.RegularExpressions.Regex.Match(raw, "\"retryDelay\"\\s*:\\s*\"(\\d+(?:\\.\\d+)?)s\"", rx);
+        if (m.Success) return (int)Math.Ceiling(double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture));
+
+        m = System.Text.RegularExpressions.Regex.Match(raw, @"(?:try again|retry|reset[s]?)(?: after| in)?\s*(\d+(?:\.\d+)?)\s*(ms|milliseconds|seconds|secs|sec|s|minutes|mins|min|m)\b", rx);
+        if (m.Success)
+        {
+            var n = double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            var u = m.Groups[2].Value.ToLowerInvariant();
+            var sec = u.StartsWith("ms") || u.StartsWith("milli") ? n / 1000 : u.StartsWith("m") ? n * 60 : n;
+            return (int)Math.Ceiling(sec);
+        }
+
+        m = System.Text.RegularExpressions.Regex.Match(raw, "X-RateLimit-Reset\"?\\s*[:=]\\s*\"?(\\d{10,13})", rx);
+        if (m.Success && long.TryParse(m.Groups[1].Value, out var epoch))
+        {
+            var secs = m.Groups[1].Value.Length == 13 ? epoch / 1000 : epoch;
+            var diff = secs - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            if (diff > 0 && diff < 86400) return (int)diff;
+        }
+        return null;
     }
 
     public static string ExtractError(string body)

@@ -458,6 +458,8 @@ public class ChatState
         UiWidth = Preferences.Default.Get("ui_w", 768);
         UiLineHeight = Preferences.Default.Get("ui_lh", 160);
         UiFont = Preferences.Default.Get("ui_font", "default");
+        LoadTestSettings();
+        ModelTests = new(await _storage.LoadModelTestsAsync() ?? new());
         IsRtl = Preferences.Default.Get("rtl", true);
         SystemPrompt = Preferences.Default.Get("system_prompt", "");
 
@@ -568,22 +570,63 @@ public class ChatState
     public void OpenNewApi() { Picker = null; NewApiRequested = true; OpenSettingsAt("api"); }
 
     // ---- model test: which models of the current API actually answer
-    public record ModelTestResult(bool Ok, string? Error, bool RateLimited = false);
-    public Dictionary<string, ModelTestResult> ModelTests { get; } = new();
+    // ================= model test =================
+    // Results are saved (model_tests.json) and survive restarts until a new test replaces them.
+
+    public System.Collections.Concurrent.ConcurrentDictionary<string, ModelTestResult> ModelTests { get; private set; } = new();
     public bool TestingModels { get; private set; }
     public int TestDone { get; private set; }
     public int TestTotal { get; private set; }
-    public bool OnlyWorkingModels { get; set; }
 
-    /// <summary>Shown in the picker while the test waits for a rate limit to reset, or after it gave up.</summary>
+    /// <summary>"all" | "ok" | "failed" | "limited" | "untested": which previous results the model list shows.</summary>
+    public string TestFilter { get; set; } = "all";
+
+    /// <summary>Shown while the test waits for a rate limit to reset, or after it gave up.</summary>
     public string? TestMessage { get; private set; }
+
+    // ---- user settings of the test (saved)
+    int _testBatch, _testWindow = 60, _testParallel = 3;
+    bool _testContinue = true;
+    string _testWords = "";
+
+    /// <summary>Max models tested per period; 0 = automatic (learned from the first rate-limit answer).</summary>
+    public int TestBatch { get => _testBatch; set { _testBatch = Math.Clamp(value, 0, 1000); Preferences.Default.Set("test_batch", _testBatch); } }
+    /// <summary>Length of that period in seconds.</summary>
+    public int TestWindow { get => _testWindow; set { _testWindow = Math.Clamp(value, 5, 3600); Preferences.Default.Set("test_window", _testWindow); } }
+    public int TestParallel { get => _testParallel; set { _testParallel = Math.Clamp(value, 1, 6); Preferences.Default.Set("test_parallel", _testParallel); } }
+    /// <summary>true = wait for the limit to reset and continue; false = stop at the first limit.</summary>
+    public bool TestContinueOnLimit { get => _testContinue; set { _testContinue = value; Preferences.Default.Set("test_continue", value); } }
+    /// <summary>Extra words (comma separated); an error containing one of them counts as a rate limit.</summary>
+    public string TestLimitWords { get => _testWords; set { _testWords = value ?? ""; Preferences.Default.Set("test_words", _testWords); } }
+    /// <summary>Text of the last error that was recognized as a rate limit.</summary>
+    public string LastLimitMessage { get; private set; } = "";
+
+    public void UseLastLimitMessageAsKeyword()
+    {
+        if (string.IsNullOrWhiteSpace(LastLimitMessage)) return;
+        var word = LastLimitMessage.Length > 80 ? LastLimitMessage[..80] : LastLimitMessage;
+        TestLimitWords = string.IsNullOrWhiteSpace(TestLimitWords) ? word : TestLimitWords.TrimEnd(' ', ',') + ", " + word;
+        Notify();
+    }
+
+    void LoadTestSettings()
+    {
+        _testBatch = Preferences.Default.Get("test_batch", 0);
+        _testWindow = Preferences.Default.Get("test_window", 60);
+        _testParallel = Preferences.Default.Get("test_parallel", 3);
+        _testContinue = Preferences.Default.Get("test_continue", true);
+        _testWords = Preferences.Default.Get("test_words", "");
+        LastLimitMessage = Preferences.Default.Get("last_limit_msg", "");
+    }
 
     CancellationTokenSource? _testCts;
     readonly object _rateLock = new();
-    DateTime _pauseUntil;       // global pause after a "too many requests" answer
-    DateTime _nextStart;        // spacing between request starts
-    TimeSpan _interval;         // learned spacing (0 until the first rate-limit answer)
+    readonly List<DateTime> _starts = new();   // reserved request start times (sliding window)
+    readonly List<DateTime> _okTimes = new();  // recent successful answers, used to learn the limit
+    DateTime _pauseUntil, _pauseSetAt;
+    int _learnedBatch;                         // limit learned from the server (0 = none yet)
     string? _abortReason;
+    readonly SemaphoreSlim _testSaveGate = new(1, 1);
 
     public static string TestKey(string providerId, string model) => providerId + "|" + model;
 
@@ -592,42 +635,81 @@ public class ChatState
 
     public void StopModelTest() => _testCts?.Cancel();
 
-    /// <summary>After a pause: tells the user the test goes on, slower (or clears the message).</summary>
-    void SetPacingMessage()
+    public async Task ClearModelTestsAsync()
     {
-        if (_abortReason != null) return;
-        if (_pauseUntil > DateTime.UtcNow) return;
-        TestMessage = _interval > TimeSpan.Zero
-            ? L.F("تست ادامه دارد؛ بین درخواست‌ها {0} ثانیه فاصله می‌افتد تا به محدودیت نخورد.", (int)Math.Ceiling(_interval.TotalSeconds))
-            : null;
+        if (CurrentProviderId == null || TestingModels) return;
+        foreach (var k in ModelTests.Keys.Where(k => k.StartsWith(CurrentProviderId + "|")).ToList())
+            ModelTests.TryRemove(k, out _);
+        Notify();
+        await SaveModelTestsAsync();
     }
 
-    /// <summary>Waits until a request may start (global pause + learned spacing).</summary>
-    async Task WaitTurnAsync(CancellationToken ct)
+    async Task SaveModelTestsAsync()
     {
-        DateTime start;
+        await _testSaveGate.WaitAsync();
+        try { await _storage.SaveModelTestsAsync(new Dictionary<string, ModelTestResult>(ModelTests)); }
+        catch (Exception ex) { _log.Warn("Saving model test results failed: " + ex.Message); }
+        finally { _testSaveGate.Release(); }
+    }
+
+    int EffectiveBatch()
+    {
+        if (_testBatch > 0 && _learnedBatch > 0) return Math.Min(_testBatch, _learnedBatch);
+        return Math.Max(_testBatch, _learnedBatch); // 0 = unlimited
+    }
+
+    /// <summary>Reserves the next allowed start time: after the global pause and within "batch per window".</summary>
+    DateTime ReserveStart()
+    {
         lock (_rateLock)
         {
-            var now = DateTime.UtcNow;
-            start = new[] { now, _pauseUntil, _nextStart }.Max();
-            _nextStart = start + _interval;
-        }
-        while (true)
-        {
-            var wait = start - DateTime.UtcNow;
-            if (wait <= TimeSpan.Zero || _abortReason != null)
+            var window = TimeSpan.FromSeconds(_testWindow);
+            var start = DateTime.UtcNow;
+            if (_pauseUntil > start) start = _pauseUntil;
+            var batch = EffectiveBatch();
+            if (batch > 0)
             {
-                SetPacingMessage();
-                return;
+                while (true)
+                {
+                    var recent = _starts.Where(t => t > start - window).OrderBy(t => t).ToList();
+                    if (recent.Count < batch) break;
+                    start = recent[recent.Count - batch] + window;
+                }
             }
-            if (_pauseUntil > DateTime.UtcNow)
-                TestMessage = L.F("محدودیت درخواست سرویس؛ ادامه‌ی تست تا {0} ثانیه‌ی دیگر...", (int)Math.Ceiling((_pauseUntil - DateTime.UtcNow).TotalSeconds));
-            else
-                SetPacingMessage();
+            _starts.Add(start);
+            _starts.RemoveAll(t => t < DateTime.UtcNow - window - window);
+            return start;
+        }
+    }
+
+    async Task WaitUntilAsync(DateTime start, CancellationToken ct)
+    {
+        while (_abortReason == null)
+        {
+            var now = DateTime.UtcNow;
+            var target = start > _pauseUntil ? start : _pauseUntil;   // a pause may have started after we reserved
+            var wait = target - now;
+            if (wait <= TimeSpan.Zero) { if (_pauseUntil <= now) SetPacingMessage(); return; }
+
+            if (_pauseUntil > now)
+                TestMessage = L.F("محدودیت درخواست سرویس؛ ادامه‌ی تست تا {0} ثانیه‌ی دیگر...", (int)Math.Ceiling((_pauseUntil - now).TotalSeconds));
+            else SetPacingMessage();
             Notify();
             await Task.Delay(wait < TimeSpan.FromSeconds(1) ? wait : TimeSpan.FromSeconds(1), ct);
         }
     }
+
+    void SetPacingMessage()
+    {
+        if (_abortReason != null) return;
+        var batch = EffectiveBatch();
+        TestMessage = batch > 0 && (_learnedBatch > 0 || _testBatch > 0)
+            ? L.F("تست ادامه دارد؛ حداکثر {0} مدل در هر {1} ثانیه.", batch, _testWindow)
+            : null;
+    }
+
+    static List<string> SplitWords(string s) =>
+        s.Split(new[] { ',', '،', ';', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
     public async Task TestModelsAsync(List<string> models)
     {
@@ -639,85 +721,120 @@ public class ChatState
         TestTotal = models.Count;
         TestMessage = null;
         _abortReason = null;
-        _interval = TimeSpan.Zero;
-        _pauseUntil = _nextStart = DateTime.UtcNow;
+        _learnedBatch = 0;
+        _pauseUntil = _pauseSetAt = DateTime.MinValue;
+        lock (_rateLock) { _starts.Clear(); _okTimes.Clear(); }
         _testCts = new CancellationTokenSource();
         var all = _testCts.Token;
         var impl = _factory.Create(provider.Type);
-        var gate = new SemaphoreSlim(4);
-        var okTimes = new Queue<DateTime>(); // successful answers in the last minute, to learn the limit
-        _log.Info($"Model test: {provider.Name}, {models.Count} models");
+        var words = SplitWords(_testWords);
+        var next = -1;
+        _log.Info($"Model test: {provider.Name}, {models.Count} models, batch={_testBatch}/{_testWindow}s, parallel={_testParallel}, continue={_testContinue}");
         Notify();
 
-        async Task One(string model)
+        async Task TestOne(string model)
         {
-            try { await gate.WaitAsync(all); }
-            catch (OperationCanceledException) { return; }
-
             ModelTestResult? result = null;
-            try
+            var limitHits = 0;
+            for (var loop = 0; loop < 12 && result == null; loop++)
             {
-                for (var attempt = 0; attempt < 4 && result == null; attempt++)
+                if (_abortReason != null || all.IsCancellationRequested) return;
+                var start = ReserveStart();
+                try { await WaitUntilAsync(start, all); }
+                catch (OperationCanceledException) { return; }
+                if (_abortReason != null) return;
+
+                var t0 = DateTime.UtcNow;
+                try
                 {
-                    if (_abortReason != null) return;
-                    await WaitTurnAsync(all);
-                    if (_abortReason != null) return;
-
-                    try
+                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(all);
+                    cts.CancelAfter(TimeSpan.FromSeconds(30));
+                    var hi = new List<ChatMessage> { new() { Role = "user", Content = "Hi" } };
+                    await foreach (var _ in impl.StreamAsync(provider, model, hi, "Reply with one word.", null, cts.Token))
+                        break;
+                    result = new ModelTestResult(true, null, false, DateTime.Now);
+                    lock (_rateLock) _okTimes.Add(DateTime.UtcNow);
+                }
+                catch (OperationCanceledException) when (!all.IsCancellationRequested)
+                {
+                    result = new ModelTestResult(false, "Timeout (30 s)", false, DateTime.Now);
+                }
+                catch (OperationCanceledException) { return; }
+                catch (Exception ex)
+                {
+                    var d = ProviderHttp.RateInfo(ex, words);
+                    if (!d.Limited)
                     {
-                        using var cts = CancellationTokenSource.CreateLinkedTokenSource(all);
-                        cts.CancelAfter(TimeSpan.FromSeconds(30));
-                        var hi = new List<ChatMessage> { new() { Role = "user", Content = "Hi" } };
-                        await foreach (var _ in impl.StreamAsync(provider, model, hi, "Reply with one word.", null, cts.Token))
-                            break;
-                        result = new ModelTestResult(true, null);
-                        lock (_rateLock) okTimes.Enqueue(DateTime.UtcNow);
+                        result = new ModelTestResult(false, ProviderHttp.Describe(ex), false, DateTime.Now);
+                        break;
                     }
-                    catch (OperationCanceledException) when (!all.IsCancellationRequested)
-                    {
-                        result = new ModelTestResult(false, "Timeout (30 s)");
-                    }
-                    catch (OperationCanceledException) { return; }
-                    catch (Exception ex)
-                    {
-                        var (limited, retry, daily) = ProviderHttp.RateInfo(ex);
-                        if (!limited) { result = new ModelTestResult(false, ProviderHttp.Describe(ex)); break; }
 
-                        if (daily || retry > 180)
-                        {
-                            _abortReason = L["سهمیه‌ی روزانه یا طولانی‌مدت این API تمام شده است؛ تست متوقف شد."];
-                            result = new ModelTestResult(false, ProviderHttp.Describe(ex), true);
-                            break;
-                        }
+                    LastLimitMessage = d.Text.Length > 300 ? d.Text[..300] : d.Text;
+                    Preferences.Default.Set("last_limit_msg", LastLimitMessage);
 
-                        lock (_rateLock)
-                        {
-                            var now = DateTime.UtcNow;
-                            while (okTimes.Count > 0 && now - okTimes.Peek() > TimeSpan.FromMinutes(1)) okTimes.Dequeue();
-                            if (_interval == TimeSpan.Zero)
-                            {
-                                // learn the limit: N answers per minute -> one request every 60/N seconds
-                                var n = Math.Max(1, okTimes.Count);
-                                _interval = TimeSpan.FromSeconds(Math.Min(15, 60.0 / n + 0.5));
-                            }
-                            var wait = TimeSpan.FromSeconds(Math.Min(retry ?? 60, 120) + 1);
-                            if (now + wait > _pauseUntil) _pauseUntil = now + wait;
-                            okTimes.Clear();
-                        }
-                        _log.Warn($"Model test: rate limit on {provider.Name}, waiting");
-                        if (attempt == 3) result = new ModelTestResult(false, ProviderHttp.Describe(ex), true);
+                    if (d.Daily || d.RetrySeconds > 900)
+                    {
+                        _abortReason = L["سهمیه‌ی روزانه یا طولانی‌مدت این API تمام شده است؛ تست متوقف شد."];
+                        result = new ModelTestResult(false, LastLimitMessage, true, DateTime.Now);
+                        break;
                     }
+
+                    // An answer to a request that started before the current pause: it is the same limit, not a new one.
+                    bool stale;
+                    lock (_rateLock) stale = t0 < _pauseSetAt;
+                    if (stale) continue;
+
+                    if (!_testContinue)
+                    {
+                        _abortReason = L["به محدودیت رسید و طبق تنظیمات، تست متوقف شد."];
+                        result = new ModelTestResult(false, LastLimitMessage, true, DateTime.Now);
+                        break;
+                    }
+
+                    limitHits++;
+                    lock (_rateLock)
+                    {
+                        var now = DateTime.UtcNow;
+                        var wait = TimeSpan.FromSeconds(Math.Min(d.RetrySeconds ?? _testWindow, 900) + 1);
+                        _pauseSetAt = now;
+                        _pauseUntil = now + wait;
+                        _starts.Clear();
+
+                        // learn the allowed speed; limited again after learning -> be more careful
+                        var win = now - TimeSpan.FromSeconds(_testWindow);
+                        _okTimes.RemoveAll(t => t < win);
+                        _learnedBatch = _learnedBatch == 0 ? Math.Max(1, _okTimes.Count) : Math.Max(1, _learnedBatch * 2 / 3);
+                        _okTimes.Clear();
+                    }
+                    _log.Warn($"Model test: rate limit ({provider.Name}), pausing; allowed about {_learnedBatch} per {_testWindow}s");
+                    if (limitHits >= 4) result = new ModelTestResult(false, LastLimitMessage, true, DateTime.Now);
                 }
             }
-            catch (OperationCanceledException) { return; }
-            finally { gate.Release(); }
+            result ??= _abortReason == null && !all.IsCancellationRequested
+                ? new ModelTestResult(false, LastLimitMessage, true, DateTime.Now) : null;
 
-            if (result != null) ModelTests[TestKey(provider.Id, model)] = result;
-            TestDone++;
-            Notify();
+            if (result != null)
+            {
+                ModelTests[TestKey(provider.Id, model)] = result;
+                var done = Interlocked.Increment(ref _testDoneCounter);
+                TestDone = done;
+                Notify();
+                if (done % 15 == 0) await SaveModelTestsAsync();
+            }
         }
 
-        try { await Task.WhenAll(models.Select(One)); }
+        async Task Worker()
+        {
+            while (!all.IsCancellationRequested && _abortReason == null)
+            {
+                var i = Interlocked.Increment(ref next);
+                if (i >= models.Count) return;
+                await TestOne(models[i]);
+            }
+        }
+
+        _testDoneCounter = 0;
+        try { await Task.WhenAll(Enumerable.Range(0, _testParallel).Select(_ => Worker())); }
         finally
         {
             TestingModels = false;
@@ -725,8 +842,11 @@ public class ChatState
             _testCts?.Dispose();
             _testCts = null;
             Notify();
+            await SaveModelTestsAsync();
         }
     }
+
+    int _testDoneCounter;
 
     public void OpenPicker(string kind) { Picker = kind; PickerFilter = ""; Notify(); }
     public void ClosePicker() { Picker = null; Notify(); }

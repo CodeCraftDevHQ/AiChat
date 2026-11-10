@@ -67,6 +67,14 @@ public class StorageService
     public Task SaveProjectsAsync(List<Project> list) =>
         WriteAsync("projects.json", JsonSerializer.Serialize(list, Json));
 
+    // ---- model test results ----
+
+    public Task<Dictionary<string, ModelTestResult>?> LoadModelTestsAsync() =>
+        ReadAsync<Dictionary<string, ModelTestResult>>("model_tests.json");
+
+    public Task SaveModelTestsAsync(Dictionary<string, ModelTestResult> snapshot) =>
+        WriteAsync("model_tests.json", JsonSerializer.Serialize(snapshot, Json));
+
     // ---- attachments ----
 
     static string AttachDir => Path.Combine(FileSystem.AppDataDirectory, "attachments");

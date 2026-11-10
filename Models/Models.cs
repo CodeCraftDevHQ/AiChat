@@ -140,6 +140,9 @@ public class Project
     };
 }
 
+/// <summary>Result of testing one model with a tiny message (saved between app runs).</summary>
+public record ModelTestResult(bool Ok, string? Error, bool RateLimited = false, DateTime? At = null);
+
 public record Preset(string Name, ProviderType Type, string BaseUrl);
 
 public static class ProviderDefaults

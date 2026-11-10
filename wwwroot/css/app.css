@@ -194,6 +194,18 @@ button { cursor: pointer; }
 .sheet-edit:hover { opacity: 1; }
 .select-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: start; width: 100%; cursor: pointer; color: var(--text); }
 .select-btn .sel-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet.wide { width: min(520px, calc(100vw - 32px)); }
+.sheet-note { padding: 0 14px 8px; font-size: 13px; }
+.sheet-chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 8px; }
+.chip.sm { padding: 3px 10px; font-size: 13px; }
+.chip.active, .btn.active { border-color: var(--accent); color: var(--accent); }
+.test-settings { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 6px 16px 16px; }
+.test-settings label { display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+.test-settings label.check { flex-direction: row; align-items: center; gap: 8px; }
+.test-settings .inp { padding: 8px 12px; }
+.last-limit { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.last-limit code { background: var(--hover); border-radius: 8px; padding: 6px 8px; max-height: 90px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.btn.danger { color: var(--danger); }
 .sheet-empty { padding: 16px; text-align: center; color: var(--muted); }
 .picker option { background: var(--surface); color: var(--text); }
 .picker.model { font-weight: 500; color: var(--muted); direction: ltr; }

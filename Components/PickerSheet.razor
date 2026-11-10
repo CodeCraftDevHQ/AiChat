@@ -1,0 +1,189 @@
+@inherits StateComponent
+
+@if (State.Picker != null)
+{
+    var isModel = State.Picker == "model";
+    var allModels = isModel ? State.ModelsFor(State.CurrentProvider).Distinct().ToList() : new List<string>();
+    var items = isModel ? ModelItems(allModels) : State.Providers.Select(p => p.Id).ToList();
+
+    <div class="modal-backdrop" @onclick="State.ClosePicker">
+        <div class="sheet @(isModel ? "wide" : "")" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>@(isModel ? L["مدل"] : L["سرویس‌دهنده"])</strong>
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="State.ClosePicker">✕</button>
+            </div>
+
+            @if (isModel && allModels.Count > 8)
+            {
+                <input class="inp sheet-search" dir="auto" placeholder="@L["جست‌وجوی مدل..."]" value="@State.PickerFilter" @oninput="OnPickerFilter" />
+            }
+
+            @if (isModel)
+            {
+                <div class="sheet-tools">
+                    @if (State.TestingModels)
+                    {
+                        <span class="muted" dir="ltr">@State.TestDone / @State.TestTotal</span>
+                        <button class="btn sm" @onclick="State.StopModelTest">@L["توقف"]</button>
+                    }
+                    else
+                    {
+                        <button class="btn sm" title="@L["هر مدل یک پیام کوتاه می‌گیرد (هزینه‌ی ناچیز). فقط مدل‌هایی که الان در لیست دیده می‌شوند تست می‌شوند."]"
+                                disabled="@(items.Count == 0)" @onclick="() => State.TestModelsAsync(items)">🧪 @L["تست مدل‌ها"] (@items.Count)</button>
+                    }
+                    <button class="btn sm @(_settings ? "active" : "")" title="@L["تنظیمات تست"]" @onclick="OpenSettings">⚙</button>
+                </div>
+
+                @if (State.TestMessage != null)
+                {
+                    <div class="sheet-note pdf-warn">⏳ @State.TestMessage</div>
+                }
+
+                <div class="sheet-chips">
+                    @foreach (var (key, label) in Filters)
+                    {
+                        var k = key;
+                        <button class="chip sm @(State.TestFilter == k ? "active" : "")" @onclick="() => SetFilter(k)">@label @CountText(allModels, k)</button>
+                    }
+                </div>
+            }
+
+            <div class="sheet-list">
+                @if (items.Count == 0)
+                {
+                    <div class="sheet-empty">@L["نتیجه‌ای پیدا نشد"]</div>
+                }
+                @foreach (var id in items)
+                {
+                    var value = id;
+                    var label = isModel ? value : State.Providers.First(p => p.Id == value).Name;
+                    var current = isModel ? value == State.CurrentModel : value == State.CurrentProviderId;
+                    var test = isModel ? State.TestResultOf(value) : null;
+                    var tip = test == null ? "" : (test.At?.ToString("yyyy-MM-dd HH:mm") + " " + test.Error).Trim();
+                    <div class="sheet-row">
+                        <button class="sheet-item @(current ? "current" : "") @(test is { Ok: false } ? "failed" : "")" dir="auto" title="@tip" @onclick="() => PickItem(value)">
+                            <span>@Icon(test)@label</span>@if (current) { <span>✓</span> }
+                        </button>
+                        @if (!isModel)
+                        {
+                            <button class="icon-btn sm sheet-edit" title="@L["ویرایش این API"]" @onclick="() => State.OpenEditApi(value)">✎</button>
+                        }
+                    </div>
+                }
+                @if (!isModel)
+                {
+                    <button class="sheet-item add" @onclick="State.OpenNewApi">+ @L["افزودن API"]</button>
+                }
+            </div>
+        </div>
+    </div>
+    @if (_settings)
+    {
+        <div class="modal-backdrop" @onclick="CloseSettings">
+            <div class="sheet wide" @onclick:stopPropagation="true">
+                <div class="sheet-head">
+                    <strong>⚙ @L["تنظیمات تست"]</strong>
+                    <button class="icon-btn sm" title="@L["بستن"]" @onclick="CloseSettings">✕</button>
+                </div>
+                <div class="test-settings">
+                        <label>
+                            <span>@L["حداکثر تعداد مدل در هر بازه (۰ = خودکار)"]</span>
+                            <input type="number" class="inp" min="0" max="1000" @bind="State.TestBatch" @bind:event="onchange" />
+                        </label>
+                        <label>
+                            <span>@L["طول بازه (ثانیه)"]</span>
+                            <input type="number" class="inp" min="5" max="3600" @bind="State.TestWindow" @bind:event="onchange" />
+                        </label>
+                        <label>
+                            <span>@L["تعداد تست هم‌زمان"]</span>
+                            <input type="number" class="inp" min="1" max="6" @bind="State.TestParallel" @bind:event="onchange" />
+                        </label>
+                        <label class="check">
+                            <input type="checkbox" @bind="State.TestContinueOnLimit" />
+                            <span>@L["بعد از رسیدن به محدودیت صبر کن و ادامه بده"]</span>
+                        </label>
+                        <label>
+                            <span>@L["کلیدواژه‌های تشخیص محدودیت (با ویرگول جدا کنید)"]</span>
+                            <input class="inp" dir="ltr" placeholder="e.g. slow down, try later" @bind="State.TestLimitWords" @bind:event="onchange" />
+                        </label>
+                        @if (!string.IsNullOrWhiteSpace(State.LastLimitMessage))
+                        {
+                            <div class="last-limit">
+                                <span class="muted">@L["آخرین پیامی که محدودیت تشخیص داده شد:"]</span>
+                                <code dir="ltr">@State.LastLimitMessage</code>
+                                <button class="btn sm" @onclick="State.UseLastLimitMessageAsKeyword">@L["افزودن به کلیدواژه‌ها"]</button>
+                            </div>
+                        }
+                        <button class="btn sm danger" disabled="@State.TestingModels" @onclick="State.ClearModelTestsAsync">@L["پاک کردن نتیجه‌های تست این API"]</button>
+                    </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    bool _settings;
+
+    void OpenSettings()
+    {
+        _settings = true;
+        State.PushBack(CloseSettingsFromBack);
+    }
+
+    void CloseSettingsFromBack()
+    {
+        _settings = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    void CloseSettings()
+    {
+        _settings = false;
+        State.RemoveBack(CloseSettingsFromBack);
+    }
+
+    public override void Dispose()
+    {
+        State.RemoveBack(CloseSettingsFromBack);
+        base.Dispose();
+    }
+
+    (string Key, string Label)[] Filters => new[]
+    {
+        ("all", L["همه"]), ("ok", "✅"), ("failed", "❌"), ("limited", "⏳"), ("untested", L["تست‌نشده"])
+    };
+
+    static string Icon(ModelTestResult? t) => t == null ? "" : t.Ok ? "✅ " : t.RateLimited ? "⏳ " : "❌ ";
+
+    bool Matches(string model, string filter)
+    {
+        var r = State.TestResultOf(model);
+        return filter switch
+        {
+            "ok" => r is { Ok: true },
+            "failed" => r is { Ok: false, RateLimited: false },
+            "limited" => r is { Ok: false, RateLimited: true },
+            "untested" => r == null,
+            _ => true
+        };
+    }
+
+    List<string> ModelItems(List<string> all) => all
+        .Where(m => m.Contains(State.PickerFilter, StringComparison.OrdinalIgnoreCase))
+        .Where(m => Matches(m, State.TestFilter))
+        .ToList();
+
+    string CountText(List<string> all, string filter) =>
+        filter == "all" ? $"({all.Count})" : $"({all.Count(m => Matches(m, filter))})";
+
+    void SetFilter(string k) => State.TestFilter = k;
+
+    void OnPickerFilter(ChangeEventArgs e) => State.SetPickerFilter(e.Value?.ToString() ?? "");
+
+    void PickItem(string value)
+    {
+        if (State.Picker == "model") State.SelectModel(value);
+        else State.SelectProvider(value);
+        State.ClosePicker();
+    }
+}
