@@ -188,6 +188,12 @@ button { cursor: pointer; }
 .check.small { font-size: 13px; }
 .sheet-item.failed { color: var(--muted); }
 .sheet-item.add { color: var(--accent); border-top: 1px solid var(--border); border-radius: 0 0 10px 10px; margin-top: 6px; }
+.sheet-row { display: flex; align-items: center; gap: 2px; }
+.sheet-row .sheet-item { flex: 1; min-width: 0; }
+.sheet-edit { flex: none; opacity: .7; }
+.sheet-edit:hover { opacity: 1; }
+.select-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: start; width: 100%; cursor: pointer; color: var(--text); }
+.select-btn .sel-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-empty { padding: 16px; text-align: center; color: var(--muted); }
 .picker option { background: var(--surface); color: var(--text); }
 .picker.model { font-weight: 500; color: var(--muted); direction: ltr; }
@@ -571,6 +577,7 @@ select.inp option { background: var(--surface); color: var(--text); }
     box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
 }
 .qrail:hover .qpanel, .qrail.open .qpanel { display: flex; }
+.qpanel::after { content: ""; position: absolute; top: 0; bottom: 0; left: 100%; width: 14px; }
 
 .qitem {
     display: flex; align-items: center; justify-content: flex-end; gap: 10px; background: transparent; border: 0;

@@ -42,17 +42,12 @@
                     {
                         case "general":
                             <label class="lbl first">@L["زبان برنامه"]</label>
-                            <select class="inp" value="@State.Language" @onchange="OnLanguageChanged">
-                                <option value="fa">فارسی</option>
-                                <option value="en">English</option>
-                            </select>
+                            <AppSelect Title="@L["زبان برنامه"]" Value="@State.Language" ValueChanged="State.SetLanguage"
+                                       Options="@(new AppSelect.SelectOption[] { new("fa", "فارسی"), new("en", "English") })" />
 
                             <label class="lbl">@L["تم برنامه"]</label>
-                            <select class="inp" value="@State.Theme" @onchange="OnThemeChanged">
-                                <option value="system">@L["مطابق سیستم"]</option>
-                                <option value="dark">@L["تاریک"]</option>
-                                <option value="light">@L["روشن"]</option>
-                            </select>
+                            <AppSelect Title="@L["تم برنامه"]" Value="@State.Theme" ValueChanged="State.SetTheme"
+                                       Options="@(new AppSelect.SelectOption[] { new("system", L["مطابق سیستم"]), new("dark", L["تاریک"]), new("light", L["روشن"]) })" />
 
                             <label class="check" style="margin-top:18px">
                                 <input type="checkbox" checked="@State.IsRtl" @onchange="OnRtlChanged" />
@@ -75,12 +70,8 @@
                             <input type="range" class="range" min="120" max="220" step="5" value="@State.UiLineHeight" @oninput="e => State.SetUi(lineHeight: ToInt(e))" />
 
                             <label class="lbl">@L["قلم"]</label>
-                            <select class="inp" value="@State.UiFont" @onchange="OnFontChanged">
-                                <option value="default">@L["پیش‌فرض"]</option>
-                                <option value="tahoma">Tahoma</option>
-                                <option value="serif">@L["سریف"]</option>
-                                <option value="mono">@L["تک‌فاصله"]</option>
-                            </select>
+                            <AppSelect Title="@L["قلم"]" Value="@State.UiFont" ValueChanged="OnFontChosen"
+                                       Options="@(new AppSelect.SelectOption[] { new("default", L["پیش‌فرض"]), new("tahoma", "Tahoma"), new("serif", L["سریف"]), new("mono", L["تک‌فاصله"]) })" />
 
                             <button class="btn" style="margin-top:20px" @onclick="State.ResetUi">@L["بازنشانی ظاهر"]</button>
                             break;
@@ -102,24 +93,15 @@
                             else
                             {
                                 <label class="lbl">@L["الگوی آماده"]</label>
-                                <select class="inp" @onchange="OnPreset">
-                                    <option value="">@L["— انتخاب کنید (اختیاری) —"]</option>
-                                    @foreach (var pr in ProviderDefaults.Presets)
-                                    {
-                                        <option value="@pr.Name">@L[pr.Name]</option>
-                                    }
-                                </select>
+                                <AppSelect Title="@L["الگوی آماده"]" Value="" ValueChanged="OnPresetChosen" Placeholder="@L["— انتخاب کنید (اختیاری) —"]"
+                                           Options="@(ProviderDefaults.Presets.Select(pr => new AppSelect.SelectOption(pr.Name, L[pr.Name])).ToList())" />
 
                                 <label class="lbl">@L["نام نمایشی"]</label>
                                 <input class="inp" dir="auto" @bind="_editing.Name" @bind:event="oninput" />
 
                                 <label class="lbl">@L["نوع API"]</label>
-                                <select class="inp" @bind="_editing.Type" @bind:after="OnTypeChanged">
-                                    @foreach (var t in Enum.GetValues<ProviderType>())
-                                    {
-                                        <option value="@t">@L[ProviderDefaults.TypeLabel(t)]</option>
-                                    }
-                                </select>
+                                <AppSelect Title="@L["نوع API"]" Value="@_editing.Type.ToString()" ValueChanged="OnTypeChosen"
+                                           Options="@(Enum.GetValues<ProviderType>().Select(t => new AppSelect.SelectOption(t.ToString(), L[ProviderDefaults.TypeLabel(t)])).ToList())" />
 
                                 <label class="lbl">@L["آدرس پایه (Base URL)"]</label>
                                 <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_editing.BaseUrl" @bind:event="oninput" />
@@ -228,11 +210,8 @@
 
     static int ToInt(ChangeEventArgs e) => int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
     void OnFullWidth(ChangeEventArgs e) => State.SetUi(width: e.Value is true ? 0 : 768);
-    void OnFontChanged(ChangeEventArgs e) => State.SetUi(font: e.Value?.ToString() ?? "default");
 
-    void OnLanguageChanged(ChangeEventArgs e) => State.SetLanguage(e.Value?.ToString() ?? "fa");
 
-    void OnThemeChanged(ChangeEventArgs e) => State.SetTheme(e.Value?.ToString() ?? "system");
 
     bool _confirmClear;
 
@@ -255,7 +234,13 @@
     protected override void OnInitialized()
     {
         base.OnInitialized();
-        if (State.NewApiRequested) { State.NewApiRequested = false; StartNew(); }
+        if (State.EditProviderId != null)
+        {
+            var wanted = State.Providers.FirstOrDefault(p => p.Id == State.EditProviderId);
+            State.EditProviderId = null;
+            if (wanted != null) Edit(wanted); else StartNew();
+        }
+        else if (State.NewApiRequested) { State.NewApiRequested = false; StartNew(); }
         else if (State.Providers.Count == 0) StartNew();
         else Edit(State.CurrentProvider ?? State.Providers[0]);
     }
@@ -285,9 +270,18 @@
         _confirmDelete = false;
     }
 
-    void OnPreset(ChangeEventArgs e)
+    void OnFontChosen(string v) => State.SetUi(font: v);
+
+    void OnTypeChosen(string v)
     {
-        var preset = ProviderDefaults.Presets.FirstOrDefault(p => p.Name == e.Value?.ToString());
+        if (_editing == null || !Enum.TryParse<ProviderType>(v, out var t)) return;
+        _editing.Type = t;
+        OnTypeChanged();
+    }
+
+    void OnPresetChosen(string name)
+    {
+        var preset = ProviderDefaults.Presets.FirstOrDefault(p => p.Name == name);
         if (preset == null || _editing == null) return;
         _editing.Name = L[preset.Name];
         _editing.Type = preset.Type;
@@ -304,9 +298,11 @@
             _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
     }
 
-    async Task FetchModels()
+    Task FetchModels() => TryFetch();
+
+    async Task<bool> TryFetch()
     {
-        if (_editing == null) return;
+        if (_editing == null) return false;
         if (string.IsNullOrWhiteSpace(_editing.BaseUrl))
             _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
 
@@ -320,10 +316,12 @@
             if (string.IsNullOrWhiteSpace(_editing.DefaultModel) && list.Count > 0)
                 _editing.DefaultModel = list[0];
             _status = L.F("{0} مدل دریافت شد. برای نگه‌داشتن، ذخیره را بزنید.", list.Count);
+            return list.Count > 0;
         }
         catch (Exception ex)
         {
-            _status = L["خطا: "] + ex.Message;
+            _status = L["خطا: "] + ProviderHttp.Describe(ex);
+            return false;
         }
         finally
         {
@@ -347,6 +345,15 @@
             _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
         _editing.BaseUrl = _editing.BaseUrl.Trim();
 
+        // no model list yet: fetch it automatically (the manual button stays available)
+        var autoFetched = false;
+        string? fetchError = null;
+        if (string.IsNullOrWhiteSpace(_modelsText))
+        {
+            autoFetched = await TryFetch();
+            if (!autoFetched) fetchError = _status;
+        }
+
         _editing.Models = _modelsText
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct()
@@ -357,6 +364,8 @@
         await State.SaveProviderAsync(_editing);
         _isNew = false;
         _status = L["ذخیره شد ✓"];
+        if (autoFetched) _status += " · " + L.F("{0} مدل دریافت شد.", _editing.Models.Count);
+        else if (fetchError != null) _status += " · " + L["دریافت خودکار مدل‌ها ناموفق بود"] + " (" + fetchError + ")";
     }
 
     async Task DeleteProvider()

@@ -732,8 +732,24 @@ public class ChatState
     public void ClosePicker() { Picker = null; Notify(); }
     public void SetPickerFilter(string f) { PickerFilter = f; Notify(); }
 
+    // small modals (custom select lists etc.) register here so Esc / Android back closes the top one first
+    readonly List<Action> _backStack = new();
+    public void PushBack(Action close) { if (!_backStack.Contains(close)) _backStack.Add(close); }
+    public void RemoveBack(Action close) => _backStack.Remove(close);
+
+    /// <summary>Provider whose edit form Settings should open directly (from the provider picker).</summary>
+    public string? EditProviderId { get; set; }
+    public void OpenEditApi(string providerId) { Picker = null; EditProviderId = providerId; OpenSettingsAt("api"); }
+
     public bool HandleBack(bool includeSidebar = true)
     {
+        if (_backStack.Count > 0)
+        {
+            var top = _backStack[^1];
+            _backStack.RemoveAt(_backStack.Count - 1);
+            top();
+            return true;
+        }
         if (PdfPrompt != null) { ChoosePdfMode("text"); return true; }
         if (Picker != null) { ClosePicker(); return true; }
         if (Viewer != null) { CloseViewer(); return true; }

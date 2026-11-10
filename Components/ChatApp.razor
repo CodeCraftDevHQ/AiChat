@@ -87,9 +87,15 @@
                             var label = isModel ? value : State.Providers.First(p => p.Id == value).Name;
                             var current = isModel ? value == State.CurrentModel : value == State.CurrentProviderId;
                             var test = isModel ? State.TestResultOf(value) : null;
-                            <button class="sheet-item @(current ? "current" : "") @(test is { Ok: false } ? "failed" : "")" dir="auto" title="@(test?.Error ?? "")" @onclick="() => PickItem(value)">
-                                <span>@(test == null ? "" : test.Ok ? "✅ " : test.RateLimited ? "⏳ " : "❌ ")@label</span>@if (current) { <span>✓</span> }
-                            </button>
+                            <div class="sheet-row">
+                                <button class="sheet-item @(current ? "current" : "") @(test is { Ok: false } ? "failed" : "")" dir="auto" title="@(test?.Error ?? "")" @onclick="() => PickItem(value)">
+                                    <span>@(test == null ? "" : test.Ok ? "✅ " : test.RateLimited ? "⏳ " : "❌ ")@label</span>@if (current) { <span>✓</span> }
+                                </button>
+                                @if (!isModel)
+                                {
+                                    <button class="icon-btn sm sheet-edit" title="@L["ویرایش این API"]" @onclick="() => State.OpenEditApi(value)">✎</button>
+                                }
+                            </div>
                         }
                         @if (!isModel)
                         {

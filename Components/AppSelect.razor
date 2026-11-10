@@ -1,0 +1,71 @@
+@inherits StateComponent
+
+<button type="button" class="inp select-btn" @onclick="Open">
+    <span class="sel-label" dir="auto">@CurrentLabel</span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+</button>
+
+@if (_open)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="sheet" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>@Title</strong>
+                <button type="button" class="icon-btn sm" title="@L["بستن"]" @onclick="Close">✕</button>
+            </div>
+            <div class="sheet-list">
+                @foreach (var o in Options)
+                {
+                    var value = o.Value;
+                    <button type="button" class="sheet-item @(value == Value ? "current" : "")" dir="auto" @onclick="() => Pick(value)">
+                        <span>@o.Label</span>@if (value == Value) { <span>✓</span> }
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    public record SelectOption(string Value, string Label);
+
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<SelectOption> Options { get; set; } = Array.Empty<SelectOption>();
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+
+    bool _open;
+
+    string CurrentLabel => Options.FirstOrDefault(o => o.Value == Value)?.Label ?? Placeholder ?? "";
+
+    void Open()
+    {
+        _open = true;
+        State.PushBack(CloseFromBack);
+    }
+
+    void CloseFromBack()
+    {
+        _open = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    void Close()
+    {
+        _open = false;
+        State.RemoveBack(CloseFromBack);
+    }
+
+    async Task Pick(string value)
+    {
+        Close();
+        await ValueChanged.InvokeAsync(value);
+    }
+
+    public override void Dispose()
+    {
+        State.RemoveBack(CloseFromBack);
+        base.Dispose();
+    }
+}
