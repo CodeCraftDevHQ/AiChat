@@ -7,7 +7,8 @@ public enum ProviderType
 {
     OpenAiCompatible,
     Anthropic,
-    Gemini
+    Gemini,
+    FooocusApi // image generator (Fooocus-API), not a chat model
 }
 
 public class ProviderConfig
@@ -24,6 +25,13 @@ public class ProviderConfig
     public string DefaultModel { get; set; } = "";
     public List<string> Models { get; set; } = new();
 
+    // Fooocus-API (image generation) options
+    public string ImageAspect { get; set; } = "1152*896";
+    public string ImagePerformance { get; set; } = "Speed";
+    public int ImageCount { get; set; } = 1;
+    public string ImageStyles { get; set; } = "Fooocus V2, Fooocus Enhance, Fooocus Sharp";
+    public string NegativePrompt { get; set; } = "";
+
     public ProviderConfig Clone() => new()
     {
         Id = Id,
@@ -32,7 +40,12 @@ public class ProviderConfig
         BaseUrl = BaseUrl,
         ApiKey = ApiKey,
         DefaultModel = DefaultModel,
-        Models = new List<string>(Models)
+        Models = new List<string>(Models),
+        ImageAspect = ImageAspect,
+        ImagePerformance = ImagePerformance,
+        ImageCount = ImageCount,
+        ImageStyles = ImageStyles,
+        NegativePrompt = NegativePrompt
     };
 }
 
@@ -160,12 +173,14 @@ public static class ProviderDefaults
         new("Together AI", ProviderType.OpenAiCompatible, "https://api.together.xyz/v1"),
         new("Ollama (محلی)", ProviderType.OpenAiCompatible, "http://localhost:11434/v1"),
         new("LM Studio (محلی)", ProviderType.OpenAiCompatible, "http://localhost:1234/v1"),
+        new("Fooocus-API (محلی)", ProviderType.FooocusApi, "http://127.0.0.1:8888"),
     };
 
     public static string BaseUrl(ProviderType type) => type switch
     {
         ProviderType.Anthropic => "https://api.anthropic.com/v1",
         ProviderType.Gemini => "https://generativelanguage.googleapis.com/v1beta",
+        ProviderType.FooocusApi => "http://127.0.0.1:8888",
         _ => "https://api.openai.com/v1"
     };
 
@@ -173,6 +188,7 @@ public static class ProviderDefaults
     {
         ProviderType.Anthropic => "Anthropic (Claude)",
         ProviderType.Gemini => "Google Gemini",
+        ProviderType.FooocusApi => "Fooocus-API (تصویرساز)",
         _ => "سازگار با OpenAI"
     };
 }

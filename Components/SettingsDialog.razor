@@ -113,6 +113,31 @@
                                     <button class="btn" type="button" @onclick="() => _showKey = !_showKey">@(_showKey ? L["پنهان"] : L["نمایش"])</button>
                                 </div>
 
+                                @if (_editing.Type == ProviderType.FooocusApi)
+                                {
+                                    <div class="img-opts">
+                                        <label class="lbl">@L["تنظیمات تصویرسازی"]</label>
+                                        <p class="muted small">@L["هر پیام یک توضیح تصویر حساب می‌شود. برای نتیجه‌ی بهتر، توضیح را انگلیسی بنویسید."]</p>
+
+                                        <label class="lbl">@L["نسبت تصویر"]</label>
+                                        <AppSelect Title="@L["نسبت تصویر"]" Value="@_editing.ImageAspect" ValueChanged="v => _editing.ImageAspect = v"
+                                                   Options="@(AspectRatios.Select(a => new AppSelect.SelectOption(a, a.Replace("*", " × "))).ToList())" />
+
+                                        <label class="lbl">@L["سرعت / کیفیت"]</label>
+                                        <AppSelect Title="@L["سرعت / کیفیت"]" Value="@_editing.ImagePerformance" ValueChanged="v => _editing.ImagePerformance = v"
+                                                   Options="@(new AppSelect.SelectOption[] { new("Speed", "Speed"), new("Quality", "Quality"), new("Extreme Speed", "Extreme Speed") })" />
+
+                                        <label class="lbl">@L["تعداد تصویر در هر پیام"]</label>
+                                        <input type="number" class="inp" min="1" max="4" @bind="_editing.ImageCount" @bind:event="onchange" />
+
+                                        <label class="lbl">@L["استایل‌ها (با ویرگول جدا کنید)"]</label>
+                                        <input class="inp" dir="ltr" @bind="_editing.ImageStyles" @bind:event="oninput" />
+
+                                        <label class="lbl">@L["متن منفی (چیزهایی که نباید در تصویر باشد)"]</label>
+                                        <input class="inp" dir="ltr" @bind="_editing.NegativePrompt" @bind:event="oninput" />
+                                    </div>
+                                }
+
                                 <label class="lbl">@L["مدل‌ها (هر خط یک مدل)"]</label>
                                 <textarea class="inp" rows="6" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_modelsText" @bind:event="oninput"></textarea>
 
@@ -269,6 +294,13 @@
         _showKey = false;
         _confirmDelete = false;
     }
+
+    static readonly string[] AspectRatios =
+    {
+        "704*1408", "704*1344", "768*1344", "768*1280", "832*1216", "832*1152", "896*1152", "896*1088", "960*1088", "960*1024",
+        "1024*1024", "1024*960", "1088*960", "1088*896", "1152*896", "1152*832", "1216*832", "1280*768", "1344*768", "1344*704",
+        "1408*704", "1472*704", "1536*640", "1600*640", "1664*576", "1728*576"
+    };
 
     void OnFontChosen(string v) => State.SetUi(font: v);
 

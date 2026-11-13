@@ -1315,7 +1315,7 @@ public class ChatState
         catch (Exception ex)
         {
             reply.ErrorText = ProviderHttp.Describe(ex);
-            if (LooksLikeImageRejection(reply.ErrorText) && await ExcludeImagesAsync(history, project))
+            if (provider.Type != ProviderType.FooocusApi && LooksLikeImageRejection(reply.ErrorText) && await ExcludeImagesAsync(history, project))
                 reply.ErrorText += "\n\n" + L["این مدل عکس را پشتیبانی نمی‌کند. عکس‌ها از ادامه‌ی گفتگو کنار گذاشته شدند؛ می‌توانید پیام متنی بفرستید یا مدل دیگری را انتخاب کنید."];
             _log.Error($"Request to {provider.Name} ({provider.Type}) / {model} failed", ex);
         }

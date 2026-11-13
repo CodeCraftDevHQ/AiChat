@@ -20,9 +20,11 @@ public class ProviderFactory
     readonly OpenAiCompatibleProvider _openAi;
     readonly AnthropicProvider _anthropic;
     readonly GeminiProvider _gemini;
+    readonly FooocusApiProvider _fooocus;
 
     public ProviderFactory(HttpClient http)
     {
+        _fooocus = new FooocusApiProvider(http);
         _openAi = new OpenAiCompatibleProvider(http);
         _anthropic = new AnthropicProvider(http);
         _gemini = new GeminiProvider(http);
@@ -32,6 +34,7 @@ public class ProviderFactory
     {
         ProviderType.Anthropic => _anthropic,
         ProviderType.Gemini => _gemini,
+        ProviderType.FooocusApi => _fooocus,
         _ => _openAi
     };
 }
@@ -722,6 +725,122 @@ public class GeminiProvider : IChatProvider
                 list.Add(CleanModel(name));
             }
         }
+        return list;
+    }
+}
+
+
+// ---------------------------------------------------------------- Fooocus-API (image generation)
+
+/// <summary>
+/// Talks to a local Fooocus-API server. Every message is an image description: the last user message is the prompt,
+/// the model is the checkpoint file name, and the generated PNG files are handed to the chat through onImage.
+/// </summary>
+public class FooocusApiProvider : IChatProvider
+{
+    readonly HttpClient _http;
+    public FooocusApiProvider(HttpClient http) => _http = http;
+
+    static HttpRequestMessage NewRequest(HttpMethod method, ProviderConfig cfg, string path, HttpContent? content = null)
+    {
+        var req = new HttpRequestMessage(method, ProviderHttp.Url(cfg, path)) { Content = content };
+        if (!string.IsNullOrWhiteSpace(cfg.ApiKey)) req.Headers.TryAddWithoutValidation("X-API-KEY", cfg.ApiKey.Trim());
+        return req;
+    }
+
+    public async IAsyncEnumerable<string> StreamAsync(ProviderConfig cfg, string model,
+        IReadOnlyList<ChatMessage> history, string? systemPrompt, Func<string, byte[], Task>? onImage,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        var prompt = history.LastOrDefault(m => m.Role == "user")?.Content?.Trim();
+        if (string.IsNullOrEmpty(prompt)) throw new InvalidOperationException("Write a description of the image first.");
+        if (onImage == null) throw new InvalidOperationException("Images cannot be shown here.");
+
+        var styles = new JsonArray();
+        foreach (var st in cfg.ImageStyles.Split(new[] { ',', '،', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            styles.Add(st);
+
+        var count = Math.Clamp(cfg.ImageCount, 1, 4);
+        for (var i = 0; i < count; i++)
+        {
+            var body = new JsonObject
+            {
+                ["prompt"] = prompt,
+                ["negative_prompt"] = cfg.NegativePrompt ?? "",
+                ["style_selections"] = JsonNode.Parse(styles.ToJsonString()),
+                ["performance_selection"] = string.IsNullOrWhiteSpace(cfg.ImagePerformance) ? "Speed" : cfg.ImagePerformance,
+                ["aspect_ratios_selection"] = string.IsNullOrWhiteSpace(cfg.ImageAspect) ? "1152*896" : cfg.ImageAspect,
+                ["image_number"] = 1,
+                ["image_seed"] = -1,
+                ["sharpness"] = 2,
+                ["guidance_scale"] = 4,
+                ["refiner_model_name"] = "None",
+                ["refiner_switch"] = 0.5,
+                ["save_meta"] = true,
+                ["save_extension"] = "png",
+                ["require_base64"] = false,
+                ["async_process"] = false
+            };
+            if (!string.IsNullOrWhiteSpace(model)) body["base_model_name"] = model;
+
+            using var req = NewRequest(HttpMethod.Post, cfg, "v1/generation/text-to-image?accept_query=image/png", ProviderHttp.JsonBody(body));
+            req.Headers.TryAddWithoutValidation("Accept", "image/png");
+
+            var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, ct);
+            using var _respGuard = new SafeDispose(resp);
+            await ProviderHttp.EnsureSuccessAsync(resp, ct);
+
+            var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+            var type = resp.Content.Headers.ContentType?.MediaType ?? "";
+
+            if (type.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                await onImage(type, bytes);
+                continue;
+            }
+
+            // The server answered with JSON instead of the raw image (older versions): base64 or a url per image.
+            using var doc = JsonDocument.Parse(bytes);
+            var items = doc.RootElement.ValueKind == JsonValueKind.Array
+                ? doc.RootElement.EnumerateArray().ToList()
+                : new List<JsonElement> { doc.RootElement };
+            var got = false;
+            foreach (var it in items)
+            {
+                if (it.ValueKind != JsonValueKind.Object) continue;
+                if (it.TryGetProperty("base64", out var b64) && b64.ValueKind == JsonValueKind.String && b64.GetString() is { Length: > 0 } data)
+                {
+                    await onImage("image/png", Convert.FromBase64String(data));
+                    got = true;
+                }
+                else if (it.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String && u.GetString() is { Length: > 0 } url)
+                {
+                    using var imgReq = NewRequest(HttpMethod.Get, cfg, url);
+                    var imgResp = await _http.SendAsync(imgReq, ct);
+                    using var _imgGuard = new SafeDispose(imgResp);
+                    await ProviderHttp.EnsureSuccessAsync(imgResp, ct);
+                    await onImage(imgResp.Content.Headers.ContentType?.MediaType ?? "image/png", await imgResp.Content.ReadAsByteArrayAsync(ct));
+                    got = true;
+                }
+            }
+            if (!got) throw new InvalidOperationException("The image server returned no image: " + Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, 300)));
+        }
+
+        yield break;
+    }
+
+    public async Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct)
+    {
+        using var req = NewRequest(HttpMethod.Get, cfg, "v1/engines/all-models");
+        var resp = await _http.SendAsync(req, ct);
+        using var _respGuard = new SafeDispose(resp);
+        await ProviderHttp.EnsureSuccessAsync(resp, ct);
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+
+        var list = new List<string>();
+        if (doc.RootElement.TryGetProperty("model_filenames", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            foreach (var m in arr.EnumerateArray())
+                if (m.GetString() is { Length: > 0 } name) list.Add(name);
         return list;
     }
 }
