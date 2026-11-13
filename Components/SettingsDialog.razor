@@ -138,6 +138,43 @@
                                     </div>
                                 }
 
+                                @if (_editing.Type != ProviderType.FooocusApi)
+                                {
+                                    <details class="adv" open="@_advOpen" @ontoggle="() => _advOpen = !_advOpen">
+                                        <summary>@L["تنظیمات پیشرفته"]</summary>
+                                        <p class="muted small">@L["همه‌ی این موارد اختیاری‌اند. برای APIهای غیرمعمول یا سرویس‌های واسط استفاده کنید."]</p>
+
+                                        <label class="lbl">@L["روش ارسال کلید"]</label>
+                                        <AppSelect Title="@L["روش ارسال کلید"]" Value="@_editing.AuthMode" ValueChanged="v => _editing.AuthMode = v"
+                                                   Options="@(AuthModes.Select(a => new AppSelect.SelectOption(a.Key, L[a.Label])).ToList())" />
+
+                                        @if (_editing.AuthMode is "header" or "query")
+                                        {
+                                            <label class="lbl">@L["نام هدر یا پارامتر کلید"]</label>
+                                            <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="X-API-Key" @bind="_editing.AuthName" @bind:event="oninput" />
+                                        }
+
+                                        <label class="lbl">@L["هدرهای اضافی (هر خط: Name: value)"]</label>
+                                        <textarea class="inp" rows="3" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="X-Org: my-team" @bind="_editing.Headers" @bind:event="oninput"></textarea>
+                                        <p class="muted small">@L["در مقدار می‌توانید {apiKey} را بنویسید تا با کلید جایگزین شود."]</p>
+
+                                        <label class="lbl">@L["پارامترهای اضافی بدنه (JSON)"]</label>
+                                        <textarea class="inp" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder='{"temperature": 0.7}' @bind="_editing.ExtraBody" @bind:event="oninput"></textarea>
+                                        <p class="muted small">@L["این فیلدها به هر درخواست اضافه می‌شوند. مقدار null آن فیلد را حذف می‌کند."]</p>
+
+                                        <label class="lbl">@L["مسیر چت (اختیاری)"]</label>
+                                        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="chat/completions" @bind="_editing.ChatPath" @bind:event="oninput" />
+
+                                        <label class="lbl">@L["مسیر لیست مدل‌ها (اختیاری)"]</label>
+                                        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="models" @bind="_editing.ModelsPath" @bind:event="oninput" />
+
+                                        @if (_editing.Type == ProviderType.OpenAiCompatible)
+                                        {
+                                            <label class="chk"><input type="checkbox" @bind="_editing.NoStream" /> @L["پاسخ یکجا (بدون استریم)"]</label>
+                                        }
+                                    </details>
+                                }
+
                                 <label class="lbl">@L["مدل‌ها (هر خط یک مدل)"]</label>
                                 <textarea class="inp" rows="6" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_modelsText" @bind:event="oninput"></textarea>
 
@@ -330,6 +367,37 @@
             _editing.BaseUrl = ProviderDefaults.BaseUrl(_editing.Type);
     }
 
+    bool _advOpen;
+
+    static readonly (string Key, string Label)[] AuthModes =
+    {
+        ("default", "پیش‌فرض (بر اساس نوع API)"),
+        ("bearer", "Bearer در هدر Authorization"),
+        ("header", "هدر دلخواه"),
+        ("query", "پارامتر در آدرس (query)"),
+        ("none", "بدون کلید"),
+    };
+
+    string? ValidateAdvanced()
+    {
+        if (_editing == null) return null;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_editing.ExtraBody) &&
+                System.Text.Json.Nodes.JsonNode.Parse(_editing.ExtraBody) is not System.Text.Json.Nodes.JsonObject)
+                return L["پارامترهای اضافی باید یک شیء JSON باشد."];
+        }
+        catch (Exception ex)
+        {
+            return L["JSON پارامترهای اضافی نامعتبر است: "] + ex.Message;
+        }
+        try { ProviderHttp.ParseHeaders(_editing.Headers ?? "", "x"); }
+        catch (Exception ex) { return L["هدرها نامعتبر است: "] + ex.Message; }
+        if (_editing.AuthMode is "header" or "query" && string.IsNullOrWhiteSpace(_editing.AuthName))
+            return L["نام هدر یا پارامتر کلید را وارد کنید."];
+        return null;
+    }
+
     Task FetchModels() => TryFetch();
 
     async Task<bool> TryFetch()
@@ -369,6 +437,8 @@
             _status = L["نام را وارد کنید."];
             return;
         }
+
+        if (ValidateAdvanced() is { } advErr) { _status = advErr; _advOpen = true; return; }
 
         _editing.Name = _editing.Name.Trim();
         _editing.ApiKey = (_editing.ApiKey ?? "").Trim();

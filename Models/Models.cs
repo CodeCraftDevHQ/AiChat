@@ -25,6 +25,22 @@ public class ProviderConfig
     public string DefaultModel { get; set; } = "";
     public List<string> Models { get; set; } = new();
 
+    // Advanced connection settings (all optional)
+    /// <summary>"default" (by API type) | "bearer" | "header" | "query" | "none"</summary>
+    public string AuthMode { get; set; } = "default";
+    /// <summary>Header or query parameter name when AuthMode is "header" / "query".</summary>
+    public string AuthName { get; set; } = "";
+    /// <summary>Extra request headers, one "Name: value" per line ({apiKey} is replaced by the key).</summary>
+    public string Headers { get; set; } = "";
+    /// <summary>JSON object merged into every request body (a null value removes that field).</summary>
+    public string ExtraBody { get; set; } = "";
+    /// <summary>Replaces the chat endpoint path (Gemini: {model} is replaced by the model).</summary>
+    public string ChatPath { get; set; } = "";
+    /// <summary>Replaces the model-list endpoint path.</summary>
+    public string ModelsPath { get; set; } = "";
+    /// <summary>OpenAI-compatible only: ask for one complete answer instead of a stream.</summary>
+    public bool NoStream { get; set; }
+
     // Fooocus-API (image generation) options
     public string ImageAspect { get; set; } = "1152*896";
     public string ImagePerformance { get; set; } = "Speed";
@@ -41,6 +57,13 @@ public class ProviderConfig
         ApiKey = ApiKey,
         DefaultModel = DefaultModel,
         Models = new List<string>(Models),
+        AuthMode = AuthMode,
+        AuthName = AuthName,
+        Headers = Headers,
+        ExtraBody = ExtraBody,
+        ChatPath = ChatPath,
+        ModelsPath = ModelsPath,
+        NoStream = NoStream,
         ImageAspect = ImageAspect,
         ImagePerformance = ImagePerformance,
         ImageCount = ImageCount,

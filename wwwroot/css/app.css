@@ -648,3 +648,7 @@ select.inp option { background: var(--surface); color: var(--text); }
 }
 .snippet mark { background: rgba(255, 213, 74, .45); color: var(--text); border-radius: 3px; padding: 0 1px; }
 .range { width: 100%; accent-color: var(--accent); margin: 4px 0; }
+
+.adv { margin-top: 16px; border: 1px solid var(--border, rgba(128,128,128,.3)); border-radius: 12px; padding: 4px 14px 14px; }
+.adv > summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
+.chk { display: flex; align-items: center; gap: 8px; margin-top: 14px; cursor: pointer; }

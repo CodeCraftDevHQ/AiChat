@@ -174,6 +174,84 @@ static class ProviderHttp
         return baseUrl.TrimEnd('/') + "/" + path.TrimStart('/');
     }
 
+    /// <summary>Chat path: the user's override, else the default of the API type.</summary>
+    public static string ChatPath(ProviderConfig cfg, string defaultPath, string? model = null) =>
+        string.IsNullOrWhiteSpace(cfg.ChatPath) ? defaultPath : cfg.ChatPath.Trim().Replace("{model}", model ?? "");
+
+    public static string ModelsPath(ProviderConfig cfg, string defaultPath) =>
+        string.IsNullOrWhiteSpace(cfg.ModelsPath) ? defaultPath : cfg.ModelsPath.Trim();
+
+    /// <summary>Merges the user's "extra body" JSON into the request body. A null value removes the field.</summary>
+    public static JsonObject MergeBody(JsonObject body, ProviderConfig cfg)
+    {
+        if (string.IsNullOrWhiteSpace(cfg.ExtraBody)) return body;
+        if (JsonNode.Parse(cfg.ExtraBody) is not JsonObject extra)
+            throw new InvalidOperationException("The extra body must be a JSON object.");
+        foreach (var (k, v) in extra.ToList())
+        {
+            if (v == null) body.Remove(k);
+            else body[k] = v.DeepClone();
+        }
+        return body;
+    }
+
+    /// <summary>Parses "Name: value" lines; {apiKey} in a value is replaced by the key.</summary>
+    public static List<(string Name, string Value)> ParseHeaders(string text, string apiKey)
+    {
+        var list = new List<(string, string)>();
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            var i = line.IndexOf(':');
+            if (i <= 0) throw new FormatException($"Header line without a colon: {line}");
+            list.Add((line[..i].Trim(), line[(i + 1)..].Trim().Replace("{apiKey}", apiKey)));
+        }
+        return list;
+    }
+
+    static void SetHeader(HttpRequestMessage req, string name, string value)
+    {
+        req.Headers.Remove(name);
+        if (!req.Headers.TryAddWithoutValidation(name, value))
+            req.Content?.Headers.TryAddWithoutValidation(name, value);
+    }
+
+    /// <summary>Applies the user's advanced settings (auth style, extra headers) to a request just before it is sent.</summary>
+    public static HttpRequestMessage Customize(HttpRequestMessage req, ProviderConfig cfg)
+    {
+        var key = (cfg.ApiKey ?? "").Trim();
+        var mode = string.IsNullOrWhiteSpace(cfg.AuthMode) ? "default" : cfg.AuthMode;
+
+        if (mode != "default")
+        {
+            req.Headers.Authorization = null;
+            req.Headers.Remove("x-api-key");
+            req.Headers.Remove("x-goog-api-key");
+            switch (mode)
+            {
+                case "bearer":
+                    if (key.Length > 0) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+                    break;
+                case "header":
+                    if (key.Length > 0 && !string.IsNullOrWhiteSpace(cfg.AuthName)) SetHeader(req, cfg.AuthName.Trim(), key);
+                    break;
+                case "query":
+                    if (key.Length > 0 && !string.IsNullOrWhiteSpace(cfg.AuthName) && req.RequestUri != null)
+                    {
+                        var u = req.RequestUri.ToString();
+                        req.RequestUri = new Uri(u + (u.Contains('?') ? "&" : "?") + Uri.EscapeDataString(cfg.AuthName.Trim()) + "=" + Uri.EscapeDataString(key));
+                    }
+                    break;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(cfg.Headers))
+            foreach (var (n, v) in ParseHeaders(cfg.Headers, key)) SetHeader(req, n, v);
+
+        return req;
+    }
+
     public static StringContent JsonBody(JsonNode node) =>
         new(node.ToJsonString(), Encoding.UTF8, "application/json");
 
@@ -415,18 +493,50 @@ public class OpenAiCompatibleProvider : IChatProvider
             messages.Add(new JsonObject { ["role"] = t.Role, ["content"] = content });
         }
 
-        var body = new JsonObject { ["model"] = model, ["stream"] = true, ["messages"] = messages };
+        var body = new JsonObject { ["model"] = model, ["stream"] = !cfg.NoStream, ["messages"] = messages };
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, "chat/completions"))
+        using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "chat/completions")))
         {
-            Content = ProviderHttp.JsonBody(body)
+            Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg))
         };
         if (!string.IsNullOrWhiteSpace(cfg.ApiKey))
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.ApiKey.Trim());
 
-        var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
         using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
+
+        if (cfg.NoStream)
+        {
+            var whole = await resp.Content.ReadAsStringAsync(ct);
+            string? full = null;
+            var imageUrls = new List<string>();
+            using (var doc = JsonDocument.Parse(whole))
+            {
+                var root = doc.RootElement;
+                if (root.TryGetProperty("error", out _))
+                    throw new HttpRequestException(ProviderHttp.ExtractError(whole));
+                if (root.TryGetProperty("choices", out var choices) &&
+                    choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
+                    choices[0].TryGetProperty("message", out var msg))
+                {
+                    if (msg.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+                        full = c.GetString();
+                    if (msg.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
+                        foreach (var im in imgs.EnumerateArray())
+                            if (im.TryGetProperty("image_url", out var iu) &&
+                                iu.TryGetProperty("url", out var u) && u.GetString() is { Length: > 0 } url)
+                                imageUrls.Add(url);
+                }
+            }
+            if (!string.IsNullOrEmpty(full)) yield return full;
+            foreach (var url in imageUrls)
+            {
+                var md = await ImageHelper.HandleUrlAsync(url, onImage);
+                if (md != null) yield return md;
+            }
+            yield break;
+        }
 
         await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
         {
@@ -474,11 +584,11 @@ public class OpenAiCompatibleProvider : IChatProvider
 
     public async Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, ProviderHttp.Url(cfg, "models"));
+        using var req = new HttpRequestMessage(HttpMethod.Get, ProviderHttp.Url(cfg, ProviderHttp.ModelsPath(cfg, "models")));
         if (!string.IsNullOrWhiteSpace(cfg.ApiKey))
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.ApiKey.Trim());
 
-        var resp = await _http.SendAsync(req, ct);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), ct);
         using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
@@ -535,14 +645,14 @@ public class AnthropicProvider : IChatProvider
         };
         if (!string.IsNullOrWhiteSpace(systemPrompt)) body["system"] = systemPrompt;
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, "messages"))
+        using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "messages")))
         {
-            Content = ProviderHttp.JsonBody(body)
+            Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg))
         };
         req.Headers.Add("x-api-key", cfg.ApiKey.Trim());
         req.Headers.Add("anthropic-version", Version);
 
-        var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
         using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
 
@@ -580,11 +690,11 @@ public class AnthropicProvider : IChatProvider
 
     public async Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, ProviderHttp.Url(cfg, "models?limit=1000"));
+        using var req = new HttpRequestMessage(HttpMethod.Get, ProviderHttp.Url(cfg, ProviderHttp.ModelsPath(cfg, "models?limit=1000")));
         req.Headers.Add("x-api-key", cfg.ApiKey.Trim());
         req.Headers.Add("anthropic-version", Version);
 
-        var resp = await _http.SendAsync(req, ct);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), ct);
         using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
@@ -643,11 +753,11 @@ public class GeminiProvider : IChatProvider
             };
         }
 
-        var url = ProviderHttp.Url(cfg, $"models/{CleanModel(model)}:streamGenerateContent?alt=sse");
-        using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = ProviderHttp.JsonBody(body) };
+        var url = ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, $"models/{CleanModel(model)}:streamGenerateContent?alt=sse", CleanModel(model)));
+        using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg)) };
         req.Headers.Add("x-goog-api-key", cfg.ApiKey.Trim());
 
-        var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
         using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
 
@@ -701,10 +811,10 @@ public class GeminiProvider : IChatProvider
 
     public async Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, ProviderHttp.Url(cfg, "models?pageSize=1000"));
+        using var req = new HttpRequestMessage(HttpMethod.Get, ProviderHttp.Url(cfg, ProviderHttp.ModelsPath(cfg, "models?pageSize=1000")));
         req.Headers.Add("x-goog-api-key", cfg.ApiKey.Trim());
 
-        var resp = await _http.SendAsync(req, ct);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), ct);
         using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
@@ -786,7 +896,7 @@ public class FooocusApiProvider : IChatProvider
             using var req = NewRequest(HttpMethod.Post, cfg, "v1/generation/text-to-image?accept_query=image/png", ProviderHttp.JsonBody(body));
             req.Headers.TryAddWithoutValidation("Accept", "image/png");
 
-            var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, ct);
+            var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseContentRead, ct);
             using var _respGuard = new SafeDispose(resp);
             await ProviderHttp.EnsureSuccessAsync(resp, ct);
 
@@ -816,7 +926,7 @@ public class FooocusApiProvider : IChatProvider
                 else if (it.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String && u.GetString() is { Length: > 0 } url)
                 {
                     using var imgReq = NewRequest(HttpMethod.Get, cfg, url);
-                    var imgResp = await _http.SendAsync(imgReq, ct);
+                    var imgResp = await _http.SendAsync(ProviderHttp.Customize(imgReq, cfg), ct);
                     using var _imgGuard = new SafeDispose(imgResp);
                     await ProviderHttp.EnsureSuccessAsync(imgResp, ct);
                     await onImage(imgResp.Content.Headers.ContentType?.MediaType ?? "image/png", await imgResp.Content.ReadAsByteArrayAsync(ct));
@@ -832,7 +942,7 @@ public class FooocusApiProvider : IChatProvider
     public async Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct)
     {
         using var req = NewRequest(HttpMethod.Get, cfg, "v1/engines/all-models");
-        var resp = await _http.SendAsync(req, ct);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), ct);
         using var _respGuard = new SafeDispose(resp);
         await ProviderHttp.EnsureSuccessAsync(resp, ct);
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
