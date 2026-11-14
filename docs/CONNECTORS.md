@@ -18,7 +18,7 @@ Every chat message you send becomes `{{prompt}}`; results (image / video / audio
     "method": "POST", "path": "/v1/generate",       // relative to Base URL (or a full http(s) URL)
     "query": { "a": "b" },
     "headers": { },
-    "bodyType": "json",                             // json (default) | form | text | none
+    "bodyType": "json",                             // json (default) | form | multipart | text | none
     "body": { "model": "{{model}}", "prompt": "{{prompt}}", "size": "{{input.size}}" }
   },
   "response": {
@@ -41,11 +41,13 @@ Every chat message you send becomes `{{prompt}}`; results (image / video / audio
 
 ## Placeholders
 `{{prompt}}`, `{{model}}`, `{{key}}`, `{{seed}}` (random number), `{{system}}`, `{{job}}`,
-`{{image_base64}}` / `{{image_dataurl}}` / `{{image_mime}}` (first image attached to your message),
+`{{image1_base64}}` / `{{image2_base64}}` ... , `{{imageN_dataurl}}`, `{{imageN_mime}}` (the images attached to your message, in order; `image_*` without a number = first), `{{images_base64}}` (array of all),
 `{{input.NAME}}`, and inside `urlTemplate`: `{{item}}`, `{{item.field}}`. Add `|url` to URL-encode (`{{item.name|url}}`).
 
 * A value that is exactly one placeholder keeps its type (numbers stay numbers).
 * A field whose placeholder has no value (e.g. no image attached) is removed from the request.
+* An object (or array item) with `"$if": "{{input.lora}}"` is removed when that value is empty, `false` or missing:
+  `"loras": [ { "$if": "{{input.lora}}", "model_name": "{{input.lora}}", "weight": "{{input.lora_weight}}" } ]`.
 
 ## JSON paths
 `$.a.b`, `$.list[0].x`, `$.list[*]`, `$.*.outputs.*`, `$['odd-name']`.
@@ -56,4 +58,43 @@ Without a job, `"response": {"type":"binary"}` saves the response body. With a j
 polling ends when the `results` paths first match (used for ComfyUI `/history/{id}`).
 Images open in the viewer, video/audio play inside the chat, other files (e.g. `.glb`) have a save button.
 
-Not supported (yet): multipart uploads, streaming results, scripting.
+## Multipart uploads
+`"bodyType": "multipart"`: every body field becomes a form field; a field written as
+`{ "file": "{{image1_base64}}", "mime": "{{image1_mime}}", "filename": "image.png" }` is sent as a file
+(skipped when the image is missing). Example: the Fooocus "Describe image" template.
+
+In a reply, hover an image and press ↪ to use it as the input of your next message (upscale, vary, ...).
+
+Not supported: scripting.
+
+## Chat connectors (`"kind": "chat"`)
+For chat APIs that are not OpenAI/Anthropic/Gemini compatible. The conversation is available as
+`{{messages}}` (OpenAI-style `[{role, content}]`), `{{messages_with_system}}` (system prompt first),
+`{{messages_vision}}` / `{{messages_vision_with_system}}` (images as `image_url` parts) and `{{system}}`.
+
+```jsonc
+"stream": {
+  "format": "sse",                              // sse (default) | ndjson | none (one JSON answer)
+  "textPath": "$.choices[0].delta.content",     // text in every event (required)
+  "reasoningPath": "$.choices[0].delta.reasoning_content", // optional: shown as a quoted "thinking" block
+  "errorPath": "$.error.message"                // optional: shown as an error
+}
+```
+A chat connector appears as a normal chat provider (model list, model test, attachments as text/images).
+
+## Controls for normal APIs (sliders)
+In Settings → API → Advanced settings you can define **Controls** (same format as connector `inputs`, plus
+`"type": "slider"` with `min` / `max` / `step`) and use them in the extra body parameters:
+
+```json
+Controls:   [ { "id": "temperature", "label": "Temperature", "type": "slider", "min": 0, "max": 2, "step": 0.1, "default": "0.7" } ]
+Extra body: { "temperature": "{{input.temperature}}" }
+```
+
+## Slash shortcuts
+Settings → Chat → Shortcuts. A JSON array; typing `/` at the start of a message suggests them.
+`{{text}}` is replaced by whatever you typed after the command:
+
+```json
+[ { "name": "translate", "description": "Translate to English", "prompt": "Translate to English:\n\n{{text}}" } ]
+```

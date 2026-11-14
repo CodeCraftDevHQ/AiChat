@@ -119,6 +119,15 @@ window.chat = {
         };
         el.__resize = resize;
         el.addEventListener('input', resize);
+        // "/" at the start: ask the app for matching shortcuts (only while it matters)
+        el.addEventListener('input', () => {
+            const v = el.value;
+            const want = v.startsWith('/') && !/\s/.test(v);
+            if (want || el.__slash) {
+                el.__slash = want;
+                dotnet.invokeMethodAsync('OnComposerInput', want ? v : '');
+            }
+        });
         el.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !window.chat.isCoarse()) {
                 e.preventDefault();
@@ -127,6 +136,14 @@ window.chat = {
         });
 
         if (!window.chat.isCoarse()) setTimeout(() => el.focus(), 50);
+    },
+
+    setValue(el, v) {
+        if (!el) return;
+        el.value = v;
+        if (el.__resize) el.__resize();
+        el.focus();
+        el.setSelectionRange(v.length, v.length);
     },
 
     takeValue(el) {

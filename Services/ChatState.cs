@@ -233,6 +233,18 @@ public class ChatState
         return null;
     }
 
+    /// <summary>Copies an image from a reply into the next message (e.g. to upscale or vary a generated image).</summary>
+    public async Task UseAsInputAsync(Attachment a)
+    {
+        if (Pending.Count >= MaxAttachments) { SetNotice(L.F("حداکثر {0} فایل در هر پیام مجاز است.", MaxAttachments)); return; }
+        var bytes = await _storage.ReadAttachmentAsync(a);
+        if (bytes == null) { SetNotice(L["فایل دیگر در دسترس نیست."]); return; }
+        var copy = await _storage.SaveAttachmentAsync(a.Name, a.MimeType, a.Kind, bytes);
+        Pending.Add(copy);
+        ShowToast(L["به پیام بعدی اضافه شد ✓"]);
+        Notify();
+    }
+
     /// <summary>Validates a file and stores it. Used for message attachments and project files.</summary>
     public async Task<(Attachment? Att, string? Error)> CreateAttachmentAsync(string name, Stream stream)
     {
@@ -462,6 +474,8 @@ public class ChatState
         ModelTests = new(await _storage.LoadModelTestsAsync() ?? new());
         IsRtl = Preferences.Default.Get("rtl", true);
         SystemPrompt = Preferences.Default.Get("system_prompt", "");
+        ShortcutsJson = Preferences.Default.Get("shortcuts_json", "");
+        Shortcuts = ShortcutHelper.Parse(ShortcutsJson, out _);
 
         var pid = Preferences.Default.Get("provider", "");
         var provider = Providers.FirstOrDefault(p => p.Id == pid) ?? Providers.FirstOrDefault();
@@ -905,6 +919,23 @@ public class ChatState
         Notify();
     }
 
+    // ------------------------------------------------------------ slash shortcuts
+
+    public List<Shortcut> Shortcuts { get; private set; } = new();
+    public string ShortcutsJson { get; private set; } = "";
+
+    /// <summary>Saves the shortcuts JSON. Returns an error text, or null on success.</summary>
+    public string? SetShortcutsJson(string json)
+    {
+        var list = ShortcutHelper.Parse(json, out var error);
+        if (error != null) return error;
+        Shortcuts = list;
+        ShortcutsJson = json ?? "";
+        Preferences.Default.Set("shortcuts_json", ShortcutsJson);
+        Notify();
+        return null;
+    }
+
     public void SetSystemPrompt(string text)
     {
         SystemPrompt = text;
@@ -1175,7 +1206,7 @@ public class ChatState
 
     public async Task SendAsync(string text)
     {
-        text = text.Trim();
+        text = ShortcutHelper.Expand(text.Trim(), Shortcuts);
         if (IsStreaming || (text.Length == 0 && Pending.Count == 0)) return;
 
         var err = ValidateSend();

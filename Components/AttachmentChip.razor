@@ -17,6 +17,10 @@
         {
             <button class="att-x" title="@L["حذف"]" @onclick="OnRemove" @onclick:stopPropagation="true">×</button>
         }
+        @if (CanReuse && Attachment.DataUri != null)
+        {
+            <button class="att-use" title="@L["استفاده در پیام بعدی"]" @onclick="Reuse" @onclick:stopPropagation="true">↪</button>
+        }
     </div>
 }
 else if (Attachment.Kind is "video" or "audio")
@@ -62,6 +66,9 @@ else
 
     [Parameter, EditorRequired] public Attachment Attachment { get; set; } = default!;
     [Parameter] public bool Removable { get; set; }
+    [Parameter] public bool CanReuse { get; set; }
+
+    Task Reuse() => State.UseAsInputAsync(Attachment);
     [Parameter] public EventCallback OnRemove { get; set; }
 
     protected override async Task OnParametersSetAsync()

@@ -10,33 +10,569 @@ public static class ConnectorTemplates
         new("Fooocus-API (تصویر)", "http://127.0.0.1:8888", """
 {
   "kind": "image",
-  "auth": { "type": "header", "name": "X-API-KEY" },
-  "models": { "path": "/v1/engines/all-models", "method": "GET", "list": "$.model_filenames[*]" },
+  "_help": "Text to image. Optional LoRA.",
+  "auth": {
+    "type": "header",
+    "name": "X-API-KEY"
+  },
+  "models": {
+    "path": "/v1/engines/all-models",
+    "method": "GET",
+    "list": "$.model_filenames[*]"
+  },
   "inputs": [
-    { "id": "aspect", "label": "Aspect ratio", "type": "select", "options": ["1152*896", "1024*1024", "896*1152", "1344*768", "768*1344"], "default": "1152*896" },
-    { "id": "performance", "label": "Performance", "type": "select", "options": ["Speed", "Quality", "Extreme Speed"], "default": "Speed" },
-    { "id": "negative", "label": "Negative prompt", "type": "text", "default": "" }
+    {
+      "id": "aspect",
+      "label": "Aspect ratio",
+      "type": "select",
+      "options": [
+        "704*1408",
+        "768*1344",
+        "832*1216",
+        "896*1152",
+        "1024*1024",
+        "1152*896",
+        "1216*832",
+        "1344*768",
+        "1408*704"
+      ],
+      "default": "1152*896"
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "type": "select",
+      "options": [
+        "Speed",
+        "Quality",
+        "Extreme Speed"
+      ],
+      "default": "Speed"
+    },
+    {
+      "id": "negative",
+      "label": "Negative prompt",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "lora",
+      "label": "LoRA file name (optional)",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "lora_weight",
+      "label": "LoRA weight (-2 to 2)",
+      "type": "number",
+      "default": "0.8"
+    }
   ],
   "request": {
     "method": "POST",
-    "path": "/v1/generation/text-to-image?accept_query=image/png",
-    "headers": { "Accept": "image/png" },
+    "path": "/v1/generation/text-to-image",
     "body": {
       "prompt": "{{prompt}}",
       "negative_prompt": "{{input.negative}}",
-      "style_selections": ["Fooocus V2", "Fooocus Enhance", "Fooocus Sharp"],
+      "style_selections": [
+        "Fooocus V2",
+        "Fooocus Enhance",
+        "Fooocus Sharp"
+      ],
       "performance_selection": "{{input.performance}}",
       "aspect_ratios_selection": "{{input.aspect}}",
       "image_number": 1,
       "image_seed": -1,
+      "sharpness": 2,
+      "guidance_scale": 4,
       "base_model_name": "{{model}}",
       "refiner_model_name": "None",
+      "refiner_switch": 0.5,
+      "save_meta": true,
       "save_extension": "png",
       "require_base64": false,
-      "async_process": false
+      "async_process": false,
+      "loras": [
+        {
+          "$if": "{{input.lora}}",
+          "enabled": true,
+          "model_name": "{{input.lora}}",
+          "weight": "{{input.lora_weight}}"
+        }
+      ]
+    },
+    "headers": {
+      "Accept": "image/png"
     }
   },
-  "response": { "type": "binary" }
+  "response": {
+    "type": "binary"
+  }
+}
+"""),
+        new("Fooocus-API: Upscale / Vary", "http://127.0.0.1:8888", """
+{
+  "kind": "image",
+  "_help": "Attach ONE image. Vary: the message can describe the image (optional).",
+  "auth": {
+    "type": "header",
+    "name": "X-API-KEY"
+  },
+  "models": {
+    "path": "/v1/engines/all-models",
+    "method": "GET",
+    "list": "$.model_filenames[*]"
+  },
+  "inputs": [
+    {
+      "id": "method",
+      "label": "Method",
+      "type": "select",
+      "options": [
+        "Upscale (2x)",
+        "Upscale (1.5x)",
+        "Upscale (Fast 2x)",
+        "Upscale (Custom)",
+        "Vary (Subtle)",
+        "Vary (Strong)"
+      ],
+      "default": "Upscale (2x)"
+    },
+    {
+      "id": "custom_scale",
+      "label": "Custom upscale factor (1.0-5.0)",
+      "type": "number",
+      "default": ""
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "type": "select",
+      "options": [
+        "Speed",
+        "Quality",
+        "Extreme Speed"
+      ],
+      "default": "Speed"
+    },
+    {
+      "id": "negative",
+      "label": "Negative prompt",
+      "type": "text",
+      "default": ""
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/v2/generation/image-upscale-vary",
+    "body": {
+      "prompt": "{{prompt}}",
+      "negative_prompt": "{{input.negative}}",
+      "style_selections": [],
+      "performance_selection": "{{input.performance}}",
+      "image_number": 1,
+      "image_seed": -1,
+      "sharpness": 2,
+      "guidance_scale": 4,
+      "base_model_name": "{{model}}",
+      "refiner_model_name": "None",
+      "refiner_switch": 0.5,
+      "save_meta": true,
+      "save_extension": "png",
+      "require_base64": false,
+      "async_process": false,
+      "input_image": "{{image1_base64}}",
+      "uov_method": "{{input.method}}",
+      "upscale_value": "{{input.custom_scale}}"
+    },
+    "headers": {
+      "Accept": "image/png"
+    }
+  },
+  "response": {
+    "type": "binary"
+  },
+  "allowEmptyPrompt": true
+}
+"""),
+        new("Fooocus-API: Image Prompt / FaceSwap", "http://127.0.0.1:8888", """
+{
+  "kind": "image",
+  "_help": "Attach 1 or 2 reference images and write a prompt.",
+  "auth": {
+    "type": "header",
+    "name": "X-API-KEY"
+  },
+  "models": {
+    "path": "/v1/engines/all-models",
+    "method": "GET",
+    "list": "$.model_filenames[*]"
+  },
+  "inputs": [
+    {
+      "id": "cn_type",
+      "label": "Image use",
+      "type": "select",
+      "options": [
+        "ImagePrompt",
+        "FaceSwap",
+        "PyraCanny",
+        "CPDS"
+      ],
+      "default": "ImagePrompt"
+    },
+    {
+      "id": "cn_weight",
+      "label": "Image weight (0-2)",
+      "type": "number",
+      "default": "0.6"
+    },
+    {
+      "id": "cn_stop",
+      "label": "Stop at (0-1)",
+      "type": "number",
+      "default": "0.5"
+    },
+    {
+      "id": "aspect",
+      "label": "Aspect ratio",
+      "type": "select",
+      "options": [
+        "704*1408",
+        "768*1344",
+        "832*1216",
+        "896*1152",
+        "1024*1024",
+        "1152*896",
+        "1216*832",
+        "1344*768",
+        "1408*704"
+      ],
+      "default": "1152*896"
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "type": "select",
+      "options": [
+        "Speed",
+        "Quality",
+        "Extreme Speed"
+      ],
+      "default": "Speed"
+    },
+    {
+      "id": "negative",
+      "label": "Negative prompt",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "lora",
+      "label": "LoRA file name (optional)",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "lora_weight",
+      "label": "LoRA weight (-2 to 2)",
+      "type": "number",
+      "default": "0.8"
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/v2/generation/image-prompt",
+    "body": {
+      "prompt": "{{prompt}}",
+      "negative_prompt": "{{input.negative}}",
+      "style_selections": [
+        "Fooocus V2",
+        "Fooocus Enhance",
+        "Fooocus Sharp"
+      ],
+      "performance_selection": "{{input.performance}}",
+      "aspect_ratios_selection": "{{input.aspect}}",
+      "image_number": 1,
+      "image_seed": -1,
+      "sharpness": 2,
+      "guidance_scale": 4,
+      "base_model_name": "{{model}}",
+      "refiner_model_name": "None",
+      "refiner_switch": 0.5,
+      "save_meta": true,
+      "save_extension": "png",
+      "require_base64": false,
+      "async_process": false,
+      "image_prompts": [
+        {
+          "cn_img": "{{image1_base64}}",
+          "cn_type": "{{input.cn_type}}",
+          "cn_weight": "{{input.cn_weight}}",
+          "cn_stop": "{{input.cn_stop}}"
+        },
+        {
+          "$if": "{{image2_base64}}",
+          "cn_img": "{{image2_base64}}",
+          "cn_type": "{{input.cn_type}}",
+          "cn_weight": "{{input.cn_weight}}",
+          "cn_stop": "{{input.cn_stop}}"
+        }
+      ],
+      "loras": [
+        {
+          "$if": "{{input.lora}}",
+          "enabled": true,
+          "model_name": "{{input.lora}}",
+          "weight": "{{input.lora_weight}}"
+        }
+      ]
+    },
+    "headers": {
+      "Accept": "image/png"
+    }
+  },
+  "response": {
+    "type": "binary"
+  }
+}
+"""),
+        new("Fooocus-API: Outpaint", "http://127.0.0.1:8888", """
+{
+  "kind": "image",
+  "_help": "Attach ONE image. The message (optional) describes the new area.",
+  "auth": {
+    "type": "header",
+    "name": "X-API-KEY"
+  },
+  "models": {
+    "path": "/v1/engines/all-models",
+    "method": "GET",
+    "list": "$.model_filenames[*]"
+  },
+  "inputs": [
+    {
+      "id": "direction",
+      "label": "Direction",
+      "type": "select",
+      "options": [
+        "Left",
+        "Right",
+        "Top",
+        "Bottom"
+      ],
+      "default": "Left"
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "type": "select",
+      "options": [
+        "Speed",
+        "Quality",
+        "Extreme Speed"
+      ],
+      "default": "Speed"
+    },
+    {
+      "id": "negative",
+      "label": "Negative prompt",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "aspect",
+      "label": "Aspect ratio",
+      "type": "select",
+      "options": [
+        "704*1408",
+        "768*1344",
+        "832*1216",
+        "896*1152",
+        "1024*1024",
+        "1152*896",
+        "1216*832",
+        "1344*768",
+        "1408*704"
+      ],
+      "default": "1152*896"
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/v2/generation/image-inpaint-outpaint",
+    "body": {
+      "prompt": "",
+      "negative_prompt": "{{input.negative}}",
+      "style_selections": [
+        "Fooocus V2",
+        "Fooocus Enhance",
+        "Fooocus Sharp"
+      ],
+      "performance_selection": "{{input.performance}}",
+      "aspect_ratios_selection": "{{input.aspect}}",
+      "image_number": 1,
+      "image_seed": -1,
+      "sharpness": 2,
+      "guidance_scale": 4,
+      "base_model_name": "{{model}}",
+      "refiner_model_name": "None",
+      "refiner_switch": 0.5,
+      "save_meta": true,
+      "save_extension": "png",
+      "require_base64": false,
+      "async_process": false,
+      "input_image": "{{image1_base64}}",
+      "outpaint_selections": [
+        "{{input.direction}}"
+      ],
+      "outpaint_distance_left": -1,
+      "outpaint_distance_right": -1,
+      "outpaint_distance_top": -1,
+      "outpaint_distance_bottom": -1,
+      "inpaint_additional_prompt": "{{prompt}}"
+    },
+    "headers": {
+      "Accept": "image/png"
+    }
+  },
+  "response": {
+    "type": "binary"
+  },
+  "allowEmptyPrompt": true
+}
+"""),
+        new("Fooocus-API: Inpaint", "http://127.0.0.1:8888", """
+{
+  "kind": "image",
+  "_help": "Attach TWO images: first the original, second the mask (same size; WHITE = area to change, BLACK = keep). The message describes what should appear.",
+  "auth": {
+    "type": "header",
+    "name": "X-API-KEY"
+  },
+  "models": {
+    "path": "/v1/engines/all-models",
+    "method": "GET",
+    "list": "$.model_filenames[*]"
+  },
+  "inputs": [
+    {
+      "id": "performance",
+      "label": "Performance",
+      "type": "select",
+      "options": [
+        "Speed",
+        "Quality",
+        "Extreme Speed"
+      ],
+      "default": "Speed"
+    },
+    {
+      "id": "negative",
+      "label": "Negative prompt",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "aspect",
+      "label": "Aspect ratio",
+      "type": "select",
+      "options": [
+        "704*1408",
+        "768*1344",
+        "832*1216",
+        "896*1152",
+        "1024*1024",
+        "1152*896",
+        "1216*832",
+        "1344*768",
+        "1408*704"
+      ],
+      "default": "1152*896"
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/v2/generation/image-inpaint-outpaint",
+    "body": {
+      "prompt": "",
+      "negative_prompt": "{{input.negative}}",
+      "style_selections": [
+        "Fooocus V2",
+        "Fooocus Enhance",
+        "Fooocus Sharp"
+      ],
+      "performance_selection": "{{input.performance}}",
+      "aspect_ratios_selection": "{{input.aspect}}",
+      "image_number": 1,
+      "image_seed": -1,
+      "sharpness": 2,
+      "guidance_scale": 4,
+      "base_model_name": "{{model}}",
+      "refiner_model_name": "None",
+      "refiner_switch": 0.5,
+      "save_meta": true,
+      "save_extension": "png",
+      "require_base64": false,
+      "async_process": false,
+      "input_image": "{{image1_base64}}",
+      "input_mask": "{{image2_base64}}",
+      "inpaint_additional_prompt": "{{prompt}}"
+    },
+    "headers": {
+      "Accept": "image/png"
+    }
+  },
+  "response": {
+    "type": "binary"
+  }
+}
+"""),
+        new("Fooocus-API: Describe image", "http://127.0.0.1:8888", """
+{
+  "kind": "text",
+  "_help": "Attach ONE image; the reply is a text description (a prompt you can reuse).",
+  "auth": {
+    "type": "header",
+    "name": "X-API-KEY"
+  },
+  "models": {
+    "path": "/v1/engines/all-models",
+    "method": "GET",
+    "list": "$.model_filenames[*]"
+  },
+  "inputs": [
+    {
+      "id": "type",
+      "label": "Image type",
+      "type": "select",
+      "options": [
+        "Photo",
+        "Anime"
+      ],
+      "default": "Photo"
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/v1/tools/describe-image",
+    "body": {
+      "image": {
+        "file": "{{image1_base64}}",
+        "mime": "{{image1_mime}}",
+        "filename": "image.png"
+      }
+    },
+    "query": {
+      "type": "{{input.type}}"
+    },
+    "bodyType": "multipart"
+  },
+  "response": {
+    "type": "json",
+    "text": "$.describe"
+  },
+  "allowEmptyPrompt": true
 }
 """),
         new("OpenAI Images (تصویر)", "https://api.openai.com/v1", """

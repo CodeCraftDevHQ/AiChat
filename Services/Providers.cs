@@ -192,7 +192,10 @@ static class ProviderHttp
     public static JsonObject MergeBody(JsonObject body, ProviderConfig cfg)
     {
         if (string.IsNullOrWhiteSpace(cfg.ExtraBody)) return body;
-        if (JsonNode.Parse(cfg.ExtraBody) is not JsonObject extra)
+        var defs = ConnectorSpec.ControlInputs(cfg.Controls);
+        var expanded = Tpl.Expand(JsonNode.Parse(cfg.ExtraBody),
+            name => name.StartsWith("input.") ? ConnectorSpec.InputValue(defs, cfg.ConnectorInputs, name[6..]) : null);
+        if (expanded is not JsonObject extra)
             throw new InvalidOperationException("The extra body must be a JSON object.");
         foreach (var (k, v) in extra.ToList())
         {

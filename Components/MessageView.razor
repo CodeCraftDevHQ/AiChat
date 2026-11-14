@@ -74,7 +74,7 @@
                     <div class="att-row start">
                         @foreach (var a in Message.Attachments)
                         {
-                            <AttachmentChip @key="a" Attachment="a" />
+                            <AttachmentChip @key="a" Attachment="a" CanReuse="true" />
                         }
                     </div>
                 }

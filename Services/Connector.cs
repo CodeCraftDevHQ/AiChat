@@ -94,8 +94,73 @@ public static class JPath
     }
 }
 
+/// <summary>{{placeholder}} expansion over a JSON tree. Shared by connectors and the extra-body controls.</summary>
+public static class Tpl
+{
+    static readonly Regex Whole = new(@"^\s*\{\{\s*([A-Za-z0-9_.\-|]+)\s*\}\}\s*$", RegexOptions.Compiled);
+    static readonly Regex Inline = new(@"\{\{\s*([A-Za-z0-9_.\-|]+)\s*\}\}", RegexOptions.Compiled);
+
+    static bool IsPlaceholder(JsonNode n) => n is JsonValue v && v.TryGetValue<string>(out var s) && Whole.IsMatch(s);
+    static bool Droppable(JsonNode n) => IsPlaceholder(n) || (n is JsonObject o && o.ContainsKey("$if"));
+
+    static bool Truthy(JsonNode? n)
+    {
+        if (n == null) return false;
+        if (n is JsonValue v)
+        {
+            if (v.TryGetValue<bool>(out var b)) return b;
+            if (v.TryGetValue<string>(out var s)) return s.Length > 0 && !s.Equals("false", StringComparison.OrdinalIgnoreCase);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// A string that is exactly one placeholder keeps the value's type. A field (or array item) whose placeholder
+    /// has no value is removed. An object with "$if": "{{x}}" is removed when x is empty / false / missing.
+    /// </summary>
+    public static JsonNode? Expand(JsonNode? node, Func<string, JsonNode?> resolve)
+    {
+        switch (node)
+        {
+            case null: return null;
+            case JsonObject o:
+            {
+                if (o.TryGetPropertyValue("$if", out var cond) && !Truthy(Expand(cond, resolve))) return null;
+                var r = new JsonObject();
+                foreach (var (k, v) in o)
+                {
+                    if (k == "$if") continue;
+                    var e = Expand(v, resolve);
+                    if (e == null && v != null && Droppable(v)) continue;
+                    r[k] = e;
+                }
+                return r;
+            }
+            case JsonArray a:
+            {
+                var r = new JsonArray();
+                foreach (var v in a)
+                {
+                    var e = Expand(v, resolve);
+                    if (e == null && v != null && Droppable(v)) continue;
+                    r.Add(e);
+                }
+                return r;
+            }
+            case JsonValue v when v.TryGetValue<string>(out var s):
+            {
+                var m = Whole.Match(s);
+                if (m.Success) return resolve(m.Groups[1].Value);
+                return Inline.Replace(s, mm => JPath.Text(resolve(mm.Groups[1].Value)));
+            }
+            default:
+                return node.DeepClone();
+        }
+    }
+}
+
 /// <summary>One UI field declared by a connector ("inputs").</summary>
-public record ConnInput(string Id, string Label, string Type, List<string> Options, string Default);
+public record ConnInput(string Id, string Label, string Type, List<string> Options, string Default, double? Min = null, double? Max = null, double? Step = null);
 
 public static class ConnectorSpec
 {
@@ -113,20 +178,54 @@ public static class ConnectorSpec
         return null;
     }
 
-    public static List<ConnInput> Inputs(string? json)
+    public static List<ConnInput> Inputs(string? json) =>
+        ParseInputs(TryParse(json, out _)?["inputs"] as JsonArray);
+
+    /// <summary>The "controls" of a normal (non-connector) API: a JSON array in the same format as connector inputs.</summary>
+    public static List<ConnInput> ControlInputs(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<ConnInput>();
+        try { return ParseInputs(JsonNode.Parse(json) as JsonArray); }
+        catch (JsonException) { return new List<ConnInput>(); }
+    }
+
+    static double? Num(JsonNode? n) =>
+        n != null && double.TryParse(JPath.Text(n), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
+
+    public static List<ConnInput> ParseInputs(JsonArray? arr)
     {
         var list = new List<ConnInput>();
-        var root = TryParse(json, out _);
-        if (root?["inputs"] is not JsonArray arr) return list;
+        if (arr == null) return list;
         foreach (var it in arr)
         {
             if (it is not JsonObject o || JPath.Text(o["id"]) is not { Length: > 0 } id) continue;
             var type = JPath.Text(o["type"]);
             if (type.Length == 0) type = "text";
             var opts = o["options"] is JsonArray oa ? oa.Select(JPath.Text).ToList() : new List<string>();
-            list.Add(new ConnInput(id, JPath.Text(o["label"]) is { Length: > 0 } l ? l : id, type, opts, JPath.Text(o["default"])));
+            list.Add(new ConnInput(id, JPath.Text(o["label"]) is { Length: > 0 } l ? l : id, type, opts, JPath.Text(o["default"]),
+                Num(o["min"]), Num(o["max"]), Num(o["step"])));
         }
         return list;
+    }
+
+    /// <summary>The typed value of an input (user's value, else the default); null when empty.</summary>
+    public static JsonNode? InputValue(List<ConnInput> defs, IReadOnlyDictionary<string, string> values, string id)
+    {
+        var def = defs.FirstOrDefault(i => i.Id == id);
+        string? raw = values.TryGetValue(id, out var set) ? set : def?.Default;
+        if (string.IsNullOrEmpty(raw)) return null;
+        switch (def?.Type)
+        {
+            case "number":
+            case "slider":
+                if (long.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var l)) return l;
+                if (double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
+                return null;
+            case "bool":
+                return raw.Equals("true", StringComparison.OrdinalIgnoreCase);
+            default:
+                return raw;
+        }
     }
 
     /// <summary>Returns an error message, or null when the connector looks usable.</summary>
@@ -150,6 +249,18 @@ public static class ConnectorSpec
                 CheckResponse(job["response"]);
                 if (job["response"] == null && root["response"] == null)
                     return "Define \"response\" (or job.response) to say where the result is.";
+            }
+            else if (JPath.Text(root["kind"]) == "chat")
+            {
+                var st = root["stream"] as JsonObject;
+                var tp = JPath.Text(st?["textPath"]);
+                if (tp.Length == 0) tp = JPath.Text(root["response"]?["text"]);
+                if (tp.Length == 0) return "A chat connector needs stream.textPath (JSON path of the text in each streamed event).";
+                JPath.Check(tp);
+                if (JPath.Text(st?["reasoningPath"]) is { Length: > 0 } rp) JPath.Check(rp);
+                if (JPath.Text(st?["errorPath"]) is { Length: > 0 } ep) JPath.Check(ep);
+                var fmt = JPath.Text(st?["format"]);
+                if (fmt.Length > 0 && fmt is not ("sse" or "ndjson" or "none")) return "stream.format must be sse, ndjson or none.";
             }
             else if (root["response"] == null)
                 return "Define \"response\" to say where the result is (use {\"type\":\"binary\"} for raw files).";
@@ -180,6 +291,11 @@ public class ConnectorProvider : IChatProvider
         [EnumeratorCancellation] CancellationToken ct)
     {
         var run = new ConnectorRun(_http, cfg, model, history, systemPrompt, onImage, ct);
+        if (run.IsChat)
+        {
+            await foreach (var t in run.ChatStreamAsync()) yield return t;
+            yield break;
+        }
         await run.ExecuteAsync();
         foreach (var t in run.Texts) yield return t;
     }
@@ -203,8 +319,7 @@ public class ConnectorProvider : IChatProvider
 
 sealed class ConnectorRun
 {
-    static readonly Regex Whole = new(@"^\s*\{\{\s*([A-Za-z0-9_.\-|]+)\s*\}\}\s*$", RegexOptions.Compiled);
-    static readonly Regex Inline = new(@"\{\{\s*([A-Za-z0-9_.\-|]+)\s*\}\}", RegexOptions.Compiled);
+    static readonly Regex ImgRef = new(@"^image(\d*)_(base64|dataurl|mime)$", RegexOptions.Compiled);
 
     readonly HttpClient _http;
     readonly ProviderConfig _cfg;
@@ -213,7 +328,9 @@ sealed class ConnectorRun
     readonly CancellationToken _ct;
 
     readonly string _prompt, _model, _system;
-    readonly string? _imgB64, _imgMime;
+    readonly List<(string B64, string Mime)> _imgs = new();
+    readonly IReadOnlyList<ChatMessage> _history;
+    bool _inReason;
     readonly int _seed = Random.Shared.Next();
     string _job = "";
     JsonNode? _item;
@@ -226,6 +343,7 @@ sealed class ConnectorRun
     {
         _http = http;
         _cfg = cfg;
+        _history = history;
         _model = model;
         _system = system ?? "";
         _onImage = onImage;
@@ -234,11 +352,107 @@ sealed class ConnectorRun
 
         var last = history.LastOrDefault(m => m.Role == "user");
         _prompt = last?.Content?.Trim() ?? "";
-        var img = last?.Attachments.FirstOrDefault(a => a.Kind == "image" && !a.Excluded);
-        if (img != null && StorageService.ReadAttachmentSync(img) is { } bytes)
+        foreach (var img in last?.Attachments.Where(a => a.Kind == "image" && !a.Excluded) ?? Enumerable.Empty<Attachment>())
+            if (StorageService.ReadAttachmentSync(img) is { } bytes)
+                _imgs.Add((Convert.ToBase64String(bytes), img.MimeType));
+    }
+
+    public bool IsChat => JPath.Text(_spec["kind"]) == "chat";
+
+    // ------------------------------------------------------------ chat
+
+    /// <summary>The conversation as OpenAI-style messages (text only, or with images as image_url parts).</summary>
+    JsonArray Messages(bool withSystem, bool vision)
+    {
+        var arr = new JsonArray();
+        if (withSystem && _system.Length > 0) arr.Add(new JsonObject { ["role"] = "system", ["content"] = _system });
+        foreach (var t in HistoryHelper.Build(_history))
         {
-            _imgB64 = Convert.ToBase64String(bytes);
-            _imgMime = img.MimeType;
+            JsonNode content;
+            if (vision && t.Images.Count > 0)
+            {
+                var parts = new JsonArray();
+                if (t.Text.Length > 0) parts.Add(new JsonObject { ["type"] = "text", ["text"] = t.Text });
+                foreach (var (mime, b64) in t.Images)
+                    parts.Add(new JsonObject { ["type"] = "image_url", ["image_url"] = new JsonObject { ["url"] = $"data:{mime};base64,{b64}" } });
+                content = parts;
+            }
+            else content = t.Text;
+            arr.Add(new JsonObject { ["role"] = t.Role, ["content"] = content });
+        }
+        return arr;
+    }
+
+    /// <summary>Handles one streamed JSON payload; returns the text pieces to show.</summary>
+    List<string> HandlePayload(string data, JsonObject st)
+    {
+        var outp = new List<string>();
+        JsonNode? json;
+        try { json = JsonNode.Parse(data); }
+        catch (JsonException) { return outp; }
+        if (json == null) return outp;
+
+        if (JPath.Text(st["errorPath"]) is { Length: > 0 } ep &&
+            JPath.Select(json, ep).FirstOrDefault() is { } err && JPath.Text(err).Length > 0)
+            throw new HttpRequestException(JPath.Text(err));
+
+        string Join(string path) => path.Length == 0 ? "" :
+            string.Concat(JPath.Select(json, path).Where(n => n is JsonValue).Select(JPath.Text));
+
+        var reasoning = Join(JPath.Text(st["reasoningPath"]));
+        if (reasoning.Length > 0)
+        {
+            if (!_inReason) { outp.Add("\n\n> 💭 "); _inReason = true; }
+            outp.Add(reasoning.Replace("\n", "\n> "));
+        }
+
+        var textPath = JPath.Text(st["textPath"]);
+        if (textPath.Length == 0) textPath = JPath.Text(_spec["response"]?["text"]);
+        var text = Join(textPath);
+        if (text.Length > 0)
+        {
+            if (_inReason) { outp.Add("\n\n"); _inReason = false; }
+            outp.Add(text);
+        }
+        return outp;
+    }
+
+    public async IAsyncEnumerable<string> ChatStreamAsync()
+    {
+        if (_spec["request"] is not JsonObject request) throw new InvalidOperationException("Missing \"request\" in the connector.");
+        var st = _spec["stream"] as JsonObject ?? new JsonObject();
+        var format = JPath.Text(st["format"]);
+        if (format.Length == 0) format = "sse";
+
+        using var msg = Build(request);
+        var resp = await _http.SendAsync(ProviderHttp.Customize(msg, _cfg), HttpCompletionOption.ResponseHeadersRead, _ct);
+        using var _guard = new SafeDispose(resp);
+        await ProviderHttp.EnsureSuccessAsync(resp, _ct);
+
+        if (format == "none")
+        {
+            foreach (var piece in HandlePayload(await resp.Content.ReadAsStringAsync(_ct), st)) yield return piece;
+            yield break;
+        }
+
+        if (format == "ndjson")
+        {
+            await using var stream = await resp.Content.ReadAsStreamAsync(_ct);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            string? line;
+            while ((line = await reader.ReadLineAsync(_ct)) != null)
+            {
+                line = line.Trim();
+                if (line.Length == 0) continue;
+                foreach (var piece in HandlePayload(line, st)) yield return piece;
+            }
+            yield break;
+        }
+
+        await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, _ct))
+        {
+            if (data == "[DONE]") yield break;
+            foreach (var piece in HandlePayload(data, st)) yield return piece;
         }
     }
 
@@ -256,12 +470,23 @@ sealed class ConnectorRun
             "job" => _job,
             "system" => _system,
             "seed" => _seed,
-            "image_base64" => _imgB64,
-            "image_mime" => _imgMime,
-            "image_dataurl" => _imgB64 == null ? null : $"data:{_imgMime};base64,{_imgB64}",
+            "messages" => Messages(false, false),
+            "messages_with_system" => Messages(true, false),
+            "messages_vision" => Messages(false, true),
+            "messages_vision_with_system" => Messages(true, true),
+            "images_base64" => _imgs.Count == 0 ? null : new JsonArray(_imgs.Select(i => (JsonNode?)i.B64).ToArray()),
             "item" => _item?.DeepClone(),
             _ => null
         };
+        if (v == null && ImgRef.Match(name) is { Success: true } im)
+        {
+            var idx = im.Groups[1].Value.Length == 0 ? 1 : int.Parse(im.Groups[1].Value);
+            if (idx >= 1 && idx <= _imgs.Count)
+            {
+                var (b64, mime) = _imgs[idx - 1];
+                v = im.Groups[2].Value switch { "base64" => b64, "mime" => mime, _ => $"data:{mime};base64,{b64}" };
+            }
+        }
         if (v == null && name.StartsWith("input.")) v = InputValue(name[6..]);
         if (v == null && name.StartsWith("item.") && _item != null)
             v = JPath.Select(_item, "$." + name[5..]).FirstOrDefault()?.DeepClone();
@@ -271,63 +496,10 @@ sealed class ConnectorRun
         return v;
     }
 
-    JsonNode? InputValue(string id)
-    {
-        var def = ConnectorSpec.Inputs(_cfg.ConnectorJson).FirstOrDefault(i => i.Id == id);
-        string? raw = _cfg.ConnectorInputs.TryGetValue(id, out var set) ? set : def?.Default;
-        if (string.IsNullOrEmpty(raw)) return null;
-        switch (def?.Type)
-        {
-            case "number":
-                if (long.TryParse(raw, out var l)) return l;
-                if (double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
-                return null;
-            case "bool":
-                return raw.Equals("true", StringComparison.OrdinalIgnoreCase);
-            default:
-                return raw;
-        }
-    }
+    JsonNode? InputValue(string id) =>
+        ConnectorSpec.InputValue(ConnectorSpec.Inputs(_cfg.ConnectorJson), _cfg.ConnectorInputs, id);
 
-    JsonNode? Expand(JsonNode? node)
-    {
-        switch (node)
-        {
-            case null: return null;
-            case JsonObject o:
-            {
-                var r = new JsonObject();
-                foreach (var (k, v) in o)
-                {
-                    var e = Expand(v);
-                    if (e == null && (v == null ? false : IsPlaceholder(v))) continue; // unset placeholder: drop the field
-                    r[k] = e;
-                }
-                return r;
-            }
-            case JsonArray a:
-            {
-                var r = new JsonArray();
-                foreach (var v in a)
-                {
-                    var e = Expand(v);
-                    if (e == null && v != null && IsPlaceholder(v)) continue;
-                    r.Add(e);
-                }
-                return r;
-            }
-            case JsonValue v when v.TryGetValue<string>(out var s):
-            {
-                var m = Whole.Match(s);
-                if (m.Success) return Resolve(m.Groups[1].Value);
-                return Inline.Replace(s, mm => JPath.Text(Resolve(mm.Groups[1].Value)));
-            }
-            default:
-                return node.DeepClone();
-        }
-    }
-
-    static bool IsPlaceholder(JsonNode n) => n is JsonValue v && v.TryGetValue<string>(out var s) && Whole.IsMatch(s);
+    JsonNode? Expand(JsonNode? node) => Tpl.Expand(node, Resolve);
 
     string ExpandText(string? s) => JPath.Text(Expand(JsonValue.Create(s ?? "")));
 
@@ -363,6 +535,28 @@ sealed class ConnectorRun
             if (bodyType == "form" && body is JsonObject fo)
                 msg.Content = new FormUrlEncodedContent(fo.Where(kv => kv.Value != null)
                     .Select(kv => new KeyValuePair<string, string>(kv.Key, JPath.Text(kv.Value))));
+            else if (bodyType == "multipart" && body is JsonObject mo)
+            {
+                var mp = new MultipartFormDataContent();
+                foreach (var (k, v) in mo)
+                {
+                    if (v == null) continue;
+                    if (v is JsonObject fileObj)
+                    {
+                        if (fileObj["file"] == null) continue; // file not available (e.g. no image attached)
+                        var raw = JPath.Text(fileObj["file"]);
+                        if (raw.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) raw = raw[(raw.IndexOf(',') + 1)..];
+                        var data = Convert.FromBase64String(raw);
+                        var mime = JPath.Text(fileObj["mime"]) is { Length: > 0 } fm ? fm : Normalize("", data);
+                        var part = new ByteArrayContent(data);
+                        part.Headers.ContentType = MediaTypeHeaderValue.Parse(mime);
+                        var fname = JPath.Text(fileObj["filename"]) is { Length: > 0 } fn ? fn : "file" + FileExportService.ExtensionFromMime(mime);
+                        mp.Add(part, k, fname);
+                    }
+                    else mp.Add(new StringContent(JPath.Text(v)), k);
+                }
+                msg.Content = mp;
+            }
             else if (bodyType == "text")
                 msg.Content = new StringContent(JPath.Text(body), Encoding.UTF8, "text/plain");
             else if (body != null)
@@ -432,6 +626,7 @@ sealed class ConnectorRun
     public async Task ExecuteAsync()
     {
         if (_spec["request"] is not JsonObject request) throw new InvalidOperationException("Missing \"request\" in the connector.");
+        if (IsChat) throw new InvalidOperationException("Chat connectors are streamed.");
         if (string.IsNullOrWhiteSpace(_prompt) && _spec["allowEmptyPrompt"]?.GetValue<bool>() != true &&
             JsonUsesPrompt(_spec))
             throw new InvalidOperationException("Write a message first (it is used as the prompt).");

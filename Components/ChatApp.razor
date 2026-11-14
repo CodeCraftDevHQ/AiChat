@@ -172,6 +172,16 @@
                     <button @onclick="TakePhoto">📷 @L["دوربین"]</button>
                 </div>
             }
+            @if (_slash.Count > 0)
+            {
+                <div class="slash-menu">
+                    @foreach (var sc in _slash)
+                    {
+                        var item = sc;
+                        <button @onclick="() => PickSlash(item)"><b dir="ltr">/@item.Name</b><span class="muted small" dir="auto">@item.Description</span></button>
+                    }
+                </div>
+            }
             <div class="box">
                 @if (IsMobile)
                 {
@@ -430,6 +440,25 @@
     [JSInvokable]
     public Task OnEnter() => InvokeAsync(SendClick);
 
+    List<Shortcut> _slash = new();
+
+    [JSInvokable]
+    public Task OnComposerInput(string value) => InvokeAsync(() =>
+    {
+        var list = value.StartsWith('/')
+            ? State.Shortcuts.Where(s => s.Name.StartsWith(value[1..], StringComparison.OrdinalIgnoreCase)).Take(8).ToList()
+            : new List<Shortcut>();
+        if (list.Count == _slash.Count && list.Select(x => x.Name).SequenceEqual(_slash.Select(x => x.Name))) return;
+        _slash = list;
+        StateHasChanged();
+    });
+
+    async Task PickSlash(Shortcut sc)
+    {
+        _slash = new();
+        await JS.InvokeVoidAsync("chat.setValue", _input, "/" + sc.Name + " ");
+    }
+
     // Called from JS for files that were dropped on the window or pasted into the input.
     [JSInvokable]
     public async Task OnFileDropped(string name, string base64)
@@ -478,6 +507,7 @@
             return;
         }
 
+        _slash = new();
         var text = await JS.InvokeAsync<string>("chat.takeValue", _input);
         if (string.IsNullOrWhiteSpace(text) && State.Pending.Count == 0) return;
         await State.SendAsync(text);

@@ -168,6 +168,17 @@
                                         <label class="lbl">@L["مسیر لیست مدل‌ها (اختیاری)"]</label>
                                         <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="models" @bind="_editing.ModelsPath" @bind:event="oninput" />
 
+                                        <label class="lbl">@L["کنترل‌ها (JSON، اختیاری)"]</label>
+                                        <textarea class="inp code" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder='[{"id":"temperature","type":"slider","min":0,"max":2,"step":0.1,"default":"0.7"}]'
+                                                  @bind="_editing.Controls" @bind:event="oninput"></textarea>
+                                        <p class="muted small">@L["هر کنترل یک فیلد در همین فرم می‌سازد (slider, number, select, bool, text). مقدارش را در پارامترهای اضافی بدنه با {{input.id}} بنویسید."]</p>
+                                        <div class="row"><button class="btn sm" type="button" @onclick="InsertControlsSample">@L["درج نمونه (temperature و max_tokens)"]</button></div>
+                                        @foreach (var inp in ConnectorSpec.ControlInputs(_editing.Controls))
+                                        {
+                                            @if (inp.Type != "bool") { <label class="lbl">@L[inp.Label]</label> }
+                                            @InputField(inp)
+                                        }
+
                                         @if (_editing.Type == ProviderType.OpenAiCompatible)
                                         {
                                             <label class="chk"><input type="checkbox" @bind="_editing.NoStream" /> @L["پاسخ یکجا (بدون استریم)"]</label>
@@ -195,25 +206,8 @@
 
                                         @foreach (var inp in ConnectorSpec.Inputs(_editing.ConnectorJson))
                                         {
-                                            <label class="lbl">@L[inp.Label]</label>
-                                            @if (inp.Type == "select" && inp.Options.Count > 0)
-                                            {
-                                                var id = inp.Id; var def = inp.Default;
-                                                <AppSelect Title="@L[inp.Label]" Value="@InputOf(id, def)" ValueChanged="v => _editing.ConnectorInputs[id] = v"
-                                                           Options="@(inp.Options.Select(o => new AppSelect.SelectOption(o, o)).ToList())" />
-                                            }
-                                            else if (inp.Type == "bool")
-                                            {
-                                                var id = inp.Id; var def = inp.Default;
-                                                <label class="chk"><input type="checkbox" checked="@(InputOf(id, def).Equals("true", StringComparison.OrdinalIgnoreCase))"
-                                                                          @onchange="e => _editing.ConnectorInputs[id] = ((bool)(e.Value ?? false)).ToString().ToLowerInvariant()" /> @L[inp.Label]</label>
-                                            }
-                                            else
-                                            {
-                                                var id = inp.Id; var def = inp.Default;
-                                                <input class="inp" dir="auto" type="@(inp.Type == "number" ? "number" : "text")" step="any"
-                                                       value="@InputOf(id, def)" @oninput="e => _editing.ConnectorInputs[id] = e.Value?.ToString() ?? string.Empty" />
-                                            }
+                                            @if (inp.Type != "bool") { <label class="lbl">@L[inp.Label]</label> }
+                                            @InputField(inp)
                                         }
                                     </div>
                                 }
@@ -255,6 +249,21 @@
                             <textarea class="inp" rows="6" dir="auto" placeholder="@L["مثلاً: همیشه به فارسی پاسخ بده."]"
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
+
+                            <label class="lbl">@L["میانبرها (دستورهای /)"]</label>
+                            <p class="muted small">@L["با نوشتن / در ابتدای پیام، میانبرها پیشنهاد می‌شوند. {{text}} جای متن بعد از دستور را می‌گیرد."]</p>
+                            <textarea class="inp code" rows="10" dir="ltr" autocapitalize="off" spellcheck="false"
+                                      value="@ScText" @oninput="e => { _scText = e.Value?.ToString() ?? string.Empty; _scStatus = null; }"></textarea>
+                            <div class="row">
+                                <button class="primary" type="button" @onclick="SaveShortcuts">@L["ذخیره"]</button>
+                                <button class="btn" type="button" @onclick="InsertShortcutSample">@L["درج نمونه"]</button>
+                                <button class="btn" type="button" @onclick="ImportShortcuts">@L["وارد کردن فایل JSON"]</button>
+                                <button class="btn" type="button" @onclick="ExportShortcuts">@L["ذخیره به‌صورت فایل"]</button>
+                            </div>
+                            @if (_scStatus != null)
+                            {
+                                <p class="status" dir="auto">@_scStatus</p>
+                            }
                             break;
 
                         case "data":
@@ -412,6 +421,76 @@
 
     bool _advOpen;
 
+    static string Inv(double d) => d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    RenderFragment<ConnInput> InputField => inp => @<div>
+        @if (inp.Type == "select" && inp.Options.Count > 0)
+        {
+            <AppSelect Title="@L[inp.Label]" Value="@InputOf(inp.Id, inp.Default)" ValueChanged="v => _editing!.ConnectorInputs[inp.Id] = v"
+                       Options="@(inp.Options.Select(o => new AppSelect.SelectOption(o, o)).ToList())" />
+        }
+        else if (inp.Type == "bool")
+        {
+            <label class="chk"><input type="checkbox" checked="@(InputOf(inp.Id, inp.Default).Equals("true", StringComparison.OrdinalIgnoreCase))"
+                                      @onchange="e => _editing!.ConnectorInputs[inp.Id] = ((bool)(e.Value ?? false)).ToString().ToLowerInvariant()" /> @L[inp.Label]</label>
+        }
+        else if (inp.Type == "slider")
+        {
+            <div class="slider-row">
+                <input type="range" class="range" min="@Inv(inp.Min ?? 0)" max="@Inv(inp.Max ?? 1)" step="@Inv(inp.Step ?? 0.1)"
+                       value="@InputOf(inp.Id, inp.Default)" @oninput="e => _editing!.ConnectorInputs[inp.Id] = e.Value?.ToString() ?? string.Empty" />
+                <span class="muted val" dir="ltr">@InputOf(inp.Id, inp.Default)</span>
+            </div>
+        }
+        else
+        {
+            <input class="inp" dir="auto" type="@(inp.Type == "number" ? "number" : "text")" step="any"
+                   value="@InputOf(inp.Id, inp.Default)" @oninput="e => _editing!.ConnectorInputs[inp.Id] = e.Value?.ToString() ?? string.Empty" />
+        }
+    </div>;
+
+    void InsertControlsSample()
+    {
+        if (_editing == null) return;
+        _editing.Controls = "[\n" +
+            "  { \"id\": \"temperature\", \"label\": \"Temperature\", \"type\": \"slider\", \"min\": 0, \"max\": 2, \"step\": 0.1, \"default\": \"0.7\" },\n" +
+            "  { \"id\": \"max_tokens\", \"label\": \"Max tokens\", \"type\": \"number\", \"default\": \"1024\" }\n" +
+            "]";
+        if (string.IsNullOrWhiteSpace(_editing.ExtraBody))
+            _editing.ExtraBody = "{ \"temperature\": \"{{input.temperature}}\", \"max_tokens\": \"{{input.max_tokens}}\" }";
+        _advOpen = true;
+    }
+
+    // ---- slash shortcuts (chat section)
+    string? _scText;
+    string? _scStatus;
+
+    string ScText => _scText ??= State.ShortcutsJson;
+
+    void SaveShortcuts()
+    {
+        var err = State.SetShortcutsJson(ScText);
+        _scStatus = err == null ? L["ذخیره شد ✓"] : L["خطا: "] + err;
+    }
+
+    void InsertShortcutSample() { _scText = ShortcutHelper.Sample; _scStatus = null; }
+
+    async Task ImportShortcuts()
+    {
+        try
+        {
+            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = L["انتخاب فایل JSON میانبرها"] });
+            if (file == null) return;
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            _scText = await reader.ReadToEndAsync();
+            SaveShortcuts();
+        }
+        catch (Exception ex) { _scStatus = L["خطا: "] + ex.Message; }
+    }
+
+    Task ExportShortcuts() => State.SaveTextAsync("shortcuts.json", ScText);
+
     string InputOf(string id, string def) => _editing != null && _editing.ConnectorInputs.TryGetValue(id, out var v) ? v : def;
 
     void OnTemplateChosen(string name)
@@ -480,6 +559,16 @@
         catch (Exception ex)
         {
             return L["JSON پارامترهای اضافی نامعتبر است: "] + ex.Message;
+        }
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_editing.Controls) &&
+                System.Text.Json.Nodes.JsonNode.Parse(_editing.Controls) is not System.Text.Json.Nodes.JsonArray)
+                return L["کنترل‌ها باید یک آرایه‌ی JSON باشد."];
+        }
+        catch (Exception ex)
+        {
+            return L["JSON کنترل‌ها نامعتبر است: "] + ex.Message;
         }
         try { ProviderHttp.ParseHeaders(_editing.Headers ?? "", "x"); }
         catch (Exception ex) { return L["هدرها نامعتبر است: "] + ex.Message; }

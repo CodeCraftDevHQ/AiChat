@@ -39,13 +39,21 @@ public class ProviderConfig
     public string ChatPath { get; set; } = "";
     /// <summary>Replaces the model-list endpoint path.</summary>
     public string ModelsPath { get; set; } = "";
+    /// <summary>Settings controls (sliders, selects, ...) for normal APIs: a JSON array like connector "inputs".
+    /// Their values can be used in ExtraBody as {{input.id}}.</summary>
+    public string Controls { get; set; } = "";
+
     /// <summary>Custom connector: the JSON profile that describes the API.</summary>
     public string ConnectorJson { get; set; } = "";
     /// <summary>Custom connector: values of the profile's "inputs" (id -> value).</summary>
     public Dictionary<string, string> ConnectorInputs { get; set; } = new();
 
     [JsonIgnore]
-    public bool IsGenerator => Type is ProviderType.FooocusApi or ProviderType.Custom;
+    public bool IsChatConnector => Type == ProviderType.Custom &&
+        System.Text.RegularExpressions.Regex.IsMatch(ConnectorJson ?? "", "\"kind\"\\s*:\\s*\"chat\"");
+
+    [JsonIgnore]
+    public bool IsGenerator => Type == ProviderType.FooocusApi || (Type == ProviderType.Custom && !IsChatConnector);
 
     /// <summary>OpenAI-compatible only: ask for one complete answer instead of a stream.</summary>
     public bool NoStream { get; set; }
@@ -73,6 +81,7 @@ public class ProviderConfig
         ChatPath = ChatPath,
         ModelsPath = ModelsPath,
         NoStream = NoStream,
+        Controls = Controls,
         ConnectorJson = ConnectorJson,
         ConnectorInputs = new Dictionary<string, string>(ConnectorInputs),
         ImageAspect = ImageAspect,
