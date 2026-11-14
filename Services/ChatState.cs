@@ -1290,8 +1290,11 @@ public class ChatState
             async Task OnImage(string mime, byte[] data)
             {
                 var n = reply.Attachments.Count + 1;
+                var kind = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image"
+                    : mime.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? "video"
+                    : mime.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ? "audio" : "file";
                 var att = await _storage.SaveAttachmentAsync(
-                    $"image-{n}{FileExportService.ExtensionFromMime(mime)}", mime, "image", data);
+                    $"{kind}-{n}{FileExportService.ExtensionFromMime(mime)}", mime, kind, data);
                 reply.Attachments.Add(att);
                 Notify();
             }
@@ -1315,7 +1318,7 @@ public class ChatState
         catch (Exception ex)
         {
             reply.ErrorText = ProviderHttp.Describe(ex);
-            if (provider.Type != ProviderType.FooocusApi && LooksLikeImageRejection(reply.ErrorText) && await ExcludeImagesAsync(history, project))
+            if (!provider.IsGenerator && LooksLikeImageRejection(reply.ErrorText) && await ExcludeImagesAsync(history, project))
                 reply.ErrorText += "\n\n" + L["این مدل عکس را پشتیبانی نمی‌کند. عکس‌ها از ادامه‌ی گفتگو کنار گذاشته شدند؛ می‌توانید پیام متنی بفرستید یا مدل دیگری را انتخاب کنید."];
             _log.Error($"Request to {provider.Name} ({provider.Type}) / {model} failed", ex);
         }

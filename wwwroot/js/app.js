@@ -1,4 +1,15 @@
 window.chat = {
+    attachMedia: async (el, streamRef, mime) => {
+        if (!el) return;
+        const buf = await streamRef.arrayBuffer();
+        const url = URL.createObjectURL(new Blob([buf], { type: mime || 'application/octet-stream' }));
+        if (el.dataset.blob) URL.revokeObjectURL(el.dataset.blob);
+        el.dataset.blob = url;
+        el.src = url;
+    },
+    releaseMedia: (el) => {
+        if (el && el.dataset && el.dataset.blob) { URL.revokeObjectURL(el.dataset.blob); delete el.dataset.blob; }
+    },
     // theme: "system" | "light" | "dark"
     setTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme || 'system');

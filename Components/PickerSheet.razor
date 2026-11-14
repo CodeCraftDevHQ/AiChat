@@ -21,9 +21,9 @@
             @if (isModel)
             {
                 <div class="sheet-tools">
-                    @if (State.CurrentProvider?.Type == ProviderType.FooocusApi)
+                    @if (State.CurrentProvider?.IsGenerator == true)
                     {
-                        <span class="muted small">🎨 @L["این API تصویر می‌سازد؛ تست مدل‌ها برایش غیرفعال است."]</span>
+                        <span class="muted small">🎨 @L["این API محتوا (تصویر، ویدیو و...) می‌سازد؛ تست مدل‌ها برایش غیرفعال است."]</span>
                     }
                     else if (State.TestingModels)
                     {
@@ -35,7 +35,7 @@
                         <button class="btn sm" title="@L["هر مدل یک پیام کوتاه می‌گیرد (هزینه‌ی ناچیز). فقط مدل‌هایی که الان در لیست دیده می‌شوند تست می‌شوند."]"
                                 disabled="@(items.Count == 0)" @onclick="() => State.TestModelsAsync(items)">🧪 @L["تست مدل‌ها"] (@items.Count)</button>
                     }
-                    @if (State.CurrentProvider?.Type != ProviderType.FooocusApi)
+                    @if (State.CurrentProvider?.IsGenerator != true)
                     {
                         <button class="btn sm @(_settings ? "active" : "")" title="@L["تنظیمات تست"]" @onclick="OpenSettings">⚙</button>
                     }

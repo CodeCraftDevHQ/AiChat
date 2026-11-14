@@ -60,6 +60,22 @@ public class FileExportService
         "image/gif" => ".gif",
         "image/webp" => ".webp",
         "image/svg+xml" => ".svg",
-        _ => ".png"
+        "video/mp4" => ".mp4",
+        "video/webm" => ".webm",
+        "video/quicktime" => ".mov",
+        "audio/mpeg" or "audio/mp3" => ".mp3",
+        "audio/wav" or "audio/x-wav" or "audio/wave" => ".wav",
+        "audio/ogg" => ".ogg",
+        "audio/flac" => ".flac",
+        "audio/mp4" or "audio/aac" => ".m4a",
+        "model/gltf-binary" => ".glb",
+        "model/gltf+json" => ".gltf",
+        "model/obj" => ".obj",
+        "model/stl" or "application/sla" => ".stl",
+        "application/zip" => ".zip",
+        "application/json" => ".json",
+        "text/plain" => ".txt",
+        var m when m.StartsWith("image/") => ".png",
+        _ => ".bin"
     };
 }

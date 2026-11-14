@@ -652,3 +652,10 @@ select.inp option { background: var(--surface); color: var(--text); }
 .adv { margin-top: 16px; border: 1px solid var(--border, rgba(128,128,128,.3)); border-radius: 12px; padding: 4px 14px 14px; }
 .adv > summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
 .chk { display: flex; align-items: center; gap: 8px; margin-top: 14px; cursor: pointer; }
+
+.att-media { display: flex; flex-direction: column; gap: 6px; max-width: min(520px, 100%); margin: 6px 0; }
+.att-media video { width: 100%; max-height: 420px; border-radius: 12px; background: #000; }
+.att-media audio { width: 100%; }
+.att-media-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.att-media-bar .att-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+textarea.inp.code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; line-height: 1.45; white-space: pre; tab-size: 2; }

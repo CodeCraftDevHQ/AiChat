@@ -8,7 +8,8 @@ public enum ProviderType
     OpenAiCompatible,
     Anthropic,
     Gemini,
-    FooocusApi // image generator (Fooocus-API), not a chat model
+    FooocusApi, // image generator (Fooocus-API), not a chat model
+    Custom // JSON-driven connector (image / video / audio / 3D / any HTTP API)
 }
 
 public class ProviderConfig
@@ -38,6 +39,14 @@ public class ProviderConfig
     public string ChatPath { get; set; } = "";
     /// <summary>Replaces the model-list endpoint path.</summary>
     public string ModelsPath { get; set; } = "";
+    /// <summary>Custom connector: the JSON profile that describes the API.</summary>
+    public string ConnectorJson { get; set; } = "";
+    /// <summary>Custom connector: values of the profile's "inputs" (id -> value).</summary>
+    public Dictionary<string, string> ConnectorInputs { get; set; } = new();
+
+    [JsonIgnore]
+    public bool IsGenerator => Type is ProviderType.FooocusApi or ProviderType.Custom;
+
     /// <summary>OpenAI-compatible only: ask for one complete answer instead of a stream.</summary>
     public bool NoStream { get; set; }
 
@@ -64,6 +73,8 @@ public class ProviderConfig
         ChatPath = ChatPath,
         ModelsPath = ModelsPath,
         NoStream = NoStream,
+        ConnectorJson = ConnectorJson,
+        ConnectorInputs = new Dictionary<string, string>(ConnectorInputs),
         ImageAspect = ImageAspect,
         ImagePerformance = ImagePerformance,
         ImageCount = ImageCount,
@@ -76,7 +87,7 @@ public class Attachment
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "";
-    public string Kind { get; set; } = "text"; // "image" | "text"
+    public string Kind { get; set; } = "text"; // "image" | "text" | "pdf" | "video" | "audio" | "file"
     public string MimeType { get; set; } = "text/plain";
     public long Size { get; set; }
 
@@ -204,6 +215,7 @@ public static class ProviderDefaults
         ProviderType.Anthropic => "https://api.anthropic.com/v1",
         ProviderType.Gemini => "https://generativelanguage.googleapis.com/v1beta",
         ProviderType.FooocusApi => "http://127.0.0.1:8888",
+        ProviderType.Custom => "http://127.0.0.1:8000",
         _ => "https://api.openai.com/v1"
     };
 
@@ -212,6 +224,7 @@ public static class ProviderDefaults
         ProviderType.Anthropic => "Anthropic (Claude)",
         ProviderType.Gemini => "Google Gemini",
         ProviderType.FooocusApi => "Fooocus-API (تصویرساز)",
+        ProviderType.Custom => "اتصال سفارشی (JSON)",
         _ => "سازگار با OpenAI"
     };
 }

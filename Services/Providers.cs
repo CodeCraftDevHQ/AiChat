@@ -21,10 +21,12 @@ public class ProviderFactory
     readonly AnthropicProvider _anthropic;
     readonly GeminiProvider _gemini;
     readonly FooocusApiProvider _fooocus;
+    readonly ConnectorProvider _connector;
 
     public ProviderFactory(HttpClient http)
     {
         _fooocus = new FooocusApiProvider(http);
+        _connector = new ConnectorProvider(http);
         _openAi = new OpenAiCompatibleProvider(http);
         _anthropic = new AnthropicProvider(http);
         _gemini = new GeminiProvider(http);
@@ -35,6 +37,7 @@ public class ProviderFactory
         ProviderType.Anthropic => _anthropic,
         ProviderType.Gemini => _gemini,
         ProviderType.FooocusApi => _fooocus,
+        ProviderType.Custom => _connector,
         _ => _openAi
     };
 }
@@ -87,6 +90,10 @@ static class HistoryHelper
                 else if (a.Kind == "pdf")
                 {
                     text += $"\n\n--- PDF: {a.Name} ---\n{PdfHelper.ExtractText(bytes, a.Id)}\n--- End of PDF ---";
+                }
+                else if (a.Kind is "video" or "audio" or "file")
+                {
+                    text += $"\n\n[Generated {a.Kind}: {a.Name}]";
                 }
                 else if (a.Kind == "image")
                 {

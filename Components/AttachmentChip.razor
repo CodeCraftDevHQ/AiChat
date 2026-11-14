@@ -1,4 +1,6 @@
 @inject ChatState State
+@inject IJSRuntime JS
+@implements IDisposable
 
 @if (Attachment.Kind == "image")
 {
@@ -15,6 +17,28 @@
         {
             <button class="att-x" title="@L["حذف"]" @onclick="OnRemove" @onclick:stopPropagation="true">×</button>
         }
+    </div>
+}
+else if (Attachment.Kind is "video" or "audio")
+{
+    <div class="att-media @Attachment.Kind">
+        @if (_tooBig)
+        {
+            <div class="muted small">@L["فایل برای پخش در برنامه بزرگ است؛ آن را ذخیره کنید."]</div>
+        }
+        else if (Attachment.Kind == "video")
+        {
+            <video @ref="_media" controls preload="metadata" playsinline></video>
+        }
+        else
+        {
+            <audio @ref="_media" controls preload="metadata"></audio>
+        }
+        <div class="att-media-bar">
+            <span class="att-name" dir="auto">@Attachment.Name</span>
+            <small class="muted">@Attachment.SizeText</small>
+            <button class="btn sm" type="button" @onclick="SaveFile">⬇ @L["ذخیره"]</button>
+        </div>
     </div>
 }
 else
@@ -57,4 +81,36 @@ else
     }
 
     Task SaveFile() => State.SaveAttachmentAsync(Attachment);
+
+    ElementReference _media;
+    bool _tooBig, _mediaLoaded;
+    const long MaxPlayableBytes = 150L * 1024 * 1024;
+
+    protected override void OnParametersSet()
+    {
+        _tooBig = Attachment.Kind is "video" or "audio" && Attachment.Size > MaxPlayableBytes;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_mediaLoaded || _tooBig || Attachment.Kind is not ("video" or "audio")) return;
+        _mediaLoaded = true;
+        try
+        {
+            var bytes = await State.ReadAttachmentAsync(Attachment);
+            if (bytes == null) return;
+            using var stream = new MemoryStream(bytes);
+            await JS.InvokeVoidAsync("chat.attachMedia", _media, new DotNetStreamReference(stream), Attachment.MimeType);
+        }
+        catch
+        {
+            // the player stays empty; the save button still works
+        }
+    }
+
+    public void Dispose()
+    {
+        if (!_mediaLoaded) return;
+        try { _ = JS.InvokeVoidAsync("chat.releaseMedia", _media).AsTask().ContinueWith(_ => { }); } catch { }
+    }
 }

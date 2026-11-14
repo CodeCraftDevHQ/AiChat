@@ -138,7 +138,7 @@
                                     </div>
                                 }
 
-                                @if (_editing.Type != ProviderType.FooocusApi)
+                                @if (_editing.Type is not (ProviderType.FooocusApi or ProviderType.Custom))
                                 {
                                     <details class="adv" open="@_advOpen" @ontoggle="() => _advOpen = !_advOpen">
                                         <summary>@L["تنظیمات پیشرفته"]</summary>
@@ -173,6 +173,49 @@
                                             <label class="chk"><input type="checkbox" @bind="_editing.NoStream" /> @L["پاسخ یکجا (بدون استریم)"]</label>
                                         }
                                     </details>
+                                }
+
+                                @if (_editing.Type == ProviderType.Custom)
+                                {
+                                    <div class="img-opts">
+                                        <label class="lbl">@L["اتصال سفارشی"]</label>
+                                        <p class="muted small">@L["رفتار API با یک فایل JSON توصیف می‌شود: آدرس‌ها، بدنه‌ی درخواست، و محل نتیجه در پاسخ. با یک الگو شروع کنید و ویرایشش کنید."]</p>
+
+                                        <AppSelect Title="@L["الگوی اتصال"]" Value="" ValueChanged="OnTemplateChosen" Placeholder="@L["— شروع از یک الگو —"]"
+                                                   Options="@(ConnectorTemplates.All.Select(t => new AppSelect.SelectOption(t.Name, L[t.Name])).ToList())" />
+
+                                        <textarea class="inp code" rows="16" dir="ltr" autocapitalize="off" spellcheck="false"
+                                                  @bind="_editing.ConnectorJson" @bind:event="oninput"></textarea>
+
+                                        <div class="row">
+                                            <button class="btn" type="button" @onclick="CheckConnector">@L["بررسی"]</button>
+                                            <button class="btn" type="button" @onclick="ImportConnector">@L["وارد کردن فایل JSON"]</button>
+                                            <button class="btn" type="button" @onclick="ExportConnector">@L["ذخیره به‌صورت فایل"]</button>
+                                        </div>
+
+                                        @foreach (var inp in ConnectorSpec.Inputs(_editing.ConnectorJson))
+                                        {
+                                            <label class="lbl">@L[inp.Label]</label>
+                                            @if (inp.Type == "select" && inp.Options.Count > 0)
+                                            {
+                                                var id = inp.Id; var def = inp.Default;
+                                                <AppSelect Title="@L[inp.Label]" Value="@InputOf(id, def)" ValueChanged="v => _editing.ConnectorInputs[id] = v"
+                                                           Options="@(inp.Options.Select(o => new AppSelect.SelectOption(o, o)).ToList())" />
+                                            }
+                                            else if (inp.Type == "bool")
+                                            {
+                                                var id = inp.Id; var def = inp.Default;
+                                                <label class="chk"><input type="checkbox" checked="@(InputOf(id, def).Equals("true", StringComparison.OrdinalIgnoreCase))"
+                                                                          @onchange="e => _editing.ConnectorInputs[id] = ((bool)(e.Value ?? false)).ToString().ToLowerInvariant()" /> @L[inp.Label]</label>
+                                            }
+                                            else
+                                            {
+                                                var id = inp.Id; var def = inp.Default;
+                                                <input class="inp" dir="auto" type="@(inp.Type == "number" ? "number" : "text")" step="any"
+                                                       value="@InputOf(id, def)" @oninput="e => _editing.ConnectorInputs[id] = e.Value?.ToString() ?? string.Empty" />
+                                            }
+                                        }
+                                    </div>
                                 }
 
                                 <label class="lbl">@L["مدل‌ها (هر خط یک مدل)"]</label>
@@ -369,6 +412,53 @@
 
     bool _advOpen;
 
+    string InputOf(string id, string def) => _editing != null && _editing.ConnectorInputs.TryGetValue(id, out var v) ? v : def;
+
+    void OnTemplateChosen(string name)
+    {
+        var t = ConnectorTemplates.All.FirstOrDefault(x => x.Name == name);
+        if (t == null || _editing == null) return;
+        _editing.ConnectorJson = t.Json.Trim();
+        _editing.ConnectorInputs = new();
+        _editing.BaseUrl = t.BaseUrl;
+        if (_isNew || string.IsNullOrWhiteSpace(_editing.Name) || _editing.Name == "OpenAI") _editing.Name = L[t.Name];
+        _modelsText = "";
+        _status = L["الگو بارگذاری شد؛ در صورت نیاز آدرس و کلید را تنظیم کنید."];
+    }
+
+    void CheckConnector()
+    {
+        if (_editing == null) return;
+        var err = ConnectorSpec.Validate(_editing.ConnectorJson);
+        _status = err == null ? L["اتصال معتبر به نظر می‌رسد ✓"] : L["خطا در اتصال: "] + err;
+    }
+
+    async Task ImportConnector()
+    {
+        if (_editing == null) return;
+        try
+        {
+            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = L["انتخاب فایل JSON اتصال"] });
+            if (file == null) return;
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            _editing.ConnectorJson = await reader.ReadToEndAsync();
+            _editing.ConnectorInputs = new();
+            CheckConnector();
+        }
+        catch (Exception ex)
+        {
+            _status = L["خطا: "] + ex.Message;
+        }
+    }
+
+    Task ExportConnector()
+    {
+        if (_editing == null) return Task.CompletedTask;
+        var name = string.Concat((_editing.Name ?? "connector").Select(c => char.IsLetterOrDigit(c) ? c : '-')).Trim('-');
+        return State.SaveTextAsync((name.Length == 0 ? "connector" : name) + ".json", _editing.ConnectorJson ?? "");
+    }
+
     static readonly (string Key, string Label)[] AuthModes =
     {
         ("default", "پیش‌فرض (بر اساس نوع API)"),
@@ -438,6 +528,11 @@
             return;
         }
 
+        if (_editing.Type == ProviderType.Custom && ConnectorSpec.Validate(_editing.ConnectorJson) is { } connErr)
+        {
+            _status = L["خطا در اتصال: "] + connErr;
+            return;
+        }
         if (ValidateAdvanced() is { } advErr) { _status = advErr; _advOpen = true; return; }
 
         _editing.Name = _editing.Name.Trim();
