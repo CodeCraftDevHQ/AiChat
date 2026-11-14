@@ -75,6 +75,14 @@ public class StorageService
     public Task SaveModelTestsAsync(Dictionary<string, ModelTestResult> snapshot) =>
         WriteAsync("model_tests.json", JsonSerializer.Serialize(snapshot, Json));
 
+    // ---- user presets (saved API templates) ----
+
+    public async Task<List<ProviderConfig>> LoadUserPresetsAsync() =>
+        await ReadAsync<List<ProviderConfig>>("user_presets.json") ?? new();
+
+    public Task SaveUserPresetsAsync(List<ProviderConfig> list) =>
+        WriteAsync("user_presets.json", JsonSerializer.Serialize(list, Json));
+
     // ---- attachments ----
 
     static string AttachDir => Path.Combine(FileSystem.AppDataDirectory, "attachments");

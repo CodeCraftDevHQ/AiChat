@@ -12,6 +12,12 @@ public static class MauiProgram
 
         builder.Services.AddMauiBlazorWebView();
 
+#if WINDOWS
+        // WinUI's WebView2 does not accept files dragged from Explorer unless AllowDrop is set.
+        Microsoft.AspNetCore.Components.WebView.Maui.BlazorWebViewHandler.BlazorWebViewMapper
+            .AppendToMapping("AllowDrop", (handler, view) => handler.PlatformView.AllowDrop = true);
+#endif
+
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();

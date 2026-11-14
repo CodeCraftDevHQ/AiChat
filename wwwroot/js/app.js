@@ -50,7 +50,7 @@ window.chat = {
 
     // Sends dropped / pasted files to .NET as base64 (one call per file).
     async sendFiles(files, dotnet) {
-        const MAX = 6 * 1024 * 1024;
+        const MAX = 200 * 1024 * 1024; // the real limits are enforced (and configurable) in the app
         for (const f of files) {
             if (f.size > MAX) {
                 await dotnet.invokeMethodAsync('OnFileTooBig', f.name);
@@ -137,6 +137,76 @@ window.chat = {
 
         if (!window.chat.isCoarse()) setTimeout(() => el.focus(), 50);
     },
+
+    // Right-click menu (Cut / Copy / Paste / Select all) for desktop; touch devices use the system menu.
+    initContextMenu(dotnet, labels) {
+        window.chat.ctxLabels = labels;
+        if (window.__ctxInit) return;
+        window.__ctxInit = true;
+
+        let menu = null;
+        const close = () => { if (menu) { menu.remove(); menu = null; } };
+
+        document.addEventListener('contextmenu', (e) => {
+            if (window.chat.isCoarse()) return;
+            const t = e.target;
+            if (!(t instanceof Element)) return;
+            if (t.closest('a, button, summary, video, audio, .att-use')) return;
+
+            const editable = t.closest('textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), [contenteditable=true]');
+            const hasSel = editable && 'selectionStart' in editable
+                ? editable.selectionStart !== editable.selectionEnd
+                : String(window.getSelection() || '').length > 0;
+            const readOnly = editable && (editable.readOnly || editable.disabled);
+
+            e.preventDefault();
+            close();
+            const L = window.chat.ctxLabels || {};
+            const items = [];
+            if (editable && !readOnly) items.push([L.cut || 'Cut', hasSel, () => document.execCommand('cut')]);
+            items.push([L.copy || 'Copy', hasSel, () => document.execCommand('copy')]);
+            if (editable && !readOnly) items.push([L.paste || 'Paste', true, async () => {
+                const text = await dotnet.invokeMethodAsync('OnPasteRequest');
+                if (!text) return;
+                editable.focus();
+                if (!document.execCommand('insertText', false, text)) {
+                    const s = editable.selectionStart, en = editable.selectionEnd;
+                    editable.setRangeText(text, s, en, 'end');
+                    editable.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }]);
+            items.push([L.all || 'Select all', true, () => {
+                if (editable && 'select' in editable) editable.select();
+                else {
+                    const root = t.closest('.message, .msg, .bubble, .md, pre, p, li, td, div') || document.body;
+                    window.getSelection().selectAllChildren(root);
+                }
+            }]);
+
+            menu = document.createElement('div');
+            menu.className = 'ctx-menu';
+            for (const [label, enabled, action] of items) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = label;
+                b.disabled = !enabled;
+                b.addEventListener('mousedown', (ev) => ev.preventDefault()); // keep the focus / selection
+                b.addEventListener('click', async () => { close(); try { await action(); } catch { } });
+                menu.appendChild(b);
+            }
+            document.body.appendChild(menu);
+            const r = menu.getBoundingClientRect();
+            menu.style.left = Math.max(4, Math.min(e.clientX, window.innerWidth - r.width - 4)) + 'px';
+            menu.style.top = Math.max(4, Math.min(e.clientY, window.innerHeight - r.height - 4)) + 'px';
+        });
+        document.addEventListener('mousedown', (e) => { if (menu && !menu.contains(e.target)) close(); }, true);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); }, true);
+        window.addEventListener('blur', close);
+        window.addEventListener('resize', close);
+        document.addEventListener('scroll', close, true);
+    },
+
+    setCtxLabels(labels) { window.chat.ctxLabels = labels; },
 
     setValue(el, v) {
         if (!el) return;

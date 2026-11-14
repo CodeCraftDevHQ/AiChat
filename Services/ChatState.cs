@@ -203,9 +203,21 @@ public class ChatState
     // ------------------------------------------------------------ attachments
 
     public const int MaxAttachments = 6;
-    const int MaxImageBytes = 5 * 1024 * 1024; // Claude's per-image limit
-    const int MaxTextBytes = 512 * 1024;
-    const int MaxPdfBytes = 20 * 1024 * 1024;
+
+    // File size limits (MB), configurable in Settings -> Chat.
+    public int LimitImageMb { get; private set; } = 25;
+    public int LimitTextMb { get; private set; } = 2;
+    public int LimitPdfMb { get; private set; } = 50;
+    public bool ShrinkImages { get; private set; } = true;
+
+    public void SetLimits(int? imageMb = null, int? textMb = null, int? pdfMb = null, bool? shrink = null)
+    {
+        if (imageMb is int i) { LimitImageMb = Math.Clamp(i, 1, 500); Preferences.Default.Set("limit_image_mb", LimitImageMb); }
+        if (textMb is int t) { LimitTextMb = Math.Clamp(t, 1, 100); Preferences.Default.Set("limit_text_mb", LimitTextMb); }
+        if (pdfMb is int p) { LimitPdfMb = Math.Clamp(p, 1, 500); Preferences.Default.Set("limit_pdf_mb", LimitPdfMb); }
+        if (shrink is bool s) { ShrinkImages = s; Preferences.Default.Set("shrink_images", s); }
+        Notify();
+    }
 
     static readonly Dictionary<string, string> ImageMimes = new()
     {
@@ -254,7 +266,8 @@ public class ChatState
         var ext = Path.GetExtension(name).ToLowerInvariant();
         var isImage = ImageMimes.TryGetValue(ext, out var mime);
         var isPdf = ext == ".pdf";
-        var limit = isImage ? MaxImageBytes : isPdf ? MaxPdfBytes : MaxTextBytes;
+        var limitMb = isImage ? LimitImageMb : isPdf ? LimitPdfMb : LimitTextMb;
+        var limit = (long)limitMb * 1024 * 1024;
 
         using var ms = new MemoryStream();
         var buffer = new byte[81920];
@@ -263,10 +276,22 @@ public class ChatState
         {
             ms.Write(buffer, 0, n);
             if (ms.Length > limit)
-                return (null, L.F("«{0}» بزرگ‌تر از حد مجاز است (حداکثر {1}).", name, isImage ? L["5 مگابایت"] : isPdf ? L["20 مگابایت"] : L["512 کیلوبایت"]));
+                return (null, L.F("«{0}» بزرگ‌تر از حد مجاز است (حداکثر {1}).", name, L.F("{0} مگابایت", limitMb)));
         }
         var data = ms.ToArray();
         if (data.Length == 0) return (null, L.F("«{0}» خالی است.", name));
+
+        // big photos: shrink to 2048 px JPEG so that services with a 5 MB image limit accept them
+        if (isImage && ShrinkImages && ext != ".gif" && data.Length > 3 * 1024 * 1024)
+        {
+            var small = PhotoHelper.Downscale(data);
+            if (small.Length < data.Length)
+            {
+                data = small;
+                mime = "image/jpeg";
+                name = Path.ChangeExtension(name, ".jpg");
+            }
+        }
 
         if (isPdf)
         {
@@ -474,6 +499,22 @@ public class ChatState
         ModelTests = new(await _storage.LoadModelTestsAsync() ?? new());
         IsRtl = Preferences.Default.Get("rtl", true);
         SystemPrompt = Preferences.Default.Get("system_prompt", "");
+        LimitImageMb = Preferences.Default.Get("limit_image_mb", 25);
+        LimitTextMb = Preferences.Default.Get("limit_text_mb", 2);
+        LimitPdfMb = Preferences.Default.Get("limit_pdf_mb", 50);
+        ShrinkImages = Preferences.Default.Get("shrink_images", true);
+        UserPresets = await _storage.LoadUserPresetsAsync();
+        // first run: show the language page (people who already used the app are not asked)
+        if (!Preferences.Default.ContainsKey("lang_chosen") &&
+            (Preferences.Default.ContainsKey("lang") || Preferences.Default.ContainsKey("provider")))
+            Preferences.Default.Set("lang_chosen", true);
+        NeedsLanguagePick = !Preferences.Default.Get("lang_chosen", false);
+        if (NeedsLanguagePick && !Preferences.Default.ContainsKey("lang"))
+        {
+            var deviceFa = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fa";
+            L.SetLanguage(deviceFa ? "fa" : "en");
+            IsRtl = deviceFa;
+        }
         ShortcutsJson = Preferences.Default.Get("shortcuts_json", "");
         Shortcuts = ShortcutHelper.Parse(ShortcutsJson, out _);
 
@@ -916,6 +957,43 @@ public class ChatState
     {
         IsRtl = rtl;
         Preferences.Default.Set("rtl", rtl);
+        Notify();
+    }
+
+    // ------------------------------------------------------------ first-run language
+
+    public bool NeedsLanguagePick { get; private set; }
+
+    public void ChooseLanguage(string lang)
+    {
+        SetLanguage(lang);
+        Preferences.Default.Set("lang_chosen", true);
+        NeedsLanguagePick = false;
+        Notify();
+    }
+
+    // ------------------------------------------------------------ user presets (saved API templates)
+
+    public List<ProviderConfig> UserPresets { get; private set; } = new();
+
+    /// <summary>Saves the API settings (without the key) as a reusable template under the given name.</summary>
+    public async Task SaveUserPresetAsync(ProviderConfig cfg, string name)
+    {
+        var copy = cfg.Clone();
+        copy.Id = Guid.NewGuid().ToString("N");
+        copy.ApiKey = "";
+        copy.Name = name.Trim();
+        UserPresets.RemoveAll(p => p.Name.Equals(copy.Name, StringComparison.OrdinalIgnoreCase));
+        UserPresets.Add(copy);
+        UserPresets = UserPresets.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        await _storage.SaveUserPresetsAsync(UserPresets);
+        Notify();
+    }
+
+    public async Task DeleteUserPresetAsync(string name)
+    {
+        UserPresets.RemoveAll(p => p.Name == name);
+        await _storage.SaveUserPresetsAsync(UserPresets);
         Notify();
     }
 

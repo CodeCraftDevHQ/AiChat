@@ -1,0 +1,16 @@
+@inherits StateComponent
+
+@if (State.NeedsLanguagePick)
+{
+    <div class="lang-pick">
+        <div class="lang-card">
+            <h2 dir="ltr">Choose your language</h2>
+            <h2 dir="rtl">زبان خود را انتخاب کنید</h2>
+            <div class="lang-btns">
+                <button class="btn primary" @onclick='() => State.ChooseLanguage("fa")'>فارسی</button>
+                <button class="btn primary" @onclick='() => State.ChooseLanguage("en")'>English</button>
+            </div>
+            <p class="muted small" dir="ltr">@L["می‌توانید بعداً در تنظیمات تغییرش دهید."] </p>
+        </div>
+    </div>
+}

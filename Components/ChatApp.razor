@@ -33,6 +33,8 @@
             </div>
         }
 
+        <LanguageWelcome />
+
         <PickerSheet />
 
         <header class="topbar">
@@ -393,14 +395,29 @@
         await State.InitAsync();
     }
 
+    string? _ctxLang;
+
+    object CtxLabels() => new { cut = L["برش"], copy = L["کپی"], paste = L["چسباندن"], all = L["انتخاب همه"] };
+
+    [JSInvokable]
+    public async Task<string> OnPasteRequest() => await Clipboard.Default.GetTextAsync() ?? "";
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender && _ctxLang != null && _ctxLang != L.Language)
+        {
+            _ctxLang = L.Language;
+            await JS.InvokeVoidAsync("chat.setCtxLabels", CtxLabels());
+        }
+
         if (firstRender)
         {
             _self = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("chat.initComposer", _input, _self);
             await JS.InvokeVoidAsync("chat.initDrop", _self);
             await JS.InvokeVoidAsync("chat.initRail", _self);
+            await JS.InvokeVoidAsync("chat.initContextMenu", _self, CtxLabels());
+            _ctxLang = L.Language;
 
             // Android back button: close the top-most layer first, only then leave the app
             BackNavigation.Handler = () => State.HandleBack();

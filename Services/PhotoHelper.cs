@@ -26,7 +26,7 @@ public static class PhotoHelper
         return (name, data);
     }
 
-    /// <summary>Shrinks big JPEG/PNG photos to at most 2048 px and re-encodes them as JPEG (Android only).</summary>
+    /// <summary>Shrinks big JPEG/PNG photos to at most 2048 px and re-encodes them as JPEG (Android and Windows).</summary>
     public static byte[] Downscale(byte[] data)
     {
 #if ANDROID
@@ -51,6 +51,21 @@ public static class PhotoHelper
             using var outMs = new MemoryStream();
             scaled!.Compress(Android.Graphics.Bitmap.CompressFormat.Jpeg!, 85, outMs);
             return outMs.ToArray();
+        }
+        catch
+        {
+            return data;
+        }
+#elif WINDOWS
+        try
+        {
+            if (data.Length < 3 * 1024 * 1024) return data;
+            using var input = new MemoryStream(data);
+            var image = Microsoft.Maui.Graphics.Platform.PlatformImage.FromStream(input);
+            if (image == null) return data;
+            var small = image.Downsize(MaxSide, true);
+            var bytes = small.AsBytes(Microsoft.Maui.Graphics.ImageFormat.Jpeg, 0.85f);
+            return bytes.Length > 0 && bytes.Length < data.Length ? bytes : data;
         }
         catch
         {

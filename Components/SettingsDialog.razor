@@ -94,7 +94,20 @@
                             {
                                 <label class="lbl">@L["الگوی آماده"]</label>
                                 <AppSelect Title="@L["الگوی آماده"]" Value="" ValueChanged="OnPresetChosen" Placeholder="@L["— انتخاب کنید (اختیاری) —"]"
-                                           Options="@(ProviderDefaults.Presets.Select(pr => new AppSelect.SelectOption(pr.Name, L[pr.Name])).ToList())" />
+                                           Options="@PresetOptions()" />
+                                <div class="row">
+                                    <button class="btn sm" type="button" @onclick="SaveAsPreset">★ @L["ذخیره به‌عنوان الگو"]</button>
+                                </div>
+                                @if (State.UserPresets.Count > 0)
+                                {
+                                    <div class="chips my-presets">
+                                        @foreach (var up in State.UserPresets)
+                                        {
+                                            var n = up.Name;
+                                            <span class="chip">★ @n <button type="button" class="chip-x" title="@L["حذف الگو"]" @onclick="() => State.DeleteUserPresetAsync(n)">✕</button></span>
+                                        }
+                                    </div>
+                                }
 
                                 <label class="lbl">@L["نام نمایشی"]</label>
                                 <input class="inp" dir="auto" @bind="_editing.Name" @bind:event="oninput" />
@@ -172,7 +185,8 @@
                                         <textarea class="inp code" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder='[{"id":"temperature","type":"slider","min":0,"max":2,"step":0.1,"default":"0.7"}]'
                                                   @bind="_editing.Controls" @bind:event="oninput"></textarea>
                                         <p class="muted small">@L["هر کنترل یک فیلد در همین فرم می‌سازد (slider, number, select, bool, text). مقدارش را در پارامترهای اضافی بدنه با {{input.id}} بنویسید."]</p>
-                                        <div class="row"><button class="btn sm" type="button" @onclick="InsertControlsSample">@L["درج نمونه (temperature و max_tokens)"]</button></div>
+                                        <div class="row"><button class="btn sm" type="button" @onclick="InsertControlsSample">@L["درج نمونه (temperature و max_tokens)"]</button>
+                                            <button class="btn sm" type="button" @onclick="() => _editing.Controls = string.Empty">@L["پاک کردن"]</button></div>
                                         @foreach (var inp in ConnectorSpec.ControlInputs(_editing.Controls))
                                         {
                                             @if (inp.Type != "bool") { <label class="lbl">@L[inp.Label]</label> }
@@ -202,6 +216,7 @@
                                             <button class="btn" type="button" @onclick="CheckConnector">@L["بررسی"]</button>
                                             <button class="btn" type="button" @onclick="ImportConnector">@L["وارد کردن فایل JSON"]</button>
                                             <button class="btn" type="button" @onclick="ExportConnector">@L["ذخیره به‌صورت فایل"]</button>
+                                            <button class="btn" type="button" @onclick="() => { _editing.ConnectorJson = string.Empty; _editing.ConnectorInputs = new(); }">@L["پاک کردن"]</button>
                                         </div>
 
                                         @foreach (var inp in ConnectorSpec.Inputs(_editing.ConnectorJson))
@@ -250,6 +265,15 @@
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
 
+                            <label class="lbl">@L["محدودیت حجم فایل‌ها (مگابایت)"]</label>
+                            <div class="limits">
+                                <label>@L["عکس"] <input class="inp" type="number" min="1" max="500" value="@State.LimitImageMb" @onchange="e => State.SetLimits(imageMb: ToInt(e))" /></label>
+                                <label>@L["PDF"] <input class="inp" type="number" min="1" max="500" value="@State.LimitPdfMb" @onchange="e => State.SetLimits(pdfMb: ToInt(e))" /></label>
+                                <label>@L["متن و کد"] <input class="inp" type="number" min="1" max="100" value="@State.LimitTextMb" @onchange="e => State.SetLimits(textMb: ToInt(e))" /></label>
+                            </div>
+                            <label class="chk"><input type="checkbox" checked="@State.ShrinkImages" @onchange="e => State.SetLimits(shrink: (bool)(e.Value ?? false))" /> @L["کوچک‌کردن خودکار عکس‌های بزرگ (بیش از ۳ مگابایت)"]</label>
+                            <p class="muted small">@L["بعضی سرویس‌ها (مثل Claude) عکس بزرگ‌تر از ۵ مگابایت را نمی‌پذیرند؛ کوچک‌کردن خودکار آن را به حدود ۲۰۴۸ پیکسل (JPEG) می‌رساند."]</p>
+
                             <label class="lbl">@L["میانبرها (دستورهای /)"]</label>
                             <p class="muted small">@L["با نوشتن / در ابتدای پیام، میانبرها پیشنهاد می‌شوند. {{text}} جای متن بعد از دستور را می‌گیرد."]</p>
                             <textarea class="inp code" rows="10" dir="ltr" autocapitalize="off" spellcheck="false"
@@ -259,6 +283,7 @@
                                 <button class="btn" type="button" @onclick="InsertShortcutSample">@L["درج نمونه"]</button>
                                 <button class="btn" type="button" @onclick="ImportShortcuts">@L["وارد کردن فایل JSON"]</button>
                                 <button class="btn" type="button" @onclick="ExportShortcuts">@L["ذخیره به‌صورت فایل"]</button>
+                                <button class="btn" type="button" @onclick="ClearShortcuts">@L["پاک کردن"]</button>
                             </div>
                             @if (_scStatus != null)
                             {
@@ -400,8 +425,37 @@
         OnTypeChanged();
     }
 
+    List<AppSelect.SelectOption> PresetOptions() =>
+        State.UserPresets.Select(u => new AppSelect.SelectOption("user:" + u.Name, "★ " + u.Name))
+            .Concat(ProviderDefaults.Presets.Select(pr => new AppSelect.SelectOption(pr.Name, L[pr.Name])))
+            .ToList();
+
+    async Task SaveAsPreset()
+    {
+        if (_editing == null) return;
+        if (string.IsNullOrWhiteSpace(_editing.Name)) { _status = L["اول یک نام برای این API بنویسید."]; return; }
+        ApplyModelsText();
+        await State.SaveUserPresetAsync(_editing, _editing.Name);
+        _status = L["الگو ذخیره شد ✓"];
+    }
+
+    void ApplyModelsText() =>
+        _editing!.Models = _modelsText.Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).Distinct().ToList();
+
     void OnPresetChosen(string name)
     {
+        if (name.StartsWith("user:") && _editing != null)
+        {
+            var up = State.UserPresets.FirstOrDefault(u => u.Name == name[5..]);
+            if (up == null) return;
+            var c = up.Clone();
+            c.Id = _editing.Id;
+            c.ApiKey = _editing.ApiKey;
+            _editing = c;
+            _modelsText = string.Join("\n", c.Models);
+            _status = L["الگو بارگذاری شد؛ در صورت نیاز آدرس و کلید را تنظیم کنید."];
+            return;
+        }
         var preset = ProviderDefaults.Presets.FirstOrDefault(p => p.Name == name);
         if (preset == null || _editing == null) return;
         _editing.Name = L[preset.Name];
@@ -472,6 +526,8 @@
         var err = State.SetShortcutsJson(ScText);
         _scStatus = err == null ? L["ذخیره شد ✓"] : L["خطا: "] + err;
     }
+
+    void ClearShortcuts() { _scText = string.Empty; _scStatus = null; }
 
     void InsertShortcutSample() { _scText = ShortcutHelper.Sample; _scStatus = null; }
 
