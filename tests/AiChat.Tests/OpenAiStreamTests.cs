@@ -22,12 +22,12 @@ public class OpenAiStreamTests
             "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}\n\ndata: [DONE]\n\n"));
 
     [Fact]
-    public async Task Reasoning_content_is_shown_as_a_quote_before_the_answer()
+    public async Task Reasoning_content_is_wrapped_in_think_tags_before_the_answer()
     {
         var all = await Stream(
             "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"think\\nmore\"}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{\"content\":\"Answer\"}}]}\n\ndata: [DONE]\n\n");
-        Assert.Contains("> 💭 think\n> more", all);
+        Assert.StartsWith("<think>think\nmore</think>", all);
         Assert.EndsWith("Answer", all);
     }
 
@@ -35,6 +35,6 @@ public class OpenAiStreamTests
     public async Task Reasoning_only_answer_is_not_lost()
     {
         var all = await Stream("data: {\"choices\":[{\"delta\":{\"reasoning\":\"only thoughts\"}}]}\n\ndata: [DONE]\n\n");
-        Assert.Contains("only thoughts", all);
+        Assert.Equal("<think>only thoughts</think>", all);
     }
 }

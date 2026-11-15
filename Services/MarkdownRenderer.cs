@@ -37,10 +37,58 @@ public static class MarkdownRenderer
         $"<button type=\"button\" class=\"code-save\">{_save}</button>" +
         $"<button type=\"button\" class=\"code-copy\" data-done=\"{_copied}\" data-fail=\"{_failed}\">{_copy}</button>";
 
+    static string _think = "💭 فکر کردن مدل";
+
+    static string _thinkMode = "auto";
+    static int _thinkHeight = 320;
+
+    /// <param name="mode">auto (open while thinking) | open | closed | hidden</param>
+    public static void SetThinkOptions(string mode, int maxHeightPx)
+    {
+        _thinkMode = mode;
+        _thinkHeight = maxHeightPx;
+        LabelsVersion++;
+    }
+
+    public static void SetThinkLabel(string label)
+    {
+        _think = label;
+        LabelsVersion++;
+    }
+
+    // <think>...</think> (also while it is still streaming, i.e. not closed yet)
+    static readonly Regex Think = new(@"<think>(.*?)(?:</think>|\z)", RegexOptions.Singleline | RegexOptions.Compiled);
+
+    /// <summary>Removes the thinking blocks (used before the text is sent back to a model).</summary>
+    public static string StripThink(string text) =>
+        text.Contains("<think>", StringComparison.Ordinal) ? Think.Replace(text, "").TrimStart() : text;
+
     public static string ToHtml(string? markdown)
     {
         if (string.IsNullOrEmpty(markdown)) return "";
+        if (!markdown.Contains("<think>", StringComparison.Ordinal)) return Render(markdown);
 
+        // thinking goes into a collapsible box (open while the model is still thinking)
+        var sb = new System.Text.StringBuilder();
+        var pos = 0;
+        foreach (Match m in Think.Matches(markdown))
+        {
+            sb.Append(Render(markdown[pos..m.Index]));
+            var closed = m.Value.EndsWith("</think>", StringComparison.Ordinal);
+            var inner = m.Groups[1].Value.Trim();
+            var open = _thinkMode switch { "open" => true, "closed" => false, _ => !closed };
+            if (inner.Length > 0 && _thinkMode != "hidden")
+                sb.Append("<details class=\"think\"").Append(open ? " open" : "").Append("><summary>").Append(_think)
+                  .Append("</summary><div class=\"think-body\" style=\"max-height:").Append(_thinkHeight).Append("px\">").Append(Render(inner)).Append("</div></details>");
+            pos = m.Index + m.Length;
+        }
+        sb.Append(Render(markdown[pos..]));
+        return sb.ToString();
+    }
+
+    static string Render(string markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown)) return "";
         var html = Markdown.ToHtml(markdown, Pipeline);
         html = BlockTag.Replace(html, "<$1 dir=\"auto\"");
         html = PreWithLang.Replace(html, "<pre data-lang=\"$1\">" + CopyButton + "<code class=\"language-$1\">");

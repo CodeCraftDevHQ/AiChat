@@ -21,5 +21,6 @@ public class Loc
     {
         Language = lang == "en" ? "en" : "fa";
         MarkdownRenderer.SetLabels(this["کپی"], this["ذخیره"], this["کپی شد ✓"], this["ناموفق"]);
+        MarkdownRenderer.SetThinkLabel(this["💭 فکر کردن مدل"]);
     }
 }

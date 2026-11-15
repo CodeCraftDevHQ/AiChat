@@ -141,4 +141,79 @@ public class WebSearchTests
         // empty template -> default text
         Assert.Contains("cite sources", WebSearchService.BuildContext(res, DateTime.Today, ""));
     }
+
+    const string Page = """
+    <html><head><title>t</title><style>p{color:red}</style><script>var x = "secret";</script></head>
+    <body><nav>Menu Home About</nav>
+    <article><h1>Big &amp; News</h1><p>First paragraph of the story, long enough to be the main content of this article page.</p>
+    <p>Second paragraph with more words so the article block passes the minimum length used to prefer it over the whole body text of the page, which also has footer junk.</p>
+    <p>Third paragraph, just to be safe about the length of the article block in this test document.</p></article>
+    <footer>Copyright junk</footer></body></html>
+    """;
+
+    [Fact]
+    public void ExtractText_keeps_the_article_and_drops_scripts_and_menus()
+    {
+        var text = WebSearchService.ExtractText(Page, 5000);
+        Assert.Contains("Big & News", text);
+        Assert.Contains("Second paragraph", text);
+        Assert.DoesNotContain("secret", text);
+        Assert.DoesNotContain("Menu Home", text);
+        Assert.DoesNotContain("Copyright", text);
+        Assert.True(WebSearchService.ExtractText(Page, 50).Length <= 52);
+    }
+
+    [Theory]
+    [InlineData("https://example.com/a", true)]
+    [InlineData("http://example.com", true)]
+    [InlineData("ftp://example.com", false)]
+    [InlineData("file:///c:/x", false)]
+    [InlineData("http://localhost:8080/", false)]
+    [InlineData("http://127.0.0.1/", false)]
+    [InlineData("http://192.168.1.5/", false)]
+    [InlineData("http://10.0.0.1/", false)]
+    [InlineData("http://172.20.1.1/", false)]
+    [InlineData("http://169.254.169.254/", false)]
+    [InlineData("http://printer.local/", false)]
+    [InlineData("not a url", false)]
+    public void Only_public_web_addresses_are_opened(string url, bool allowed) =>
+        Assert.Equal(allowed, WebSearchService.IsAllowed(url));
+
+    [Fact]
+    public void Blocked_domains_include_subdomains()
+    {
+        var blocked = new[] { "bad.com" };
+        Assert.False(WebSearchService.IsAllowed("https://bad.com/x", blocked));
+        Assert.False(WebSearchService.IsAllowed("https://www.bad.com/x", blocked));
+        Assert.True(WebSearchService.IsAllowed("https://notbad.com/x", blocked));
+    }
+
+    [Fact]
+    public async Task Pages_are_read_for_the_first_results_only_and_failures_keep_the_snippet()
+    {
+        var h = new FakeHandler(r => r.Url.Contains("ok.test") ? FakeHandler.Text(Page, "text/html")
+            : r.Url.Contains("fail.test") ? FakeHandler.Json("{}", System.Net.HttpStatusCode.Forbidden)
+            : FakeHandler.Text(Page, "text/html"));
+        var s = new WebSearchService(new HttpClient(h));
+        var input = new List<SearchResult>
+        {
+            new("A", "https://ok.test/a", "sa"), new("B", "https://fail.test/b", "sb"),
+            new("C", "https://third.test/c", "sc"), new("Local", "http://localhost/x", "sl")
+        };
+        var r = await s.ReadPagesAsync(input, new SearchOptions { PageCount = 2, BlockedDomains = "blocked.test" }, default);
+        Assert.Contains("First paragraph", r[0].Content);
+        Assert.Equal("", r[1].Content);   // HTTP error -> snippet only
+        Assert.Equal("", r[2].Content);   // beyond PageCount
+        Assert.Equal(2, h.Requests.Count);
+        Assert.Contains("Page text:", WebSearchService.BuildContext(r, DateTime.Today));
+    }
+
+    [Fact]
+    public async Task PageCount_zero_opens_nothing()
+    {
+        var h = new FakeHandler(_ => throw new Exception("no http"));
+        var s = new WebSearchService(new HttpClient(h));
+        var r = await s.ReadPagesAsync(new List<SearchResult> { new("A", "https://a.test", "") }, new SearchOptions(), default);
+        Assert.Single(r);
+    }
 }

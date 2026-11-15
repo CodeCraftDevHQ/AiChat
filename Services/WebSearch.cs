@@ -5,7 +5,11 @@ using System.Text.RegularExpressions;
 
 namespace AiChat.Services;
 
-public record SearchResult(string Title, string Url, string Snippet);
+public record SearchResult(string Title, string Url, string Snippet)
+{
+    /// <summary>Text of the page itself (only when "read pages" is on).</summary>
+    public string Content { get; init; } = "";
+}
 
 /// <summary>
 /// Web search for any chat model: the results are put into the system prompt (no tool-calling needed),
@@ -37,6 +41,14 @@ public class SearchOptions
     public string CustomSnippet { get; set; } = "$.content";
 
     public int SafeCount => Math.Clamp(Count, 1, 10);
+
+    // reading the pages themselves
+    /// <summary>How many of the first results are opened and read (0 = off).</summary>
+    public int PageCount { get; set; }
+    public int PageChars { get; set; } = 3000;
+    public int PageTimeoutSec { get; set; } = 10;
+    /// <summary>One domain per line; these sites are never opened (and subdomains of them).</summary>
+    public string BlockedDomains { get; set; } = "";
 }
 
 public class WebSearchService
@@ -139,6 +151,88 @@ public class WebSearchService
         return list;
     }
 
+
+    // ---------------------------------------------------------------- reading the pages
+
+    /// <summary>Opens the first <see cref="SearchOptions.PageCount"/> results and adds their text. Failures just leave the snippet.</summary>
+    public async Task<List<SearchResult>> ReadPagesAsync(List<SearchResult> results, SearchOptions opt, CancellationToken ct)
+    {
+        var n = Math.Clamp(opt.PageCount, 0, 10);
+        if (n == 0 || results.Count == 0) return results;
+        var chars = Math.Clamp(opt.PageChars, 300, 20000);
+        var blocked = opt.BlockedDomains.Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(d => d.ToLowerInvariant().TrimStart('*', '.')).Where(d => d.Length > 0).ToList();
+
+        async Task<SearchResult> One(SearchResult r)
+        {
+            if (!IsAllowed(r.Url, blocked)) return r;
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(opt.PageTimeoutSec, 3, 60)));
+                using var req = new HttpRequestMessage(HttpMethod.Get, r.Url);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
+                req.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml");
+                using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+                if (!resp.IsSuccessStatusCode) return r;
+                var type = resp.Content.Headers.ContentType?.MediaType ?? "";
+                if (type.Length > 0 && !type.Contains("html", StringComparison.OrdinalIgnoreCase) && !type.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+                    return r;
+
+                // read at most ~1.5 MB
+                await using var stream = await resp.Content.ReadAsStreamAsync(cts.Token);
+                var buf = new byte[1_500_000];
+                var total = 0;
+                int read;
+                while (total < buf.Length && (read = await stream.ReadAsync(buf.AsMemory(total, buf.Length - total), cts.Token)) > 0) total += read;
+                var html = Encoding.UTF8.GetString(buf, 0, total);
+                var text = ExtractText(html, chars);
+                return text.Length > 0 ? r with { Content = text } : r;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch { return r; }
+        }
+
+        var tasks = results.Select((r, i) => i < n ? One(r) : Task.FromResult(r)).ToArray();
+        return (await Task.WhenAll(tasks)).ToList();
+    }
+
+    /// <summary>Only http(s), no local/private addresses, not on the user's block list.</summary>
+    public static bool IsAllowed(string url, IReadOnlyCollection<string>? blocked = null)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || (u.Scheme != "http" && u.Scheme != "https")) return false;
+        var host = u.Host.ToLowerInvariant();
+        if (host == "localhost" || host.EndsWith(".local") || host.EndsWith(".internal")) return false;
+        if (System.Net.IPAddress.TryParse(host, out var ip))
+        {
+            if (System.Net.IPAddress.IsLoopback(ip)) return false;
+            var b = ip.GetAddressBytes();
+            if (b.Length == 4 && (b[0] == 10 || b[0] == 127 || b[0] == 0 || (b[0] == 169 && b[1] == 254) ||
+                                  (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168))) return false;
+            if (b.Length == 16) return false; // IPv6 literals: not worth the risk
+        }
+        return blocked == null || !blocked.Any(d => host == d || host.EndsWith("." + d));
+    }
+
+    static readonly Regex DropBlocks = new(@"<(script|style|noscript|svg|nav|header|footer|aside|form|iframe|template)\b[^>]*>.*?</\1\s*>|<!--.*?-->",
+        RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    static readonly Regex MainBlock = new(@"<(article|main)\b[^>]*>(.*?)</\1\s*>", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    static readonly Regex BreakTags = new(@"</?(p|div|br|li|tr|h[1-6]|section|blockquote|pre|table|ul|ol)\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Readable text of an HTML page (main article if there is one), cut to maxChars.</summary>
+    public static string ExtractText(string html, int maxChars)
+    {
+        html = DropBlocks.Replace(html, " ");
+        var main = MainBlock.Match(html);
+        if (main.Success && main.Groups[2].Length > 400) html = main.Groups[2].Value;
+
+        html = BreakTags.Replace(html, "\n");
+        var text = WebUtility.HtmlDecode(Regex.Replace(html, "<[^>]+>", " "));
+        var lines = text.Split('\n').Select(l => Regex.Replace(l, @"\s+", " ").Trim()).Where(l => l.Length > 1);
+        text = string.Join("\n", lines);
+        return text.Length > maxChars ? text[..maxChars].TrimEnd() + "…" : text;
+    }
+
     // ---------------------------------------------------------------- parsing
 
     static string Clean(string s, int maxLen = 400)
@@ -232,6 +326,7 @@ public class WebSearchService
             if (i > 0) sb.AppendLine();
             sb.AppendLine($"[{i + 1}] {r.Title}").AppendLine(r.Url);
             if (r.Snippet.Length > 0) sb.AppendLine(r.Snippet);
+            if (r.Content.Length > 0) sb.AppendLine("Page text:").AppendLine(r.Content);
         }
         var t = string.IsNullOrWhiteSpace(template) ? DefaultPrompt : template;
         if (!t.Contains("{results}")) t += "\n\n{results}";

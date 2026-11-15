@@ -506,6 +506,9 @@ public class ChatState
         UserPresets = await _storage.LoadUserPresetsAsync();
         LockAfterMin = Preferences.Default.Get("lock_after_min", 0);
         WebSearchOn = Preferences.Default.Get("web_search", false);
+        ThinkMode = Preferences.Default.Get("think_mode", "auto");
+        ThinkMaxHeight = Preferences.Default.Get("think_h", 320);
+        MarkdownRenderer.SetThinkOptions(ThinkMode, ThinkMaxHeight);
         try { SearchOpts = System.Text.Json.JsonSerializer.Deserialize<SearchOptions>(Preferences.Default.Get("search_opts", "")) ?? new(); }
         catch { SearchOpts = new(); }
         SearchEngine = Preferences.Default.Get("search_engine", WebSearchService.Ddg);
@@ -578,11 +581,11 @@ public class ChatState
             await foreach (var chunk in impl.StreamAsync(provider, model, new List<ChatMessage> { ask }, null, null, qc.Token))
             {
                 if (!chunk.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) sb.Append(chunk);
-                if (sb.Length > 600) break;
+                if (sb.Length > 4000) break;
             }
-            // skip a quoted "thinking" block, take the first real line
-            var line = sb.ToString().Split('\n').Select(l => l.Trim())
-                .FirstOrDefault(l => l.Length > 0 && !l.StartsWith('>')) ?? "";
+            // drop the model's "thinking" block, take the first real line
+            var line = MarkdownRenderer.StripThink(sb.ToString()).Split('\n').Select(l => l.Trim())
+                .FirstOrDefault(l => l.Length > 0) ?? "";
             line = line.Trim('"', '\'', '`', ' ');
             if (line.Length is > 0 and <= 300)
             {
@@ -593,6 +596,26 @@ public class ChatState
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) { _log.Warn("Could not build a search query with the model: " + ex.Message); }
         return fallback;
+    }
+
+    // ---- display of the model's "thinking"
+    public string ThinkMode { get; private set; } = "auto";   // auto | open | closed | hidden
+    public int ThinkMaxHeight { get; private set; } = 320;
+
+    public void SetThinkMode(string mode)
+    {
+        ThinkMode = mode;
+        Preferences.Default.Set("think_mode", mode);
+        MarkdownRenderer.SetThinkOptions(ThinkMode, ThinkMaxHeight);
+        Notify();
+    }
+
+    public void SetThinkMaxHeight(int px)
+    {
+        ThinkMaxHeight = Math.Clamp(px, 100, 900);
+        Preferences.Default.Set("think_h", ThinkMaxHeight);
+        MarkdownRenderer.SetThinkOptions(ThinkMode, ThinkMaxHeight);
+        Notify();
     }
 
     public bool WebSearchOn { get; private set; }
@@ -1640,11 +1663,17 @@ public class ChatState
                 try
                 {
                     using var sc = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    sc.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(SearchOpts.TimeoutSec, 5, 120)));
+                    sc.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(SearchOpts.TimeoutSec, 5, 120) + (SearchOpts.PageCount > 0 ? Math.Clamp(SearchOpts.PageTimeoutSec, 3, 60) + 5 : 0)));
                     var q = query;
                     if (SearchOpts.QueryMode == "ai")
                         q = await BuildSearchQueryAsync(impl, provider, model, history, query, ct);
                     found = await Search.SearchAsync(SearchEngine, q, SearchKey, SearchBaseUrl, SearchOpts, sc.Token);
+                    if (found.Count > 0 && SearchOpts.PageCount > 0)
+                    {
+                        GenStatus = L["📄 در حال خواندن صفحه‌ها..."];
+                        Notify();
+                        found = await Search.ReadPagesAsync(found, SearchOpts, sc.Token);
+                    }
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {

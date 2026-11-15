@@ -66,7 +66,8 @@ static class HistoryHelper
         var result = new List<Turn>();
         foreach (var m in history)
         {
-            var text = m.Content ?? "";
+            // the model's own "thinking" is shown to the user but not sent back
+            var text = m.Role == "assistant" ? MarkdownRenderer.StripThink(m.Content ?? "") : m.Content ?? "";
             var images = new List<(string, string)>();
             var pdfs = new List<string>();
 
@@ -551,7 +552,11 @@ public class OpenAiCompatibleProvider : IChatProvider
         var inReason = false;
         await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
         {
-            if (data == "[DONE]") yield break;
+            if (data == "[DONE]")
+            {
+                if (inReason) yield return "</think>";
+                yield break;
+            }
 
             string? text = null, reason = null;
             try
@@ -597,15 +602,16 @@ public class OpenAiCompatibleProvider : IChatProvider
 
             if (!string.IsNullOrEmpty(reason))
             {
-                if (!inReason) { yield return "\n\n> 💭 "; inReason = true; }
-                yield return reason.Replace("\n", "\n> ");
+                if (!inReason) { yield return "<think>"; inReason = true; }
+                yield return reason;
             }
             if (!string.IsNullOrEmpty(text))
             {
-                if (inReason) { yield return "\n\n"; inReason = false; }
+                if (inReason) { yield return "</think>\n\n"; inReason = false; }
                 yield return text;
             }
         }
+        if (inReason) yield return "</think>";
     }
 
     public async Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct)

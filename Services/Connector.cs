@@ -425,8 +425,8 @@ sealed class ConnectorRun
         var reasoning = Join(JPath.Text(st["reasoningPath"]));
         if (reasoning.Length > 0)
         {
-            if (!_inReason) { outp.Add("\n\n> 💭 "); _inReason = true; }
-            outp.Add(reasoning.Replace("\n", "\n> "));
+            if (!_inReason) { outp.Add("<think>"); _inReason = true; }
+            outp.Add(reasoning);
         }
 
         var textPath = JPath.Text(st["textPath"]);
@@ -434,7 +434,7 @@ sealed class ConnectorRun
         var text = Join(textPath);
         if (text.Length > 0)
         {
-            if (_inReason) { outp.Add("\n\n"); _inReason = false; }
+            if (_inReason) { outp.Add("</think>\n\n"); _inReason = false; }
             outp.Add(text);
         }
         return outp;

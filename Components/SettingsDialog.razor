@@ -291,6 +291,12 @@
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
 
+                            <label class="lbl">@L["نمایش فکر کردن مدل"]</label>
+                            <AppSelect Title="@L["نمایش فکر کردن مدل"]" Value="@State.ThinkMode" ValueChanged="State.SetThinkMode"
+                                       Options="@(new AppSelect.SelectOption[] { new("auto", L["باز هنگام فکر، بسته بعد از آن"]), new("open", L["همیشه باز"]), new("closed", L["همیشه بسته"]), new("hidden", L["نمایش داده نشود"]) })" />
+                            <label class="lbl">@L["حداکثر ارتفاع جعبه‌ی فکر"]: @State.ThinkMaxHeight px</label>
+                            <input type="range" class="range" min="100" max="900" step="20" value="@State.ThinkMaxHeight" @oninput="e => State.SetThinkMaxHeight(ToInt(e))" />
+
                             <label class="lbl">@L["جستجو در وب"]</label>
                             <p class="muted small">@L["با دکمه‌ی 🌐 کنار کادر پیام روشن می‌شود. نتایج جستجو به مدل داده می‌شود و منابع زیر پاسخ می‌آید؛ با هر مدل چتی کار می‌کند."]</p>
                             <AppSelect Title="@L["موتور جستجو"]" Value="@State.SearchEngine" ValueChanged="State.SetSearchEngine"
@@ -326,6 +332,21 @@
 
                                 <label class="lbl">@L["حداکثر زمان انتظار (ثانیه)"]</label>
                                 <input class="inp" type="number" min="5" max="120" dir="ltr" value="@so.TimeoutSec" @onchange="e => Opt(o => o.TimeoutSec = Math.Clamp(ToInt(e), 5, 120))" />
+
+                                <label class="lbl">@L["خواندن متن صفحه‌ها"]: @(so.PageCount == 0 ? L["خاموش"] : so.PageCount.ToString())</label>
+                                <input type="range" class="range" min="0" max="5" step="1" value="@so.PageCount" @oninput="e => Opt(o => o.PageCount = ToInt(e))" />
+                                <p class="muted small">@L["اگر روشن باشد، متن چند نتیجه‌ی اول هم باز و خوانده می‌شود (دقیق‌تر، ولی کندتر و پر مصرف‌تر)."]</p>
+                                @if (so.PageCount > 0)
+                                {
+                                    <label class="lbl">@L["حداکثر نویسه‌ی هر صفحه"]: @so.PageChars</label>
+                                    <input type="range" class="range" min="500" max="12000" step="500" value="@so.PageChars" @oninput="e => Opt(o => o.PageChars = ToInt(e))" />
+
+                                    <label class="lbl">@L["حداکثر زمان باز کردن هر صفحه (ثانیه)"]</label>
+                                    <input class="inp" type="number" min="3" max="60" dir="ltr" value="@so.PageTimeoutSec" @onchange="e => Opt(o => o.PageTimeoutSec = Math.Clamp(ToInt(e), 3, 60))" />
+
+                                    <label class="lbl">@L["سایت‌های مسدود (هر خط یک دامنه)"]</label>
+                                    <textarea class="inp" rows="3" dir="ltr" placeholder="example.com" value="@so.BlockedDomains" @onchange="e => Opt(o => o.BlockedDomains = e.Value?.ToString() ?? string.Empty)"></textarea>
+                                }
 
                                 <label class="check" style="margin-top:10px">
                                     <input type="checkbox" checked="@so.ShowSources" @onchange="e => Opt(o => o.ShowSources = e.Value is true)" />
