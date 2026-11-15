@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- Plain net10.0 test project: it compiles the MAUI-free source files of the app directly (no MAUI needed). -->
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+		<RootNamespace>AiChat.Tests</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+		<PackageReference Include="xunit" Version="2.*" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+		<PackageReference Include="Markdig" Version="0.*" />
+		<PackageReference Include="PdfPig" Version="0.1.*" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="..\..\Models\Models.cs" Link="App\Models.cs" />
+		<Compile Include="..\..\Services\Connector.cs" Link="App\Connector.cs" />
+		<Compile Include="..\..\Services\ConnectorTemplates.cs" Link="App\ConnectorTemplates.cs" />
+		<Compile Include="..\..\Services\Providers.cs" Link="App\Providers.cs" />
+		<Compile Include="..\..\Services\Shortcuts.cs" Link="App\Shortcuts.cs" />
+		<Compile Include="..\..\Services\MarkdownRenderer.cs" Link="App\MarkdownRenderer.cs" />
+		<Compile Include="..\..\Services\PdfHelper.cs" Link="App\PdfHelper.cs" />
+	</ItemGroup>
+
+</Project>

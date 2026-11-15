@@ -46,4 +46,14 @@
 		<PackageReference Include="PdfPig" Version="0.1.*" />
 	</ItemGroup>
 
+
+	<!-- The test project lives in tests/ and must not be compiled into the app -->
+	<ItemGroup>
+		<Compile Remove="tests\**" />
+		<EmbeddedResource Remove="tests\**" />
+		<None Remove="tests\**" />
+		<Content Remove="tests\**" />
+		<RazorComponent Remove="tests\**" />
+	</ItemGroup>
+
 </Project>
