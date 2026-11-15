@@ -97,17 +97,12 @@
                                            Options="@PresetOptions()" />
                                 <div class="row">
                                     <button class="btn sm" type="button" @onclick="SaveAsPreset">★ @L["ذخیره به‌عنوان الگو"]</button>
+                                    @if (State.UserPresets.Count > 0)
+                                    {
+                                        <button class="btn sm" type="button" @onclick="() => OpenDlg(0)">@L["مدیریت الگوهای من"] (@State.UserPresets.Count)</button>
+                                    }
                                 </div>
-                                @if (State.UserPresets.Count > 0)
-                                {
-                                    <div class="chips my-presets">
-                                        @foreach (var up in State.UserPresets)
-                                        {
-                                            var n = up.Name;
-                                            <span class="chip">★ @n <button type="button" class="chip-x" title="@L["حذف الگو"]" @onclick="() => State.DeleteUserPresetAsync(n)">✕</button></span>
-                                        }
-                                    </div>
-                                }
+
 
                                 <label class="lbl">@L["نام نمایشی"]</label>
                                 <input class="inp" dir="auto" @bind="_editing.Name" @bind:event="oninput" />
@@ -208,6 +203,13 @@
 
                                         <AppSelect Title="@L["الگوی اتصال"]" Value="" ValueChanged="OnTemplateChosen" Placeholder="@L["— شروع از یک الگو —"]"
                                                    Options="@(ConnectorTemplates.All.Select(t => new AppSelect.SelectOption(t.Name, L[t.Name])).ToList())" />
+                                        <div class="row">
+                                            <button class="btn sm" type="button" @onclick="() => OpenDlg(1)">❓ @L["راهنما و پرامپت هوش مصنوعی"]</button>
+                                        </div>
+                                        @if (ConnectorHelp() is { Length: > 0 } help)
+                                        {
+                                            <p class="muted small" dir="ltr">ℹ @help</p>
+                                        }
 
                                         <textarea class="inp code" rows="16" dir="ltr" autocapitalize="off" spellcheck="false"
                                                   @bind="_editing.ConnectorJson" @bind:event="oninput"></textarea>
@@ -319,7 +321,101 @@
     </div>
 </div>
 
+@if (_dlg == 0)
+{
+    <div class="modal-backdrop" @onclick="CloseDlg">
+        <div class="sheet wide" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>★ @L["الگوهای من"]</strong>
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="CloseDlg">✕</button>
+            </div>
+            <div class="tpl-list">
+                @foreach (var up in State.UserPresets)
+                {
+                    var n = up.Name;
+                    <div class="tpl-row">
+                        <div class="tpl-name"><b dir="auto">@n</b><span class="muted small">@ProviderDefaults.TypeLabel(up.Type)</span></div>
+                        <button class="btn sm" type="button" @onclick="() => UsePreset(n)">@L["استفاده"]</button>
+                        <button class="btn sm danger" type="button" @onclick="() => State.DeleteUserPresetAsync(n)">@L["حذف"]</button>
+                    </div>
+                }
+                @if (State.UserPresets.Count == 0)
+                {
+                    <p class="muted">@L["هنوز الگویی ذخیره نکرده‌اید."]</p>
+                }
+            </div>
+        </div>
+    </div>
+}
+else if (_dlg == 1)
+{
+    <div class="modal-backdrop" @onclick="CloseDlg">
+        <div class="sheet wide help-sheet" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>❓ @L["اتصال سفارشی چیست؟"]</strong>
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="CloseDlg">✕</button>
+            </div>
+            <div class="help-body">
+                <p><b>@L["کاربرد"]</b><br />@L["با اتصال سفارشی می‌توانید هر API را به برنامه وصل کنید: چت، تصویر، ویدیو، صوت، سه‌بعدی و غیره. رفتار API در یک فایل JSON توصیف می‌شود، پس برای سرویس تازه نیازی به به‌روزرسانی برنامه نیست."]</p>
+                <p><b>@L["چطور کار می‌کند"]</b><br />@L["پیامی که می‌نویسید به‌جای {{prompt}} در درخواست قرار می‌گیرد، درخواست به آدرس API فرستاده می‌شود و JSON می‌گوید نتیجه (متن، تصویر، ویدیو...) کجای پاسخ است. نتیجه داخل چت نمایش داده یا پخش می‌شود."]</p>
+                <p><b>@L["سه راه برای ساخت اتصال"]</b></p>
+                <ol>
+                    <li>@L["از «الگوی اتصال» یکی از الگوهای آماده را بردارید و ویرایش کنید."]</li>
+                    <li>@L["یک فایل JSON آماده را با «وارد کردن فایل JSON» اضافه کنید."]</li>
+                    <li>@L["پرامپت زیر را همراه مستندات یا مثال درخواست API خود برای یک هوش مصنوعی (ChatGPT، Claude، Gemini...) بفرستید و JSON تحویلی را در ویرایشگر بچسبانید."]</li>
+                </ol>
+                <p class="muted small">@L["بعد از ساخت، با «ذخیره به‌عنوان الگو» آن را نگه دارید تا دفعه‌ی بعد در لیست باشد. راهنمای کامل قالب در فایل docs/CONNECTORS.md پروژه است."]</p>
+
+                <label class="lbl">@L["پرامپت برای هوش مصنوعی"]</label>
+                <textarea class="inp code" rows="12" dir="ltr" readonly>@ConnectorGuide.AiPrompt</textarea>
+                <div class="row">
+                    <button class="primary" type="button" @onclick="CopyPrompt">@L["کپی پرامپت"]</button>
+                    @if (_promptCopied) { <span class="muted">@L["کپی شد ✓"]</span> }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    int _dlg = -1;
+    bool _promptCopied;
+
+    void OpenDlg(int which)
+    {
+        _dlg = which;
+        _promptCopied = false;
+        State.PushBack(CloseDlgFromBack);
+    }
+
+    void CloseDlgFromBack()
+    {
+        _dlg = -1;
+        InvokeAsync(StateHasChanged);
+    }
+
+    void CloseDlg()
+    {
+        _dlg = -1;
+        State.RemoveBack(CloseDlgFromBack);
+    }
+
+    void UsePreset(string name)
+    {
+        OnPresetChosen("user:" + name);
+        CloseDlg();
+    }
+
+    async Task CopyPrompt()
+    {
+        await Clipboard.Default.SetTextAsync(ConnectorGuide.AiPrompt);
+        _promptCopied = true;
+    }
+
+    /// <summary>The "_help" sentence of the connector in the editor (templates describe themselves there).</summary>
+    string ConnectorHelp() =>
+        _editing != null && ConnectorSpec.TryParse(_editing.ConnectorJson, out _) is { } o ? JPath.Text(o["_help"]) : "";
+
     record SectionItem(string Key, string Title);
 
     SectionItem[] Sections => new[]

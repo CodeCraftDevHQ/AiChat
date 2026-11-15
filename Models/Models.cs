@@ -217,6 +217,7 @@ public static class ProviderDefaults
         new("Ollama (محلی)", ProviderType.OpenAiCompatible, "http://localhost:11434/v1"),
         new("LM Studio (محلی)", ProviderType.OpenAiCompatible, "http://localhost:1234/v1"),
         new("Fooocus-API (محلی)", ProviderType.FooocusApi, "http://127.0.0.1:8888"),
+        new("اتصال سفارشی (JSON)", ProviderType.Custom, "http://127.0.0.1:8000"),
     };
 
     public static string BaseUrl(ProviderType type) => type switch

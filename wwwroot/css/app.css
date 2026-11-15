@@ -690,3 +690,10 @@ textarea.inp.code { font-family: Consolas, "Cascadia Mono", monospace; font-size
 .limits label { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 90px; font-size: 13px; }
 .my-presets { margin-top: 8px; }
 .chip-x { border: 0; background: none; color: inherit; cursor: pointer; opacity: .7; padding: 0 0 0 4px; }
+
+.tpl-list { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px; max-height: 60vh; overflow: auto; }
+.tpl-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border, rgba(128,128,128,.3)); border-radius: 10px; }
+.tpl-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tpl-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.help-body { padding: 4px 4px 8px; max-height: 70vh; overflow: auto; line-height: 1.7; }
+.help-body ol { margin: 6px 0; padding-inline-start: 22px; }

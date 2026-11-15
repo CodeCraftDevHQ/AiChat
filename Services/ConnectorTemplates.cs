@@ -575,9 +575,43 @@ public static class ConnectorTemplates
   "allowEmptyPrompt": true
 }
 """),
+        new("Ollama (API بومی، چت)", "http://localhost:11434", """
+{
+  "kind": "chat",
+  "auth": { "type": "none" },
+  "_help": "Ollama native chat API (http://localhost:11434). Install Ollama and pull a model first.",
+  "models": { "path": "/api/tags", "method": "GET", "list": "$.models[*].name" },
+  "request": {
+    "method": "POST",
+    "path": "/api/chat",
+    "body": { "model": "{{model}}", "messages": "{{messages_with_system}}", "stream": true }
+  },
+  "stream": { "format": "ndjson", "textPath": "$.message.content", "errorPath": "$.error" }
+}
+"""),
+        new("چت با نمایش تفکر مدل (سبک DeepSeek)", "https://api.deepseek.com/v1", """
+{
+  "kind": "chat",
+  "_help": "Chat API that streams a reasoning field (reasoning_content); the model's thinking is shown as a quoted block. Needs an API key.",
+  "auth": { "type": "bearer" },
+  "models": { "path": "/models", "method": "GET", "list": "$.data[*].id" },
+  "request": {
+    "method": "POST",
+    "path": "/chat/completions",
+    "body": { "model": "{{model}}", "messages": "{{messages_with_system}}", "stream": true }
+  },
+  "stream": {
+    "format": "sse",
+    "textPath": "$.choices[0].delta.content",
+    "reasoningPath": "$.choices[0].delta.reasoning_content",
+    "errorPath": "$.error.message"
+  }
+}
+"""),
         new("OpenAI Images (تصویر)", "https://api.openai.com/v1", """
 {
   "kind": "image",
+  "_help": "OpenAI image generation. Needs an OpenAI API key.",
   "auth": { "type": "bearer" },
   "models": { "static": ["gpt-image-1", "dall-e-3"] },
   "inputs": [
@@ -600,6 +634,7 @@ public static class ConnectorTemplates
         new("OpenAI Text-to-Speech (صوت)", "https://api.openai.com/v1", """
 {
   "kind": "audio",
+  "_help": "Text to speech with OpenAI. Needs an OpenAI API key; the reply is an audio file you can play.",
   "auth": { "type": "bearer" },
   "models": { "static": ["gpt-4o-mini-tts", "tts-1", "tts-1-hd"] },
   "inputs": [
@@ -616,6 +651,7 @@ public static class ConnectorTemplates
         new("AUTOMATIC1111 / Forge (تصویر)", "http://127.0.0.1:7860", """
 {
   "kind": "image",
+  "_help": "Local Stable Diffusion WebUI (start it with the --api option). Models are read from the server.",
   "auth": { "type": "none" },
   "models": { "path": "/sdapi/v1/sd-models", "method": "GET", "list": "$[*].title" },
   "inputs": [
@@ -640,9 +676,10 @@ public static class ConnectorTemplates
   "response": { "type": "json", "results": [ { "from": "$.images[*]", "as": "base64", "mime": "image/png" } ] }
 }
 """),
-        new("ComfyUI (تصویر، گردش‌کار پیش‌فرض)", "http://127.0.0.1:8000", """
+        new("ComfyUI (تصویر، گردش‌کار پیش‌فرض)", "http://127.0.0.1:8188", """
 {
   "kind": "image",
+  "_help": "Local ComfyUI, default text-to-image workflow. Use the port ComfyUI listens on (8188 or 8000).",
   "auth": { "type": "none" },
   "models": { "path": "/models/checkpoints", "method": "GET", "list": "$[*]" },
   "inputs": [
@@ -673,6 +710,247 @@ public static class ConnectorTemplates
       "type": "json",
       "results": [
         { "from": "$.*.outputs.*.images[*]", "as": "url", "urlTemplate": "/view?filename={{item.filename|url}}&subfolder={{item.subfolder|url}}&type={{item.type|url}}" }
+      ]
+    }
+  }
+}
+"""),
+        new("ComfyUI: Wan 2.2 (ویدیو)", "http://127.0.0.1:8188", """
+{
+  "kind": "video",
+  "_help": "Local ComfyUI, Wan 2.2 5B text-to-video. The model box is the diffusion model file; needs several minutes on a mid-range GPU. Use the port ComfyUI listens on.",
+  "auth": {
+    "type": "none"
+  },
+  "models": {
+    "path": "/models/diffusion_models",
+    "method": "GET",
+    "list": "$[*]"
+  },
+  "inputs": [
+    {
+      "id": "width",
+      "label": "Width",
+      "type": "number",
+      "default": "608"
+    },
+    {
+      "id": "height",
+      "label": "Height",
+      "type": "number",
+      "default": "384"
+    },
+    {
+      "id": "length",
+      "label": "Frames (121 = 5 s at 24 fps)",
+      "type": "number",
+      "default": "121"
+    },
+    {
+      "id": "fps",
+      "label": "FPS",
+      "type": "number",
+      "default": "24"
+    },
+    {
+      "id": "steps",
+      "label": "Steps",
+      "type": "slider",
+      "min": 10,
+      "max": 50,
+      "step": 1,
+      "default": "20"
+    },
+    {
+      "id": "cfg",
+      "label": "CFG",
+      "type": "slider",
+      "min": 1,
+      "max": 10,
+      "step": 0.5,
+      "default": "5"
+    },
+    {
+      "id": "negative",
+      "label": "Negative prompt",
+      "type": "text",
+      "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+    },
+    {
+      "id": "clip",
+      "label": "CLIP file",
+      "type": "text",
+      "default": "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    },
+    {
+      "id": "vae",
+      "label": "VAE file",
+      "type": "text",
+      "default": "wan2.2_vae.safetensors"
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/prompt",
+    "body": {
+      "prompt": {
+        "3": {
+          "inputs": {
+            "seed": "{{seed}}",
+            "steps": "{{input.steps}}",
+            "cfg": "{{input.cfg}}",
+            "sampler_name": "uni_pc",
+            "scheduler": "simple",
+            "denoise": 1,
+            "model": [
+              "48",
+              0
+            ],
+            "positive": [
+              "6",
+              0
+            ],
+            "negative": [
+              "7",
+              0
+            ],
+            "latent_image": [
+              "55",
+              0
+            ]
+          },
+          "class_type": "KSampler"
+        },
+        "6": {
+          "inputs": {
+            "text": "{{prompt}}",
+            "clip": [
+              "38",
+              0
+            ]
+          },
+          "class_type": "CLIPTextEncode"
+        },
+        "7": {
+          "inputs": {
+            "text": "{{input.negative}}",
+            "clip": [
+              "38",
+              0
+            ]
+          },
+          "class_type": "CLIPTextEncode"
+        },
+        "8": {
+          "inputs": {
+            "samples": [
+              "3",
+              0
+            ],
+            "vae": [
+              "39",
+              0
+            ]
+          },
+          "class_type": "VAEDecode"
+        },
+        "37": {
+          "inputs": {
+            "unet_name": "{{model}}",
+            "weight_dtype": "default"
+          },
+          "class_type": "UNETLoader"
+        },
+        "38": {
+          "inputs": {
+            "clip_name": "{{input.clip}}",
+            "type": "wan",
+            "device": "default"
+          },
+          "class_type": "CLIPLoader"
+        },
+        "39": {
+          "inputs": {
+            "vae_name": "{{input.vae}}"
+          },
+          "class_type": "VAELoader"
+        },
+        "48": {
+          "inputs": {
+            "shift": 8,
+            "model": [
+              "37",
+              0
+            ]
+          },
+          "class_type": "ModelSamplingSD3"
+        },
+        "55": {
+          "inputs": {
+            "width": "{{input.width}}",
+            "height": "{{input.height}}",
+            "length": "{{input.length}}",
+            "batch_size": 1,
+            "vae": [
+              "39",
+              0
+            ]
+          },
+          "class_type": "Wan22ImageToVideoLatent"
+        },
+        "57": {
+          "inputs": {
+            "fps": "{{input.fps}}",
+            "bit_depth": "auto",
+            "color_space": "sRGB",
+            "codec": "none",
+            "images": [
+              "8",
+              0
+            ]
+          },
+          "class_type": "CreateVideo"
+        },
+        "58": {
+          "inputs": {
+            "filename_prefix": "video/AiChat",
+            "format": "auto",
+            "format.codec": "auto",
+            "codec": "auto",
+            "video": [
+              "57",
+              0
+            ]
+          },
+          "class_type": "SaveVideo"
+        }
+      }
+    }
+  },
+  "job": {
+    "id": "$.prompt_id",
+    "poll": {
+      "method": "GET",
+      "path": "/history/{{job}}",
+      "intervalSec": 5,
+      "timeoutSec": 3600,
+      "statusPath": "$.*.status.status_str",
+      "done": [
+        "success"
+      ],
+      "failed": [
+        "error"
+      ],
+      "errorPath": "$.*.status.messages"
+    },
+    "response": {
+      "type": "json",
+      "results": [
+        {
+          "from": "$.*.outputs.*.images[*]",
+          "as": "url",
+          "urlTemplate": "/view?filename={{item.filename|url}}&subfolder={{item.subfolder|url}}&type={{item.type|url}}"
+        }
       ]
     }
   }
