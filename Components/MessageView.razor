@@ -63,6 +63,10 @@
                 @if (string.IsNullOrEmpty(Message.Content) && Streaming && Message.ErrorText == null)
                 {
                     <div class="typing"><i></i><i></i><i></i></div>
+                    @if (!string.IsNullOrEmpty(State.GenStatus))
+                    {
+                        <div class="gen-status" dir="auto">@State.GenStatus</div>
+                    }
                 }
                 else if (!string.IsNullOrEmpty(Message.Content))
                 {

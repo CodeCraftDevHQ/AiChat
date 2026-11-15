@@ -1379,6 +1379,9 @@ public class ChatState
         await RunAsync(conv, reply, provider, CurrentModel);
     }
 
+    /// <summary>Progress line of a running async job (e.g. "running · 42% · 0:35"), shown in the waiting bubble.</summary>
+    public string? GenStatus { get; private set; }
+
     public void Stop() => _cts?.Cancel();
 
     static bool LooksLikeImageRejection(string error)
@@ -1448,6 +1451,12 @@ public class ChatState
 
             await foreach (var chunk in impl.StreamAsync(provider, model, history, system, OnImage, ct))
             {
+                if (chunk.StartsWith(ProviderStatus.Prefix))
+                {
+                    GenStatus = chunk[ProviderStatus.Prefix.Length..];
+                    Notify();
+                    continue;
+                }
                 reply.Content += chunk;
 
                 // throttle UI updates to ~20/s
@@ -1472,6 +1481,7 @@ public class ChatState
         finally
         {
             IsStreaming = false;
+            GenStatus = null;
             _cts?.Dispose();
             _cts = null;
 

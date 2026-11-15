@@ -295,6 +295,54 @@ public class ConnectorFlowTests
     }
 
     [Fact]
+    public async Task Job_reports_status_progress_and_elapsed()
+    {
+        var polls = 0;
+        var h = new FakeHandler(r =>
+        {
+            if (r.Url.EndsWith("/submit")) return FakeHandler.Json("""{"id":"J"}""");
+            if (r.Url.Contains("/s/"))
+                return FakeHandler.Json(++polls < 2 ? """{"state":"Running","p":0.5}""" : """{"state":"done","f":["/o.png"]}""");
+            return FakeHandler.Bytes(Png, "image/png");
+        });
+        var cfg = Cfg("""
+        { "request": { "path": "/submit", "body": {"p":"{{prompt}}"} },
+          "job": { "id": "$.id", "poll": { "method":"GET", "path": "/s/{{job}}", "intervalSec": 1, "statusPath": "$.state",
+                   "done": ["done"], "failed": ["failed"], "progressPath": "$.p", "progressMax": 1 },
+                   "response": { "results": [ {"from":"$.f[*]","as":"url"} ] } } }
+        """);
+        var run = await RunAsync(h, cfg, User("x"));
+        var s = Assert.Single(run.Statuses);
+        Assert.StartsWith("Running · 50% · 0:", s);
+        Assert.Single(run.Images);
+    }
+
+    [Fact]
+    public async Task Stop_sends_the_cancel_request()
+    {
+        var h = new FakeHandler(r => r.Url.EndsWith("/submit")
+            ? FakeHandler.Json("""{"id":"J9"}""")
+            : FakeHandler.Json("""{"state":"running"}"""));
+        var cfg = Cfg("""
+        { "request": { "path": "/submit", "body": {"p":"{{prompt}}"} },
+          "job": { "id": "$.id", "cancel": { "method":"POST", "path":"/cancel/{{job}}" },
+                   "poll": { "method":"GET", "path": "/s/{{job}}", "intervalSec": 1, "statusPath": "$.state", "done": ["done"] },
+                   "response": { "type":"binary" } } }
+        """);
+        using var cts = new CancellationTokenSource();
+        var provider = new ConnectorProvider(new HttpClient(h));
+        var task = Task.Run(async () =>
+        {
+            await foreach (var _ in provider.StreamAsync(cfg, "m", User("x"), null, (m, d) => Task.CompletedTask, cts.Token)) { }
+        });
+        await Task.Delay(1800);   // submitted and polled at least once
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+        await Task.Delay(500);    // the cancel request is sent in the background
+        Assert.Contains(h.Requests, r => r.Url == "http://api.test/cancel/J9" && r.Method == HttpMethod.Post);
+    }
+
+    [Fact]
     public async Task Job_id_missing_is_an_error()
     {
         var h = new FakeHandler(_ => FakeHandler.Json("""{"nope":1}"""));

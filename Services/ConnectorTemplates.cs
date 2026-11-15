@@ -90,8 +90,8 @@ public static class ConnectorTemplates
       "refiner_switch": 0.5,
       "save_meta": true,
       "save_extension": "png",
-      "require_base64": false,
-      "async_process": false,
+      "require_base64": true,
+      "async_process": true,
       "loras": [
         {
           "$if": "{{input.lora}}",
@@ -100,13 +100,27 @@ public static class ConnectorTemplates
           "weight": "{{input.lora_weight}}"
         }
       ]
-    },
-    "headers": {
-      "Accept": "image/png"
     }
   },
-  "response": {
-    "type": "binary"
+  "job": {
+    "id": "$.job_id",
+    "cancel": { "method": "POST", "path": "/v1/generation/stop" },
+    "poll": {
+      "method": "GET",
+      "path": "/v1/generation/query-job",
+      "query": { "job_id": "{{job}}", "require_step_preview": "false" },
+      "intervalSec": 1,
+      "timeoutSec": 1800,
+      "statusPath": "$.job_stage",
+      "done": [ "success" ],
+      "failed": [ "error" ],
+      "errorPath": "$.job_status",
+      "progressPath": "$.job_progress",
+      "progressMax": 100
+    },
+    "response": {
+      "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
+    }
   }
 }
 """),
@@ -179,18 +193,32 @@ public static class ConnectorTemplates
       "refiner_switch": 0.5,
       "save_meta": true,
       "save_extension": "png",
-      "require_base64": false,
-      "async_process": false,
+      "require_base64": true,
+      "async_process": true,
       "input_image": "{{image1_base64}}",
       "uov_method": "{{input.method}}",
       "upscale_value": "{{input.custom_scale}}"
-    },
-    "headers": {
-      "Accept": "image/png"
     }
   },
-  "response": {
-    "type": "binary"
+  "job": {
+    "id": "$.job_id",
+    "cancel": { "method": "POST", "path": "/v1/generation/stop" },
+    "poll": {
+      "method": "GET",
+      "path": "/v1/generation/query-job",
+      "query": { "job_id": "{{job}}", "require_step_preview": "false" },
+      "intervalSec": 1,
+      "timeoutSec": 1800,
+      "statusPath": "$.job_stage",
+      "done": [ "success" ],
+      "failed": [ "error" ],
+      "errorPath": "$.job_status",
+      "progressPath": "$.job_progress",
+      "progressMax": 100
+    },
+    "response": {
+      "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
+    }
   },
   "allowEmptyPrompt": true
 }
@@ -302,8 +330,8 @@ public static class ConnectorTemplates
       "refiner_switch": 0.5,
       "save_meta": true,
       "save_extension": "png",
-      "require_base64": false,
-      "async_process": false,
+      "require_base64": true,
+      "async_process": true,
       "image_prompts": [
         {
           "cn_img": "{{image1_base64}}",
@@ -327,13 +355,27 @@ public static class ConnectorTemplates
           "weight": "{{input.lora_weight}}"
         }
       ]
-    },
-    "headers": {
-      "Accept": "image/png"
     }
   },
-  "response": {
-    "type": "binary"
+  "job": {
+    "id": "$.job_id",
+    "cancel": { "method": "POST", "path": "/v1/generation/stop" },
+    "poll": {
+      "method": "GET",
+      "path": "/v1/generation/query-job",
+      "query": { "job_id": "{{job}}", "require_step_preview": "false" },
+      "intervalSec": 1,
+      "timeoutSec": 1800,
+      "statusPath": "$.job_stage",
+      "done": [ "success" ],
+      "failed": [ "error" ],
+      "errorPath": "$.job_status",
+      "progressPath": "$.job_progress",
+      "progressMax": 100
+    },
+    "response": {
+      "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
+    }
   }
 }
 """),
@@ -420,8 +462,8 @@ public static class ConnectorTemplates
       "refiner_switch": 0.5,
       "save_meta": true,
       "save_extension": "png",
-      "require_base64": false,
-      "async_process": false,
+      "require_base64": true,
+      "async_process": true,
       "input_image": "{{image1_base64}}",
       "outpaint_selections": [
         "{{input.direction}}"
@@ -431,13 +473,27 @@ public static class ConnectorTemplates
       "outpaint_distance_top": -1,
       "outpaint_distance_bottom": -1,
       "inpaint_additional_prompt": "{{prompt}}"
-    },
-    "headers": {
-      "Accept": "image/png"
     }
   },
-  "response": {
-    "type": "binary"
+  "job": {
+    "id": "$.job_id",
+    "cancel": { "method": "POST", "path": "/v1/generation/stop" },
+    "poll": {
+      "method": "GET",
+      "path": "/v1/generation/query-job",
+      "query": { "job_id": "{{job}}", "require_step_preview": "false" },
+      "intervalSec": 1,
+      "timeoutSec": 1800,
+      "statusPath": "$.job_stage",
+      "done": [ "success" ],
+      "failed": [ "error" ],
+      "errorPath": "$.job_status",
+      "progressPath": "$.job_progress",
+      "progressMax": 100
+    },
+    "response": {
+      "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
+    }
   },
   "allowEmptyPrompt": true
 }
@@ -513,18 +569,32 @@ public static class ConnectorTemplates
       "refiner_switch": 0.5,
       "save_meta": true,
       "save_extension": "png",
-      "require_base64": false,
-      "async_process": false,
+      "require_base64": true,
+      "async_process": true,
       "input_image": "{{image1_base64}}",
       "input_mask": "{{image2_base64}}",
       "inpaint_additional_prompt": "{{prompt}}"
-    },
-    "headers": {
-      "Accept": "image/png"
     }
   },
-  "response": {
-    "type": "binary"
+  "job": {
+    "id": "$.job_id",
+    "cancel": { "method": "POST", "path": "/v1/generation/stop" },
+    "poll": {
+      "method": "GET",
+      "path": "/v1/generation/query-job",
+      "query": { "job_id": "{{job}}", "require_step_preview": "false" },
+      "intervalSec": 1,
+      "timeoutSec": 1800,
+      "statusPath": "$.job_stage",
+      "done": [ "success" ],
+      "failed": [ "error" ],
+      "errorPath": "$.job_status",
+      "progressPath": "$.job_progress",
+      "progressMax": 100
+    },
+    "response": {
+      "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
+    }
   }
 }
 """),
@@ -705,6 +775,7 @@ public static class ConnectorTemplates
   },
   "job": {
     "id": "$.prompt_id",
+    "cancel": { "method": "POST", "path": "/interrupt" },
     "poll": { "method": "GET", "path": "/history/{{job}}", "intervalSec": 2, "timeoutSec": 600 },
     "response": {
       "type": "json",
@@ -929,6 +1000,7 @@ public static class ConnectorTemplates
   },
   "job": {
     "id": "$.prompt_id",
+    "cancel": { "method": "POST", "path": "/interrupt" },
     "poll": {
       "method": "GET",
       "path": "/history/{{job}}",

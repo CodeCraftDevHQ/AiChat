@@ -33,7 +33,9 @@ Every chat message you send becomes `{{prompt}}`; results (image / video / audio
   "job": {                                          // optional: async APIs (video, 3D, ComfyUI ...)
     "id": "$.id",
     "poll": { "method": "GET", "path": "/jobs/{{job}}", "intervalSec": 5, "timeoutSec": 900,
-              "statusPath": "$.status", "done": ["succeeded"], "failed": ["failed"], "errorPath": "$.error" },
+              "statusPath": "$.status", "done": ["succeeded"], "failed": ["failed"], "errorPath": "$.error",
+              "progressPath": "$.progress", "progressMax": 100 },   // optional: shows "running · 42% · 0:35" while waiting
+    "cancel": { "method": "POST", "path": "/jobs/{{job}}/cancel" },  // optional: sent when you press Stop
     "response": { "type": "json", "results": [ { "from": "$.output.url", "as": "url" } ] }
   }
 }

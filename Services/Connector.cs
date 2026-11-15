@@ -246,6 +246,9 @@ public static class ConnectorSpec
                 if (job["poll"] is not JsonObject poll || string.IsNullOrWhiteSpace(JPath.Text(poll["path"])))
                     return "job.poll.path is required.";
                 if (JPath.Text(poll["statusPath"]) is { Length: > 0 } sp) JPath.Check(sp);
+                if (JPath.Text(poll["progressPath"]) is { Length: > 0 } pp) JPath.Check(pp);
+                if (job["cancel"] != null && (job["cancel"] is not JsonObject co || string.IsNullOrWhiteSpace(JPath.Text(co["path"]))))
+                    return "job.cancel.path is required.";
                 CheckResponse(job["response"]);
                 if (job["response"] == null && root["response"] == null)
                     return "Define \"response\" (or job.response) to say where the result is.";
@@ -281,6 +284,12 @@ public static class ConnectorSpec
     }
 }
 
+/// <summary>A streamed chunk that starts with this character is a status line (progress), not message text.</summary>
+public static class ProviderStatus
+{
+    public const string Prefix = "\u0001";
+}
+
 public class ConnectorProvider : IChatProvider
 {
     readonly HttpClient _http;
@@ -296,7 +305,18 @@ public class ConnectorProvider : IChatProvider
             await foreach (var t in run.ChatStreamAsync()) yield return t;
             yield break;
         }
-        await run.ExecuteAsync();
+
+        // Status lines (progress of an async job) are streamed while the job runs.
+        var channel = System.Threading.Channels.Channel.CreateUnbounded<string>();
+        run.OnStatus = s => channel.Writer.TryWrite(s);
+        var work = Task.Run(async () =>
+        {
+            try { await run.ExecuteAsync(); }
+            finally { channel.Writer.Complete(); }
+        });
+        await foreach (var status in channel.Reader.ReadAllAsync(ct))
+            yield return ProviderStatus.Prefix + status;
+        await work;
         foreach (var t in run.Texts) yield return t;
     }
 
@@ -337,6 +357,9 @@ sealed class ConnectorRun
     int _outputs;
 
     public List<string> Texts { get; } = new();
+
+    /// <summary>Receives progress lines while an async job runs.</summary>
+    public Action<string>? OnStatus { get; set; }
 
     public ConnectorRun(HttpClient http, ProviderConfig cfg, string model, IReadOnlyList<ChatMessage> history,
         string? system, Func<string, byte[], Task>? onImage, CancellationToken ct)
@@ -661,35 +684,76 @@ sealed class ConnectorRun
         var failed = ListOf(poll["failed"]);
         var started = DateTime.UtcNow;
 
-        while (true)
+        var progressPath = JPath.Text(poll["progressPath"]);
+        var progressMax = poll["progressMax"]?.GetValue<double>() ?? 100;
+
+        try
         {
-            await Task.Delay(interval, _ct);
-            if (DateTime.UtcNow - started > timeout)
-                throw new TimeoutException("The job did not finish in time (" + (int)timeout.TotalSeconds + " s).");
-
-            var (bytes, type) = await SendAsync(poll);
-            var json = type.Contains("json", StringComparison.OrdinalIgnoreCase) || LooksJson(bytes) ? ParseJson(bytes) : null;
-
-            if (statusPath.Length > 0 && json != null)
+            while (true)
             {
-                var st = JPath.Text(JPath.Select(json, statusPath).FirstOrDefault()).ToLowerInvariant();
-                if (failed.Contains(st))
+                await Task.Delay(interval, _ct);
+                var elapsed = DateTime.UtcNow - started;
+                if (elapsed > timeout)
+                    throw new TimeoutException("The job did not finish in time (" + (int)timeout.TotalSeconds + " s).");
+
+                var (bytes, type) = await SendAsync(poll);
+                var json = type.Contains("json", StringComparison.OrdinalIgnoreCase) || LooksJson(bytes) ? ParseJson(bytes) : null;
+
+                var status = statusPath.Length > 0 && json != null
+                    ? JPath.Text(JPath.Select(json, statusPath).FirstOrDefault()) : "";
+                if (statusPath.Length > 0 && json != null)
                 {
-                    var ep = JPath.Text(poll["errorPath"]);
-                    var em = ep.Length > 0 ? JPath.Text(JPath.Select(json, ep).FirstOrDefault()) : "";
-                    throw new InvalidOperationException("The job failed" + (em.Length > 0 ? ": " + em : ": " + Snippet(bytes)));
+                    var st = status.ToLowerInvariant();
+                    if (failed.Contains(st))
+                    {
+                        var ep = JPath.Text(poll["errorPath"]);
+                        var em = ep.Length > 0 ? JPath.Text(JPath.Select(json, ep).FirstOrDefault()) : "";
+                        throw new InvalidOperationException("The job failed" + (em.Length > 0 ? ": " + em : ": " + Snippet(bytes)));
+                    }
+                    if (!done.Contains(st)) { ReportProgress(status, progressPath, progressMax, json, elapsed); continue; }
                 }
-                if (!done.Contains(st)) continue;
-            }
-            else if (!HasResults(resp, json))
-            {
-                continue;
-            }
+                else if (!HasResults(resp, json))
+                {
+                    ReportProgress(status, progressPath, progressMax, json, elapsed);
+                    continue;
+                }
 
-            await ExtractAsync(resp, bytes, type);
-            Finish(bytes);
-            return;
+                await ExtractAsync(resp, bytes, type);
+                Finish(bytes);
+                return;
+            }
         }
+        catch (OperationCanceledException) when (_ct.IsCancellationRequested)
+        {
+            await CancelJobAsync(job); // the user pressed Stop: ask the server to stop too
+            throw;
+        }
+    }
+
+    void ReportProgress(string status, string progressPath, double max, JsonNode? json, TimeSpan elapsed)
+    {
+        if (OnStatus == null) return;
+        var parts = new List<string>();
+        if (status.Length > 0) parts.Add(status);
+        if (progressPath.Length > 0 && json != null &&
+            double.TryParse(JPath.Text(JPath.Select(json, progressPath).FirstOrDefault()),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) && max > 0)
+            parts.Add(Math.Clamp(v / max * 100, 0, 100).ToString("0") + "%");
+        parts.Add($"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:00}");
+        OnStatus(string.Join(" · ", parts));
+    }
+
+    /// <summary>Sends the optional "job.cancel" request (best effort, never throws).</summary>
+    async Task CancelJobAsync(JsonObject job)
+    {
+        if (job["cancel"] is not JsonObject cancel || _job.Length == 0) return;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var msg = Build(cancel);
+            using var resp = await _http.SendAsync(ProviderHttp.Customize(msg, _cfg), cts.Token);
+        }
+        catch { /* the job may already be gone */ }
     }
 
     static List<string> ListOf(JsonNode? n) =>

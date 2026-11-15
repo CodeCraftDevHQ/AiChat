@@ -65,17 +65,21 @@ public static class Helpers
         return a;
     }
 
-    public sealed record Run(List<string> Texts, List<(string Mime, byte[] Data)> Images);
+    public sealed record Run(List<string> Texts, List<(string Mime, byte[] Data)> Images, List<string> Statuses);
 
     public static async Task<Run> RunAsync(FakeHandler handler, ProviderConfig cfg, List<ChatMessage> history, string model = "m1", string? system = null)
     {
         var provider = new ConnectorProvider(new HttpClient(handler));
         var images = new List<(string, byte[])>();
         var texts = new List<string>();
+        var statuses = new List<string>();
         await foreach (var t in provider.StreamAsync(cfg, model, history, system,
             (mime, data) => { images.Add((mime, data)); return Task.CompletedTask; }, CancellationToken.None))
-            texts.Add(t);
-        return new Run(texts, images);
+        {
+            if (t.StartsWith(ProviderStatus.Prefix)) statuses.Add(t[ProviderStatus.Prefix.Length..]);
+            else texts.Add(t);
+        }
+        return new Run(texts, images, statuses);
     }
 
     public static JsonNode J(string json) => JsonNode.Parse(json)!;

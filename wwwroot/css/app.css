@@ -699,3 +699,5 @@ textarea.inp.code { font-family: Consolas, "Cascadia Mono", monospace; font-size
 .help-body ol { margin: 6px 0; padding-inline-start: 22px; }
 
 .row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+
+.gen-status { margin-top: 6px; font-size: 13px; color: var(--muted, #8e8ea0); font-variant-numeric: tabular-nums; }
