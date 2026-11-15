@@ -11,6 +11,34 @@ public record SearchResult(string Title, string Url, string Snippet);
 /// Web search for any chat model: the results are put into the system prompt (no tool-calling needed),
 /// so it works with every provider. Engines: DuckDuckGo (no key), Brave Search (key), SearXNG (your own server).
 /// </summary>
+/// <summary>User-adjustable search settings (stored as JSON in the preferences).</summary>
+public class SearchOptions
+{
+    public int Count { get; set; } = 5;
+    /// <summary>DuckDuckGo: kl (wt-wt, us-en, de-de...), Brave: country (US, DE...), SearXNG: language (en, fa...).</summary>
+    public string Region { get; set; } = "";
+    /// <summary>off | moderate | strict</summary>
+    public string SafeSearch { get; set; } = "moderate";
+    /// <summary>"" (any time) | day | week | month | year</summary>
+    public string TimeRange { get; set; } = "";
+    public int TimeoutSec { get; set; } = 20;
+    public bool ShowSources { get; set; } = true;
+    /// <summary>last = the last message is the query; ai = the model writes a query from the conversation first.</summary>
+    public string QueryMode { get; set; } = "last";
+    /// <summary>Instruction given to the model together with the results. Empty = default. Placeholders: {date}, {results}.</summary>
+    public string PromptTemplate { get; set; } = "";
+
+    // custom engine
+    public string CustomUrl { get; set; } = "";       // e.g. https://api.example.com/search?q={query}&n={count}
+    public string CustomHeaders { get; set; } = "";   // one per line: Name: value   ({key} is replaced)
+    public string CustomResults { get; set; } = "$.results[*]";
+    public string CustomTitle { get; set; } = "$.title";
+    public string CustomLink { get; set; } = "$.url";
+    public string CustomSnippet { get; set; } = "$.content";
+
+    public int SafeCount => Math.Clamp(Count, 1, 10);
+}
+
 public class WebSearchService
 {
     public const string Ddg = "ddg", Brave = "brave", Searx = "searxng";
@@ -18,30 +46,64 @@ public class WebSearchService
     readonly HttpClient _http;
     public WebSearchService(HttpClient http) => _http = http;
 
-    public async Task<List<SearchResult>> SearchAsync(string engine, string query, string key, string baseUrl, int max, CancellationToken ct)
+    public const string Custom = "custom";
+
+    public async Task<List<SearchResult>> SearchAsync(string engine, string query, string key, string baseUrl, SearchOptions opt, CancellationToken ct)
     {
         query = query.Trim();
         if (query.Length > 300) query = query[..300];
         var q = Uri.EscapeDataString(query);
+        var max = opt.SafeCount;
+        var region = Uri.EscapeDataString(opt.Region.Trim());
 
         HttpRequestMessage req;
         switch (engine)
         {
             case Brave:
+            {
                 if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("Brave Search needs an API key.");
-                req = new HttpRequestMessage(HttpMethod.Get, $"https://api.search.brave.com/res/v1/web/search?q={q}&count={max}");
+                var url = $"https://api.search.brave.com/res/v1/web/search?q={q}&count={max}&safesearch={(opt.SafeSearch is "off" or "strict" ? opt.SafeSearch : "moderate")}";
+                if (region.Length > 0) url += "&country=" + region;
+                var fresh = opt.TimeRange switch { "day" => "pd", "week" => "pw", "month" => "pm", "year" => "py", _ => "" };
+                if (fresh.Length > 0) url += "&freshness=" + fresh;
+                req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.TryAddWithoutValidation("X-Subscription-Token", key.Trim());
                 req.Headers.TryAddWithoutValidation("Accept", "application/json");
                 break;
+            }
             case Searx:
+            {
                 if (string.IsNullOrWhiteSpace(baseUrl)) throw new InvalidOperationException("Enter the address of your SearXNG server.");
-                req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.Trim().TrimEnd('/')}/search?q={q}&format=json");
+                var url = $"{baseUrl.Trim().TrimEnd('/')}/search?q={q}&format=json&safesearch={(opt.SafeSearch == "off" ? 0 : opt.SafeSearch == "strict" ? 2 : 1)}";
+                if (region.Length > 0) url += "&language=" + region;
+                if (opt.TimeRange.Length > 0) url += "&time_range=" + opt.TimeRange;
+                req = new HttpRequestMessage(HttpMethod.Get, url);
                 break;
+            }
+            case Custom:
+            {
+                if (string.IsNullOrWhiteSpace(opt.CustomUrl)) throw new InvalidOperationException("Enter the URL of your custom search engine.");
+                string Fill(string t) => t.Replace("{query}", q).Replace("{count}", max.ToString())
+                    .Replace("{key}", Uri.EscapeDataString(key.Trim())).Replace("{region}", region);
+                req = new HttpRequestMessage(HttpMethod.Get, Fill(opt.CustomUrl.Trim()));
+                foreach (var line in opt.CustomHeaders.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var i = line.IndexOf(':');
+                    if (i > 0) req.Headers.TryAddWithoutValidation(line[..i].Trim(), line[(i + 1)..].Replace("{key}", key.Trim()).Trim());
+                }
+                break;
+            }
             default:
-                req = new HttpRequestMessage(HttpMethod.Get, $"https://html.duckduckgo.com/html/?q={q}");
+            {
+                var url = $"https://html.duckduckgo.com/html/?q={q}&kp={(opt.SafeSearch == "off" ? "-2" : opt.SafeSearch == "strict" ? "1" : "-1")}";
+                if (region.Length > 0) url += "&kl=" + region;
+                var df = opt.TimeRange switch { "day" => "d", "week" => "w", "month" => "m", "year" => "y", _ => "" };
+                if (df.Length > 0) url += "&df=" + df;
+                req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
                 req.Headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.8");
                 break;
+            }
         }
 
         using (req)
@@ -54,9 +116,27 @@ public class WebSearchService
             {
                 Brave => ParseBrave(body, max),
                 Searx => ParseSearx(body, max),
+                Custom => ParseCustom(body, opt, max),
                 _ => ParseDuckDuckGo(body, max)
             };
         }
+    }
+
+    public static List<SearchResult> ParseCustom(string json, SearchOptions opt, int max)
+    {
+        var list = new List<SearchResult>();
+        var root = JsonNode.Parse(json);
+        if (root == null) return list;
+        string Get(JsonNode item, string path) =>
+            string.IsNullOrWhiteSpace(path) ? "" : JPath.Text(JPath.Select(item, path).FirstOrDefault());
+        foreach (var item in JPath.Select(root, opt.CustomResults))
+        {
+            var url = Get(item, opt.CustomLink);
+            if (url.Length == 0) continue;
+            list.Add(new SearchResult(Clean(Get(item, opt.CustomTitle), 200), url, Clean(Get(item, opt.CustomSnippet))));
+            if (list.Count >= max) break;
+        }
+        return list;
     }
 
     // ---------------------------------------------------------------- parsing
@@ -137,20 +217,25 @@ public class WebSearchService
 
     // ---------------------------------------------------------------- prompt / sources
 
-    /// <summary>Text added to the system prompt.</summary>
-    public static string BuildContext(IReadOnlyList<SearchResult> results, DateTime today)
+    public const string DefaultPrompt =
+        "Web search results for the user's latest message (today is {date}). " +
+        "Use them when they help, prefer them over your own memory for recent facts, and cite sources like [1] or [2]. " +
+        "If the results do not answer the question, say so instead of guessing.\n\n{results}";
+
+    /// <summary>Text added to the system prompt. The template may use {date} and {results}.</summary>
+    public static string BuildContext(IReadOnlyList<SearchResult> results, DateTime today, string? template = null)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Web search results for the user's latest message (today is {today:yyyy-MM-dd}). " +
-                      "Use them when they help, prefer them over your own memory for recent facts, and cite sources like [1] or [2]. " +
-                      "If the results do not answer the question, say so instead of guessing.");
         for (var i = 0; i < results.Count; i++)
         {
             var r = results[i];
-            sb.AppendLine().AppendLine($"[{i + 1}] {r.Title}").AppendLine(r.Url);
+            if (i > 0) sb.AppendLine();
+            sb.AppendLine($"[{i + 1}] {r.Title}").AppendLine(r.Url);
             if (r.Snippet.Length > 0) sb.AppendLine(r.Snippet);
         }
-        return sb.ToString().TrimEnd();
+        var t = string.IsNullOrWhiteSpace(template) ? DefaultPrompt : template;
+        if (!t.Contains("{results}")) t += "\n\n{results}";
+        return t.Replace("{date}", today.ToString("yyyy-MM-dd")).Replace("{results}", sb.ToString().TrimEnd()).Trim();
     }
 
     /// <summary>Markdown list appended to the answer.</summary>

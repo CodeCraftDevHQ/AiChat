@@ -294,15 +294,64 @@
                             <label class="lbl">@L["جستجو در وب"]</label>
                             <p class="muted small">@L["با دکمه‌ی 🌐 کنار کادر پیام روشن می‌شود. نتایج جستجو به مدل داده می‌شود و منابع زیر پاسخ می‌آید؛ با هر مدل چتی کار می‌کند."]</p>
                             <AppSelect Title="@L["موتور جستجو"]" Value="@State.SearchEngine" ValueChanged="State.SetSearchEngine"
-                                       Options="@(new AppSelect.SelectOption[] { new("ddg", "DuckDuckGo (" + L["بدون کلید"] + ")"), new("brave", "Brave Search (" + L["نیاز به کلید"] + ")"), new("searxng", "SearXNG (" + L["سرور خودتان"] + ")") })" />
-                            @if (State.SearchEngine == "brave")
+                                       Options="@(new AppSelect.SelectOption[] { new("ddg", "DuckDuckGo (" + L["بدون کلید"] + ")"), new("brave", "Brave Search (" + L["نیاز به کلید"] + ")"), new("searxng", "SearXNG (" + L["سرور خودتان"] + ")"), new("custom", L["موتور سفارشی (آدرس + JSON)"]) })" />
+                            @if (State.SearchEngine is "brave" or "custom")
                             {
-                                <input class="inp" style="margin-top:6px" type="password" dir="ltr" placeholder="Brave API key" value="@State.SearchKey" @onchange="e => State.SetSearchKeyAsync(e.Value?.ToString() ?? string.Empty)" />
+                                <input class="inp" style="margin-top:6px" type="password" dir="ltr" placeholder="@(State.SearchEngine == "custom" ? L["کلید API (جایگزین {key}؛ اختیاری)"] : "Brave API key")" value="@State.SearchKey" @onchange="e => State.SetSearchKeyAsync(e.Value?.ToString() ?? string.Empty)" />
                             }
                             @if (State.SearchEngine == "searxng")
                             {
                                 <input class="inp" style="margin-top:6px" dir="ltr" placeholder="http://localhost:8080" value="@State.SearchBaseUrl" @onchange="e => State.SetSearchBaseUrl(e.Value?.ToString() ?? string.Empty)" />
                             }
+                            <details class="adv-search">
+                                <summary>@L["تنظیمات پیشرفته‌ی جستجو"]</summary>
+                                @{ var so = State.SearchOpts; }
+                                <label class="lbl">@L["تعداد نتایج"]: @so.SafeCount</label>
+                                <input type="range" class="range" min="1" max="10" step="1" value="@so.SafeCount" @oninput="e => Opt(o => o.Count = ToInt(e))" />
+
+                                <label class="lbl">@L["عبارت جستجو"]</label>
+                                <AppSelect Title="@L["عبارت جستجو"]" Value="@so.QueryMode" ValueChanged="v => Opt(o => o.QueryMode = v)"
+                                           Options="@(new AppSelect.SelectOption[] { new("last", L["همان آخرین پیام"]), new("ai", L["مدل از روی گفتگو بسازد (یک درخواست اضافه)"]) })" />
+
+                                <label class="lbl">@L["بازه‌ی زمانی نتایج"]</label>
+                                <AppSelect Title="@L["بازه‌ی زمانی نتایج"]" Value="@so.TimeRange" ValueChanged="v => Opt(o => o.TimeRange = v)"
+                                           Options="@(new AppSelect.SelectOption[] { new("", L["هر زمان"]), new("day", L["۲۴ ساعت اخیر"]), new("week", L["هفته‌ی اخیر"]), new("month", L["ماه اخیر"]), new("year", L["سال اخیر"]) })" />
+
+                                <label class="lbl">@L["جستجوی امن"]</label>
+                                <AppSelect Title="@L["جستجوی امن"]" Value="@so.SafeSearch" ValueChanged="v => Opt(o => o.SafeSearch = v)"
+                                           Options="@(new AppSelect.SelectOption[] { new("off", L["خاموش"]), new("moderate", L["متوسط"]), new("strict", L["سخت‌گیرانه"]) })" />
+
+                                <label class="lbl">@L["منطقه / زبان نتایج"]</label>
+                                <input class="inp" dir="ltr" placeholder="DuckDuckGo: us-en, de-de · Brave: US · SearXNG: fa" value="@so.Region" @onchange="e => Opt(o => o.Region = e.Value?.ToString() ?? string.Empty)" />
+
+                                <label class="lbl">@L["حداکثر زمان انتظار (ثانیه)"]</label>
+                                <input class="inp" type="number" min="5" max="120" dir="ltr" value="@so.TimeoutSec" @onchange="e => Opt(o => o.TimeoutSec = Math.Clamp(ToInt(e), 5, 120))" />
+
+                                <label class="check" style="margin-top:10px">
+                                    <input type="checkbox" checked="@so.ShowSources" @onchange="e => Opt(o => o.ShowSources = e.Value is true)" />
+                                    <span>@L["فهرست منابع زیر پاسخ نمایش داده شود"]</span>
+                                </label>
+
+                                <label class="lbl">@L["دستور همراه نتایج برای مدل (خالی = پیش‌فرض)"]</label>
+                                <textarea class="inp" rows="5" dir="auto" placeholder="@WebSearchService.DefaultPrompt" value="@so.PromptTemplate"
+                                          @onchange="e => Opt(o => o.PromptTemplate = e.Value?.ToString() ?? string.Empty)"></textarea>
+                                <p class="muted small">@L["می‌توانید {date} (تاریخ امروز) و {results} (جای نتایج) را بنویسید."]</p>
+
+                                @if (State.SearchEngine == "custom")
+                                {
+                                    <label class="lbl">@L["موتور سفارشی"]</label>
+                                    <p class="muted small">@L["آدرس می‌تواند {query}، {count}، {key} و {region} داشته باشد. مسیرهای JSON مثل $.results[*] هستند."]</p>
+                                    <input class="inp" dir="ltr" placeholder="https://api.example.com/search?q={query}&n={count}" value="@so.CustomUrl" @onchange="e => Opt(o => o.CustomUrl = e.Value?.ToString() ?? string.Empty)" />
+                                    <textarea class="inp" style="margin-top:6px" rows="2" dir="ltr" placeholder="Authorization: Bearer {key}" value="@so.CustomHeaders" @onchange="e => Opt(o => o.CustomHeaders = e.Value?.ToString() ?? string.Empty)"></textarea>
+                                    <input class="inp" style="margin-top:6px" dir="ltr" placeholder="$.results[*]" value="@so.CustomResults" @onchange="e => Opt(o => o.CustomResults = e.Value?.ToString() ?? string.Empty)" />
+                                    <input class="inp" style="margin-top:6px" dir="ltr" placeholder="title: $.title" value="@so.CustomTitle" @onchange="e => Opt(o => o.CustomTitle = e.Value?.ToString() ?? string.Empty)" />
+                                    <input class="inp" style="margin-top:6px" dir="ltr" placeholder="link: $.url" value="@so.CustomLink" @onchange="e => Opt(o => o.CustomLink = e.Value?.ToString() ?? string.Empty)" />
+                                    <input class="inp" style="margin-top:6px" dir="ltr" placeholder="snippet: $.content" value="@so.CustomSnippet" @onchange="e => Opt(o => o.CustomSnippet = e.Value?.ToString() ?? string.Empty)" />
+                                }
+                                <div class="row-btns">
+                                    <button class="btn" @onclick="ResetSearchOpts">@L["بازنشانی تنظیمات جستجو"]</button>
+                                </div>
+                            </details>
                             <div class="row-btns">
                                 <button class="btn" @onclick="TestSearch">@L["آزمایش جستجو"]</button>
                             </div>
@@ -512,6 +561,18 @@ else if (_dlg == 1)
 
 
     string? _searchStatus;
+
+    void Opt(Action<SearchOptions> set)
+    {
+        set(State.SearchOpts);
+        State.SaveSearchOpts();
+    }
+
+    void ResetSearchOpts()
+    {
+        State.ResetSearchOpts();
+        _searchStatus = null;
+    }
 
     async Task TestSearch()
     {

@@ -710,3 +710,6 @@ textarea.inp.code { font-family: Consolas, "Cascadia Mono", monospace; font-size
 .icon-btn.on { color: var(--accent); }
 
 .composer .box .attach.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+.adv-search { margin-top: 12px; border: 1px solid var(--border, rgba(128,128,128,.25)); border-radius: 10px; padding: 8px 12px 12px; }
+.adv-search summary { cursor: pointer; font-weight: 600; padding: 4px 0; }

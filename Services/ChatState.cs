@@ -506,6 +506,8 @@ public class ChatState
         UserPresets = await _storage.LoadUserPresetsAsync();
         LockAfterMin = Preferences.Default.Get("lock_after_min", 0);
         WebSearchOn = Preferences.Default.Get("web_search", false);
+        try { SearchOpts = System.Text.Json.JsonSerializer.Deserialize<SearchOptions>(Preferences.Default.Get("search_opts", "")) ?? new(); }
+        catch { SearchOpts = new(); }
         SearchEngine = Preferences.Default.Get("search_engine", WebSearchService.Ddg);
         SearchBaseUrl = Preferences.Default.Get("search_url", "");
         SearchKey = await _storage.LoadSearchKeyAsync();
@@ -541,6 +543,57 @@ public class ChatState
 
     WebSearchService? _search;
     WebSearchService Search => _search ??= new WebSearchService(_http);
+
+    public SearchOptions SearchOpts { get; private set; } = new();
+
+    /// <summary>Call after changing a field of <see cref="SearchOpts"/>.</summary>
+    public void SaveSearchOpts() =>
+        Preferences.Default.Set("search_opts", System.Text.Json.JsonSerializer.Serialize(SearchOpts));
+
+    public void ResetSearchOpts()
+    {
+        SearchOpts = new();
+        SaveSearchOpts();
+        Notify();
+    }
+
+    /// <summary>Lets the model write a good search query from the recent conversation. Falls back to the last message.</summary>
+    async Task<string> BuildSearchQueryAsync(IChatProvider impl, ProviderConfig provider, string model,
+        List<ChatMessage> history, string fallback, CancellationToken ct)
+    {
+        try
+        {
+            string Clip(string t) => t.Length > 600 ? t[..600] : t;
+            var transcript = string.Join("\n", history.Where(m => (m.Role == "user" || m.Role == "assistant") && !string.IsNullOrWhiteSpace(m.Content))
+                .TakeLast(6).Select(m => $"{m.Role}: {Clip(m.Content)}"));
+            var ask = new ChatMessage
+            {
+                Role = "user",
+                Content = "Write ONE concise web search query (at most 12 words, in the language that gives the best results, no quotes, no explanation) " +
+                          "that would best find information to answer the last user message of this conversation.\n\n" + transcript
+            };
+            using var qc = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            qc.CancelAfter(TimeSpan.FromSeconds(20));
+            var sb = new System.Text.StringBuilder();
+            await foreach (var chunk in impl.StreamAsync(provider, model, new List<ChatMessage> { ask }, null, null, qc.Token))
+            {
+                if (!chunk.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) sb.Append(chunk);
+                if (sb.Length > 600) break;
+            }
+            // skip a quoted "thinking" block, take the first real line
+            var line = sb.ToString().Split('\n').Select(l => l.Trim())
+                .FirstOrDefault(l => l.Length > 0 && !l.StartsWith('>')) ?? "";
+            line = line.Trim('"', '\'', '`', ' ');
+            if (line.Length is > 0 and <= 300)
+            {
+                _log.Info("Search query by the model: " + line);
+                return line;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { _log.Warn("Could not build a search query with the model: " + ex.Message); }
+        return fallback;
+    }
 
     public bool WebSearchOn { get; private set; }
     public string SearchEngine { get; private set; } = WebSearchService.Ddg;
@@ -579,8 +632,8 @@ public class ChatState
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            var r = await Search.SearchAsync(SearchEngine, "latest news", SearchKey, SearchBaseUrl, 5, cts.Token);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(SearchOpts.TimeoutSec, 5, 120)));
+            var r = await Search.SearchAsync(SearchEngine, "latest news", SearchKey, SearchBaseUrl, SearchOpts, cts.Token);
             return r.Count > 0 ? L.F("جستجو کار می‌کند ✓ ({0} نتیجه)", r.Count) : L["جستجو انجام شد ولی نتیجه‌ای برنگشت."];
         }
         catch (Exception ex) { return L["جستجوی وب ناموفق بود: "] + ex.Message; }
@@ -1587,8 +1640,11 @@ public class ChatState
                 try
                 {
                     using var sc = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    sc.CancelAfter(TimeSpan.FromSeconds(20));
-                    found = await Search.SearchAsync(SearchEngine, query, SearchKey, SearchBaseUrl, 5, sc.Token);
+                    sc.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(SearchOpts.TimeoutSec, 5, 120)));
+                    var q = query;
+                    if (SearchOpts.QueryMode == "ai")
+                        q = await BuildSearchQueryAsync(impl, provider, model, history, query, ct);
+                    found = await Search.SearchAsync(SearchEngine, q, SearchKey, SearchBaseUrl, SearchOpts, sc.Token);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
@@ -1601,7 +1657,7 @@ public class ChatState
                 }
                 GenStatus = null;
                 if (found is { Count: > 0 })
-                    system = string.Join("\n\n", new[] { system, WebSearchService.BuildContext(found, DateTime.Now) }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                    system = string.Join("\n\n", new[] { system, WebSearchService.BuildContext(found, DateTime.Now, SearchOpts.PromptTemplate) }.Where(x => !string.IsNullOrWhiteSpace(x)));
             }
 
             // images generated by the model are stored as attachments of the reply
@@ -1635,7 +1691,7 @@ public class ChatState
                 }
             }
 
-            if (found is { Count: > 0 } && !string.IsNullOrEmpty(reply.Content))
+            if (found is { Count: > 0 } && SearchOpts.ShowSources && !string.IsNullOrEmpty(reply.Content))
                 reply.Content += WebSearchService.SourcesMarkdown(found, L["منابع"]);
         }
         catch (OperationCanceledException)
