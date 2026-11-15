@@ -706,3 +706,7 @@ textarea.inp.code { font-family: Consolas, "Cascadia Mono", monospace; font-size
 .lock-card { width: min(320px, 100%); display: flex; flex-direction: column; gap: 12px; text-align: center; }
 .lock-icon { font-size: 40px; }
 .lock-input { text-align: center; letter-spacing: 4px; }
+
+.icon-btn.on { color: var(--accent); }
+
+.composer .box .attach.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }

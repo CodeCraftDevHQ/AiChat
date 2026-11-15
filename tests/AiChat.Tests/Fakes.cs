@@ -76,7 +76,7 @@ public static class Helpers
         await foreach (var t in provider.StreamAsync(cfg, model, history, system,
             (mime, data) => { images.Add((mime, data)); return Task.CompletedTask; }, CancellationToken.None))
         {
-            if (t.StartsWith(ProviderStatus.Prefix)) statuses.Add(t[ProviderStatus.Prefix.Length..]);
+            if (t.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) statuses.Add(t[ProviderStatus.Prefix.Length..]);
             else texts.Add(t);
         }
         return new Run(texts, images, statuses);

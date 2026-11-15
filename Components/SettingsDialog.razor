@@ -291,6 +291,26 @@
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
 
+                            <label class="lbl">@L["جستجو در وب"]</label>
+                            <p class="muted small">@L["با دکمه‌ی 🌐 کنار کادر پیام روشن می‌شود. نتایج جستجو به مدل داده می‌شود و منابع زیر پاسخ می‌آید؛ با هر مدل چتی کار می‌کند."]</p>
+                            <AppSelect Title="@L["موتور جستجو"]" Value="@State.SearchEngine" ValueChanged="State.SetSearchEngine"
+                                       Options="@(new AppSelect.SelectOption[] { new("ddg", "DuckDuckGo (" + L["بدون کلید"] + ")"), new("brave", "Brave Search (" + L["نیاز به کلید"] + ")"), new("searxng", "SearXNG (" + L["سرور خودتان"] + ")") })" />
+                            @if (State.SearchEngine == "brave")
+                            {
+                                <input class="inp" style="margin-top:6px" type="password" dir="ltr" placeholder="Brave API key" value="@State.SearchKey" @onchange="e => State.SetSearchKeyAsync(e.Value?.ToString() ?? string.Empty)" />
+                            }
+                            @if (State.SearchEngine == "searxng")
+                            {
+                                <input class="inp" style="margin-top:6px" dir="ltr" placeholder="http://localhost:8080" value="@State.SearchBaseUrl" @onchange="e => State.SetSearchBaseUrl(e.Value?.ToString() ?? string.Empty)" />
+                            }
+                            <div class="row-btns">
+                                <button class="btn" @onclick="TestSearch">@L["آزمایش جستجو"]</button>
+                            </div>
+                            @if (_searchStatus != null)
+                            {
+                                <p class="status" dir="auto">@_searchStatus</p>
+                            }
+
                             <label class="lbl">@L["محدودیت حجم فایل‌ها (مگابایت)"]</label>
                             <div class="limits">
                                 <label>@L["عکس"] <input class="inp" type="number" min="1" max="500" value="@State.LimitImageMb" @onchange="e => State.SetLimits(imageMb: ToInt(e))" /></label>
@@ -490,6 +510,15 @@ else if (_dlg == 1)
     void OnFullWidth(ChangeEventArgs e) => State.SetUi(width: e.Value is true ? 0 : 768);
 
 
+
+    string? _searchStatus;
+
+    async Task TestSearch()
+    {
+        _searchStatus = L["در حال آزمایش..."];
+        StateHasChanged();
+        _searchStatus = await State.TestSearchAsync();
+    }
 
     string _pinNew = "", _pinRep = "";
     string? _pinStatus;

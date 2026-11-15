@@ -548,11 +548,12 @@ public class OpenAiCompatibleProvider : IChatProvider
             yield break;
         }
 
+        var inReason = false;
         await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
         {
             if (data == "[DONE]") yield break;
 
-            string? text = null;
+            string? text = null, reason = null;
             try
             {
                 using var doc = JsonDocument.Parse(data);
@@ -567,6 +568,12 @@ public class OpenAiCompatibleProvider : IChatProvider
                 {
                     if (delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
                         text = c.GetString();
+
+                    // thinking models (LM Studio, DeepSeek, ...) stream their reasoning separately
+                    if (delta.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String)
+                        reason = rc.GetString();
+                    else if (delta.TryGetProperty("reasoning", out var rs) && rs.ValueKind == JsonValueKind.String)
+                        reason = rs.GetString();
 
                     // Image output (e.g. OpenRouter image models): delta.images[].image_url.url
                     if (delta.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
@@ -588,7 +595,16 @@ public class OpenAiCompatibleProvider : IChatProvider
                 continue;
             }
 
-            if (!string.IsNullOrEmpty(text)) yield return text;
+            if (!string.IsNullOrEmpty(reason))
+            {
+                if (!inReason) { yield return "\n\n> 💭 "; inReason = true; }
+                yield return reason.Replace("\n", "\n> ");
+            }
+            if (!string.IsNullOrEmpty(text))
+            {
+                if (inReason) { yield return "\n\n"; inReason = false; }
+                yield return text;
+            }
         }
     }
 

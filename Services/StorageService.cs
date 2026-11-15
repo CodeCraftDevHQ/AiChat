@@ -44,6 +44,10 @@ public class StorageService
         await WriteAsync("providers.json", JsonSerializer.Serialize(list, Json));
     }
 
+    // the web-search API key lives in secure storage too
+    public Task SaveSearchKeyAsync(string key) => SetSecretAsync("websearch", key);
+    public Task<string> LoadSearchKeyAsync() => GetSecretAsync("websearch");
+
     public void DeleteSecret(string providerId)
     {
         var key = "apikey-" + providerId;
