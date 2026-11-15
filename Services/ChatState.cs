@@ -531,6 +531,44 @@ public class ChatState
         Notify();
     }
 
+    // ------------------------------------------------------------ backup
+
+    public async Task CreateBackupAsync(bool includeKeys)
+    {
+        try
+        {
+            var data = await _storage.CreateBackupAsync(includeKeys);
+            await SaveBytesAsync($"AiChat-backup-{DateTime.Now:yyyyMMdd-HHmm}.zip", data);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Creating the backup failed", ex);
+            SetNotice(L["ذخیره ناموفق بود: "] + ex.Message);
+        }
+    }
+
+    /// <summary>Restores a backup zip and reloads everything. Returns an error text, or null.</summary>
+    public async Task<string?> RestoreBackupAsync(Stream zip)
+    {
+        Stop();
+        var err = await _storage.RestoreBackupAsync(zip);
+        if (err == "NOT_BACKUP") return L["این فایل یک نسخه پشتیبان AI Chat نیست."];
+        if (err != null) return err;
+
+        Active = null;
+        Pending.Clear();
+        Providers = await _storage.LoadProvidersAsync();
+        Projects = await _storage.LoadProjectsAsync();
+        Conversations = (await _storage.LoadConversationsAsync() ?? new()).OrderByDescending(c => c.Updated).ToList();
+        UserPresets = await _storage.LoadUserPresetsAsync();
+        ModelTests = new(await _storage.LoadModelTestsAsync() ?? new());
+        var provider = Providers.FirstOrDefault(p => p.Id == CurrentProviderId) ?? Providers.FirstOrDefault();
+        CurrentProviderId = provider?.Id;
+        CurrentModel = PickModel(provider);
+        Notify();
+        return null;
+    }
+
     // ------------------------------------------------------------ remembered model per provider
 
     Dictionary<string, string> _modelByProvider = new();

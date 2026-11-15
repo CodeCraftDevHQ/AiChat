@@ -298,6 +298,25 @@
                             <p class="muted small">@L["اگر برنامه خطا داد، لاگ را کپی کنید و بفرستید. کلید API و متن پیام‌ها در لاگ نمی‌آید."]</p>
                             <button class="btn" @onclick="State.OpenLogs">@L["مشاهده لاگ‌ها"]</button>
 
+                            <label class="lbl">@L["نسخه پشتیبان"]</label>
+                            <p class="muted small">@L["همه گفتگوها، پروژه‌ها، API ها، الگوها و فایل‌های پیوست در یک فایل zip ذخیره می‌شود."]</p>
+                            <label class="check"><input type="checkbox" checked="@_bkKeys" @onchange="e => _bkKeys = e.Value is true" /> @L["کلیدهای API هم در فایل باشد (فایل را به کسی ندهید)"]</label>
+                            <div class="row-btns">
+                                <button class="btn" @onclick="MakeBackup">@L["ساخت نسخه پشتیبان"]</button>
+                                @if (_bkRestore)
+                                {
+                                    <button class="btn danger" @onclick="RestoreBackup">@L["مطمئنید؟ اطلاعات فعلی جایگزین می‌شود"]</button>
+                                }
+                                else
+                                {
+                                    <button class="btn" @onclick="() => _bkRestore = true">@L["بازیابی از نسخه پشتیبان"]</button>
+                                }
+                            </div>
+                            @if (_bkStatus != null)
+                            {
+                                <p class="status" dir="auto">@_bkStatus</p>
+                            }
+
                             <label class="lbl">@L["گفتگوها"]</label>
                             @if (_confirmClear)
                             {
@@ -447,6 +466,29 @@ else if (_dlg == 1)
     void OnFullWidth(ChangeEventArgs e) => State.SetUi(width: e.Value is true ? 0 : 768);
 
 
+
+    bool _bkKeys, _bkRestore;
+    string? _bkStatus;
+
+    async Task MakeBackup()
+    {
+        _bkStatus = null;
+        await State.CreateBackupAsync(_bkKeys);
+    }
+
+    async Task RestoreBackup()
+    {
+        _bkRestore = false;
+        try
+        {
+            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = L["انتخاب فایل نسخه پشتیبان"] });
+            if (file == null) return;
+            await using var stream = await file.OpenReadAsync();
+            var err = await State.RestoreBackupAsync(stream);
+            _bkStatus = err ?? L["بازیابی انجام شد ✓"];
+        }
+        catch (Exception ex) { _bkStatus = L["خطا: "] + ex.Message; }
+    }
 
     bool _confirmClear;
 

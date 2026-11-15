@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AiChat.Models;
@@ -135,6 +136,103 @@ public class StorageService
         foreach (var a in list)
         {
             try { File.Delete(AttachPath(a)); } catch { }
+        }
+    }
+
+    // ---- backup / restore ----
+
+    static readonly string[] BackupFiles =
+        { "providers.json", "conversations.json", "projects.json", "user_presets.json", "model_tests.json" };
+
+    /// <summary>A zip with all data (providers, chats, projects, templates, attachments). API keys only when asked.</summary>
+    public async Task<byte[]> CreateBackupAsync(bool includeKeys)
+    {
+        Dictionary<string, string>? keys = null;
+        if (includeKeys)
+        {
+            keys = new();
+            foreach (var p in await LoadProvidersAsync())
+                if (!string.IsNullOrEmpty(p.ApiKey)) keys[p.Id] = p.ApiKey;
+        }
+
+        await _lock.WaitAsync();
+        try
+        {
+            using var ms = new MemoryStream();
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
+            {
+                void AddText(string name, string text)
+                {
+                    using var w = new StreamWriter(zip.CreateEntry(name, CompressionLevel.Optimal).Open());
+                    w.Write(text);
+                }
+                AddText("backup.json", JsonSerializer.Serialize(new { app = "AiChat", format = 1, created = DateTime.UtcNow }));
+                foreach (var f in BackupFiles)
+                    if (File.Exists(PathOf(f))) zip.CreateEntryFromFile(PathOf(f), f, CompressionLevel.Optimal);
+                if (Directory.Exists(AttachDir))
+                    foreach (var f in Directory.GetFiles(AttachDir))
+                        zip.CreateEntryFromFile(f, "attachments/" + Path.GetFileName(f), CompressionLevel.Fastest);
+                if (keys is { Count: > 0 }) AddText("keys.json", JsonSerializer.Serialize(keys));
+            }
+            return ms.ToArray();
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>Replaces the current data with the backup. Returns an error text, or null on success.</summary>
+    public async Task<string?> RestoreBackupAsync(Stream input)
+    {
+        try
+        {
+            using var buffer = new MemoryStream();
+            await input.CopyToAsync(buffer);
+            buffer.Position = 0;
+            using var zip = new ZipArchive(buffer, ZipArchiveMode.Read);
+            if (zip.GetEntry("backup.json") == null) return "NOT_BACKUP";
+
+            Dictionary<string, string>? keys = null;
+            await _lock.WaitAsync();
+            try
+            {
+                Directory.CreateDirectory(AttachDir);
+                foreach (var e in zip.Entries)
+                {
+                    if (e.Length == 0 && e.FullName.EndsWith('/')) continue;
+                    var name = e.FullName.Replace('\\', '/');
+                    if (name == "keys.json")
+                    {
+                        using var r = new StreamReader(e.Open());
+                        keys = JsonSerializer.Deserialize<Dictionary<string, string>>(await r.ReadToEndAsync());
+                    }
+                    else if (BackupFiles.Contains(name))
+                        await Extract(e, PathOf(name));
+                    else if (name.StartsWith("attachments/"))
+                    {
+                        var file = Path.GetFileName(name); // never trust folders from the zip
+                        if (file.Length > 0) await Extract(e, Path.Combine(AttachDir, file));
+                    }
+                }
+            }
+            finally { _lock.Release(); }
+
+            if (keys != null)
+                foreach (var (id, key) in keys) await SetSecretAsync(id, key);
+            return null;
+        }
+        catch (InvalidDataException) { return "NOT_BACKUP"; }
+        catch (Exception ex)
+        {
+            _log.Error("Restoring the backup failed", ex);
+            return ex.Message;
+        }
+
+        static async Task Extract(ZipArchiveEntry e, string dest)
+        {
+            var tmp = dest + ".tmp";
+            await using (var src = e.Open())
+            await using (var dst = File.Create(tmp))
+                await src.CopyToAsync(dst);
+            File.Move(tmp, dest, true);
         }
     }
 

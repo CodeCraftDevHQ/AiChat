@@ -697,3 +697,5 @@ textarea.inp.code { font-family: Consolas, "Cascadia Mono", monospace; font-size
 .tpl-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .help-body { padding: 4px 4px 8px; max-height: 70vh; overflow: auto; line-height: 1.7; }
 .help-body ol { margin: 6px 0; padding-inline-start: 22px; }
+
+.row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
