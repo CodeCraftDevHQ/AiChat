@@ -291,6 +291,43 @@
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
 
+                            <label class="lbl">@L["توکن و هزینه"]</label>
+                            <p class="muted small">@L["تعداد توکن و هزینه فقط تخمین است. قیمت‌ها را خودتان از سایت سرویس‌دهنده وارد کنید."]</p>
+                            <AppSelect Title="@L["نمایش توکن و هزینه"]" Value="@State.CostOpts.Mode" ValueChanged="v => Cost(c => c.Mode = v)"
+                                       Options="@(new AppSelect.SelectOption[] { new("off", L["نمایش داده نشود"]), new("total", L["مجموع گفتگو (زیر کادر پیام)"]), new("message", L["هر پاسخ"]), new("both", L["هر دو"]) })" />
+                            @if (State.CostOpts.Mode != "off")
+                            {
+                                <label class="lbl">@L["نماد پول"]</label>
+                                <input class="inp" dir="ltr" maxlength="8" value="@State.CostOpts.Currency" @onchange="e => Cost(c => c.Currency = e.Value?.ToString() ?? string.Empty)" />
+
+                                <label class="lbl">@L["توکن هر تصویر"]: @State.CostOpts.ImageTokens</label>
+                                <input type="range" class="range" min="0" max="3000" step="50" value="@State.CostOpts.ImageTokens" @oninput="e => Cost(c => c.ImageTokens = ToInt(e))" />
+
+                                <label class="lbl">@L["نویسه در هر توکن (لاتین)"]: @State.CostOpts.LatinCharsPerToken.ToString("0.0")</label>
+                                <input type="range" class="range" min="2" max="6" step="0.1" value="@State.CostOpts.LatinCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.LatinCharsPerToken = ToDouble(e, 4))" />
+
+                                <label class="lbl">@L["نویسه در هر توکن (فارسی/عربی)"]: @State.CostOpts.ArabicCharsPerToken.ToString("0.0")</label>
+                                <input type="range" class="range" min="1" max="5" step="0.1" value="@State.CostOpts.ArabicCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.ArabicCharsPerToken = ToDouble(e, 2.2))" />
+
+                                <label class="lbl">@L["جدول قیمت مدل‌ها"]</label>
+                                <p class="muted small">@L["اولین ردیفی که بخشی از نام مدل در آن باشد استفاده می‌شود. ردیف با نام خالی برای همه‌ی مدل‌هاست. قیمت‌ها برای هر یک میلیون توکن."]</p>
+                                @foreach (var row in State.CostOpts.Prices.ToList())
+                                {
+                                    var r = row;
+                                    <div class="price-row">
+                                        <input class="inp" dir="ltr" placeholder="@L["بخشی از نام مدل"]" value="@r.Pattern" @onchange="e => Cost(c => r.Pattern = e.Value?.ToString() ?? string.Empty)" />
+                                        <input class="inp" type="number" step="any" min="0" dir="ltr" placeholder="@L["ورودی"]" value="@r.InputPerM.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => Cost(c => r.InputPerM = ToDouble(e, 0))" />
+                                        <input class="inp" type="number" step="any" min="0" dir="ltr" placeholder="@L["خروجی"]" value="@r.OutputPerM.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => Cost(c => r.OutputPerM = ToDouble(e, 0))" />
+                                        <input class="inp" type="number" min="0" dir="ltr" placeholder="context (K)" value="@r.ContextK" @onchange="e => Cost(c => r.ContextK = ToInt(e))" />
+                                        <button class="icon-btn sm" title="@L["حذف"]" @onclick="() => Cost(c => c.Prices.Remove(r))">✕</button>
+                                    </div>
+                                }
+                                <div class="row-btns">
+                                    <button class="btn" @onclick="() => Cost(c => c.Prices.Add(new PriceRow { Pattern = State.CurrentModel }))">@L["+ افزودن ردیف قیمت"]</button>
+                                    <button class="btn" @onclick="State.ResetCostOpts">@L["بازنشانی"]</button>
+                                </div>
+                            }
+
                             <label class="lbl">@L["نمایش فکر کردن مدل"]</label>
                             <AppSelect Title="@L["نمایش فکر کردن مدل"]" Value="@State.ThinkMode" ValueChanged="State.SetThinkMode"
                                        Options="@(new AppSelect.SelectOption[] { new("auto", L["باز هنگام فکر، بسته بعد از آن"]), new("open", L["همیشه باز"]), new("closed", L["همیشه بسته"]), new("hidden", L["نمایش داده نشود"]) })" />
@@ -582,6 +619,15 @@ else if (_dlg == 1)
 
 
     string? _searchStatus;
+
+    void Cost(Action<CostOptions> set)
+    {
+        set(State.CostOpts);
+        State.SaveCostOpts();
+    }
+
+    static double ToDouble(ChangeEventArgs e, double fallback) =>
+        double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : fallback;
 
     void Opt(Action<SearchOptions> set)
     {

@@ -219,6 +219,15 @@
                     </button>
                 }
             </div>
+            @if (State.CostOpts.Mode is "total" or "both" && State.StatsFor(State.Active) is { } cs)
+            {
+                var pct = cs.ContextLimit is > 0 ? cs.ContextTokens * 100 / cs.ContextLimit.Value : (int?)null;
+                <div class="tokline @(pct >= 80 ? "warn" : "")" dir="auto" title="@L["تخمینی است؛ توکن‌شمار هر مدل کمی فرق دارد."]">
+                    ≈ @TokenCost.FormatTokens(cs.ContextTokens) @L["توکن در گفتگو"]
+                    @if (pct != null) { <span> · @pct% @L["از context"]</span> }
+                    @if (cs.Cost != null) { <span> · @L["هزینه‌ی کل"] ≈ @TokenCost.FormatMoney(cs.Cost.Value, State.CostOpts.Currency)</span> }
+                </div>
+            }
             <div class="hint">@L["پاسخ‌ها ممکن است اشتباه باشند. اطلاعات مهم را بررسی کنید."]</div>
         </div>
     </main>

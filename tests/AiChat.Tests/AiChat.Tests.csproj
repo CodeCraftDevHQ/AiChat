@@ -28,6 +28,7 @@
 		<Compile Include="..\..\Services\PdfHelper.cs" Link="App\PdfHelper.cs" />
 		<Compile Include="..\..\Services\PinHelper.cs" Link="App\PinHelper.cs" />
 		<Compile Include="..\..\Services\WebSearch.cs" Link="App\WebSearch.cs" />
+		<Compile Include="..\..\Services\TokenCost.cs" Link="App\TokenCost.cs" />
 	</ItemGroup>
 
 </Project>

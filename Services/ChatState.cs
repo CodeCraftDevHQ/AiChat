@@ -506,6 +506,8 @@ public class ChatState
         UserPresets = await _storage.LoadUserPresetsAsync();
         LockAfterMin = Preferences.Default.Get("lock_after_min", 0);
         WebSearchOn = Preferences.Default.Get("web_search", false);
+        try { CostOpts = System.Text.Json.JsonSerializer.Deserialize<CostOptions>(Preferences.Default.Get("cost_opts", "")) ?? new(); }
+        catch { CostOpts = new(); }
         ThinkMode = Preferences.Default.Get("think_mode", "auto");
         ThinkMaxHeight = Preferences.Default.Get("think_h", 320);
         MarkdownRenderer.SetThinkOptions(ThinkMode, ThinkMaxHeight);
@@ -540,6 +542,42 @@ public class ChatState
         CurrentModel = PickModel(provider);
 
         Notify();
+    }
+
+    // ------------------------------------------------------------ token and cost estimate
+
+    public CostOptions CostOpts { get; private set; } = new();
+
+    public void SaveCostOpts()
+    {
+        Preferences.Default.Set("cost_opts", System.Text.Json.JsonSerializer.Serialize(CostOpts));
+        _statsKey = null;
+        Notify();
+    }
+
+    public void ResetCostOpts()
+    {
+        CostOpts = new();
+        SaveCostOpts();
+    }
+
+    (string, int, int, int)? _statsKey;
+    ConversationStats? _stats;
+
+    /// <summary>Estimated tokens and cost of a conversation (cached while nothing changed).</summary>
+    public ConversationStats? StatsFor(Conversation? conv)
+    {
+        if (conv == null || conv.Messages.Count == 0) return null;
+        var last = conv.Messages[^1];
+        var key = (conv.Id, conv.Messages.Count, (last.Content?.Length ?? 0) + last.Attachments.Count, SystemPrompt.Length + CurrentModel.Length);
+        if (_statsKey == key && _stats != null) return _stats;
+
+        var project = ProjectOf(conv);
+        var baseTokens = TokenCost.Estimate(SystemPrompt, CostOpts) + TokenCost.Estimate(project?.Instructions, CostOpts) +
+                         (project?.Files.Sum(a => TokenCost.ForAttachment(a, CostOpts)) ?? 0);
+        _stats = TokenCost.Analyze(conv.Messages, baseTokens, CurrentModel, CostOpts);
+        _statsKey = key;
+        return _stats;
     }
 
     // ------------------------------------------------------------ web search

@@ -120,6 +120,12 @@
                         {
                             <span class="model-tag" dir="ltr">@Message.Model</span>
                         }
+                        @if (State.CostOpts.Mode is "message" or "both" && State.StatsFor(State.Active) is { } cs && cs.PerMessage.TryGetValue(Message, out var ms) && ms.InputTokens > 0)
+                        {
+                            <span class="model-tag" dir="ltr" title="@L["تخمینی: ورودی"] @TokenCost.FormatTokens(ms.InputTokens) / @L["خروجی"] @TokenCost.FormatTokens(ms.Tokens)">
+                                ≈ @TokenCost.FormatTokens(ms.InputTokens) → @TokenCost.FormatTokens(ms.Tokens) tok@(ms.Cost != null ? " · " + TokenCost.FormatMoney(ms.Cost.Value, State.CostOpts.Currency) : "")
+                            </span>
+                        }
                     </div>
                 }
             </div>
