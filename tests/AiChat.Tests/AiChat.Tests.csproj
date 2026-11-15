@@ -26,6 +26,7 @@
 		<Compile Include="..\..\Services\Shortcuts.cs" Link="App\Shortcuts.cs" />
 		<Compile Include="..\..\Services\MarkdownRenderer.cs" Link="App\MarkdownRenderer.cs" />
 		<Compile Include="..\..\Services\PdfHelper.cs" Link="App\PdfHelper.cs" />
+		<Compile Include="..\..\Services\PinHelper.cs" Link="App\PinHelper.cs" />
 	</ItemGroup>
 
 </Project>

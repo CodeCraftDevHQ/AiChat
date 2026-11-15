@@ -53,6 +53,30 @@
                                 <input type="checkbox" checked="@State.IsRtl" @onchange="OnRtlChanged" />
                                 <span>@L["رابط راست‌به‌چپ (فارسی)"]</span>
                             </label>
+
+                            <label class="lbl">@L["قفل برنامه"]</label>
+                            @if (!State.HasPin)
+                            {
+                                <p class="muted small">@L["با رمز، باز کردن برنامه محافظت می‌شود. این فقط یک قفل صفحه است و داده‌ها را رمزگذاری نمی‌کند."]</p>
+                                <input class="inp" type="password" dir="ltr" placeholder="@L["رمز جدید"]" value="@_pinNew" @oninput="e => _pinNew = e.Value?.ToString() ?? string.Empty" />
+                                <input class="inp" style="margin-top:6px" type="password" dir="ltr" placeholder="@L["تکرار رمز"]" value="@_pinRep" @oninput="e => _pinRep = e.Value?.ToString() ?? string.Empty" />
+                                <button class="btn" style="margin-top:8px" @onclick="SetPin">@L["فعال کردن قفل"]</button>
+                            }
+                            else
+                            {
+                                <p class="muted small">@L["قفل برنامه فعال است."]</p>
+                                <AppSelect Title="@L["قفل خودکار"]" Value="@State.LockAfterMin.ToString()" ValueChanged="State.SetLockAfter"
+                                           Options="@(new AppSelect.SelectOption[] { new("0", L["فقط هنگام باز شدن برنامه"]), new("1", L["بعد از ۱ دقیقه بیرون بودن"]), new("5", L["بعد از ۵ دقیقه بیرون بودن"]), new("15", L["بعد از ۱۵ دقیقه بیرون بودن"]) })" />
+                                <div class="row-btns">
+                                    <button class="btn" @onclick="State.LockNow">@L["قفل کردن همین حالا"]</button>
+                                </div>
+                                <input class="inp" type="password" dir="ltr" placeholder="@L["رمز فعلی (برای برداشتن قفل)"]" value="@_pinNew" @oninput="e => _pinNew = e.Value?.ToString() ?? string.Empty" />
+                                <button class="btn danger" style="margin-top:8px" @onclick="RemovePin">@L["برداشتن قفل"]</button>
+                            }
+                            @if (_pinStatus != null)
+                            {
+                                <p class="status" dir="auto">@_pinStatus</p>
+                            }
                             break;
 
                         case "appearance":
@@ -466,6 +490,21 @@ else if (_dlg == 1)
     void OnFullWidth(ChangeEventArgs e) => State.SetUi(width: e.Value is true ? 0 : 768);
 
 
+
+    string _pinNew = "", _pinRep = "";
+    string? _pinStatus;
+
+    void SetPin()
+    {
+        _pinStatus = State.SetPin(_pinNew, _pinRep) ?? L["قفل فعال شد ✓"];
+        if (State.HasPin) { _pinNew = ""; _pinRep = ""; }
+    }
+
+    void RemovePin()
+    {
+        if (State.RemovePin(_pinNew)) { _pinStatus = L["قفل برداشته شد."]; _pinNew = ""; }
+        else _pinStatus = L["رمز اشتباه است."];
+    }
 
     bool _bkKeys, _bkRestore;
     string? _bkStatus;

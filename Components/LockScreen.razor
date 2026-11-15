@@ -1,0 +1,53 @@
+@inherits StateComponent
+@inject Microsoft.JSInterop.IJSRuntime JS
+
+@if (State.Locked)
+{
+    <div class="lock-screen">
+        <div class="lock-card">
+            <div class="lock-icon">🔒</div>
+            <h2>@L["برنامه قفل است"]</h2>
+            <input class="inp lock-input" type="password" inputmode="numeric" autocomplete="off" dir="ltr"
+                   placeholder="@L["رمز عبور"]" value="@_pin" disabled="@(_wait > 0)"
+                   @oninput="e => { _pin = e.Value?.ToString() ?? string.Empty; _error = null; }"
+                   @onkeydown="OnKey" />
+            @if (_wait > 0)
+            {
+                <p class="status">@L.F("چند ثانیه صبر کنید: {0}", _wait)</p>
+            }
+            else if (_error != null)
+            {
+                <p class="status" dir="auto">@_error</p>
+            }
+            <button class="btn primary" disabled="@(_wait > 0)" @onclick="Unlock">@L["باز کردن قفل"]</button>
+        </div>
+    </div>
+}
+
+@code {
+    string _pin = "";
+    string? _error;
+    int _wait;
+
+    async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Unlock();
+    }
+
+    async Task Unlock()
+    {
+        if (_wait > 0) return;
+        var wait = State.TryUnlock(_pin);
+        if (State.Locked)
+        {
+            _pin = "";
+            if (wait > 0)
+            {
+                _error = null;
+                for (_wait = wait; _wait > 0; _wait--) { StateHasChanged(); await Task.Delay(1000); }
+            }
+            else _error = L["رمز اشتباه است."];
+        }
+        else _pin = "";
+    }
+}

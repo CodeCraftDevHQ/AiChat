@@ -504,6 +504,8 @@ public class ChatState
         LimitPdfMb = Preferences.Default.Get("limit_pdf_mb", 50);
         ShrinkImages = Preferences.Default.Get("shrink_images", true);
         UserPresets = await _storage.LoadUserPresetsAsync();
+        LockAfterMin = Preferences.Default.Get("lock_after_min", 0);
+        Locked = HasPin;
         // first run: show the language page (people who already used the app are not asked)
         if (!Preferences.Default.ContainsKey("lang_chosen") &&
             (Preferences.Default.ContainsKey("lang") || Preferences.Default.ContainsKey("provider")))
@@ -529,6 +531,92 @@ public class ChatState
         CurrentModel = PickModel(provider);
 
         Notify();
+    }
+
+    // ------------------------------------------------------------ app lock (PIN)
+
+    public bool Locked { get; private set; }
+    public bool HasPin => !string.IsNullOrEmpty(Preferences.Default.Get("pin_hash", ""));
+
+    /// <summary>0 = lock only when the app starts; otherwise lock after this many minutes in the background.</summary>
+    public int LockAfterMin { get; private set; }
+
+    int _pinFails;
+    DateTime _pinBlockedUntil;
+    DateTime? _leftAt;
+
+    /// <returns>An error text, or null when the PIN was set.</returns>
+    public string? SetPin(string pin, string repeat)
+    {
+        if (pin.Length < PinHelper.MinLength) return L.F("رمز باید دست‌کم {0} کاراکتر باشد.", PinHelper.MinLength);
+        if (pin != repeat) return L["دو رمز یکسان نیستند."];
+        var salt = PinHelper.NewSalt();
+        Preferences.Default.Set("pin_salt", salt);
+        Preferences.Default.Set("pin_hash", PinHelper.Hash(pin, salt));
+        Notify();
+        return null;
+    }
+
+    public bool RemovePin(string current)
+    {
+        if (!PinHelper.Verify(current, Preferences.Default.Get("pin_salt", ""), Preferences.Default.Get("pin_hash", "")))
+            return false;
+        Preferences.Default.Remove("pin_salt");
+        Preferences.Default.Remove("pin_hash");
+        Locked = false;
+        Notify();
+        return true;
+    }
+
+    /// <returns>0 when unlocked or the PIN was wrong (no pause); otherwise the seconds to wait before the next try.</returns>
+    public int TryUnlock(string pin)
+    {
+        var remaining = (int)Math.Ceiling((_pinBlockedUntil - DateTime.UtcNow).TotalSeconds);
+        if (remaining > 0) return remaining;
+
+        if (PinHelper.Verify(pin, Preferences.Default.Get("pin_salt", ""), Preferences.Default.Get("pin_hash", "")))
+        {
+            _pinFails = 0;
+            Locked = false;
+            Notify();
+            return 0;
+        }
+
+        _pinFails++;
+        if (_pinFails < 5) return 0;
+        var wait = (int)Math.Min(300, 5 * Math.Pow(2, _pinFails - 5));
+        _pinBlockedUntil = DateTime.UtcNow.AddSeconds(wait);
+        return wait;
+    }
+
+    public void LockNow()
+    {
+        if (!HasPin) return;
+        Locked = true;
+        Notify();
+    }
+
+    public void SetLockAfter(string minutes)
+    {
+        LockAfterMin = int.TryParse(minutes, out var m) ? m : 0;
+        Preferences.Default.Set("lock_after_min", LockAfterMin);
+        Notify();
+    }
+
+    /// <summary>The app window lost focus / was hidden.</summary>
+    public void OnLeft() => _leftAt ??= DateTime.UtcNow;
+
+    /// <summary>The app window came back.</summary>
+    public void OnReturned()
+    {
+        var left = _leftAt;
+        _leftAt = null;
+        if (left == null || !HasPin || LockAfterMin <= 0 || Locked) return;
+        if (DateTime.UtcNow - left.Value >= TimeSpan.FromMinutes(LockAfterMin))
+        {
+            Locked = true;
+            Notify();
+        }
     }
 
     // ------------------------------------------------------------ backup
