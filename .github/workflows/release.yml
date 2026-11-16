@@ -12,6 +12,8 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -30,13 +32,14 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
       - name: Build installer
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.v.outputs.version }}" installer\AiChat.iss'
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.v.outputs.version }}" AiChat.iss'
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: installer/Output/*.exe
+          path: Output/*.exe
 
   android:
+    needs: windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +73,8 @@ jobs:
         run: >
           dotnet publish AiChat.csproj -f net10.0-android -c Release
           -p:AndroidPackageFormat=apk
+          -p:ApplicationDisplayVersion=${{ needs.windows.outputs.version }}
+          -p:ApplicationVersion=${{ github.run_number }}
           -p:AndroidKeyStore=true
           -p:AndroidSigningKeyStore=${{ runner.temp }}/release.keystore
           -p:AndroidSigningStorePass=${{ steps.ks.outputs.pass }}
