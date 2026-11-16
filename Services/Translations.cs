@@ -428,5 +428,6 @@ public static class Translations
         ["استفاده از Seed {0}"] = "Use seed {0}",
         ["Seed {0} تنظیم شد ✓"] = "Seed {0} set ✓",
         ["API فعلی ورودی «seed» ندارد؛ یک اتصال‌دهندهٔ تصویر (مثلاً Fooocus) انتخاب کنید."] = "The current API has no “seed” input; pick an image connector (e.g. Fooocus).",
+        ["پاسخ مدل"] = "Model answers",
     };
 }

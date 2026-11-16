@@ -298,57 +298,49 @@
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
 
-                            <label class="lbl">@L["تنظیمات پیش‌فرض پاسخ (برای همه)"]</label>
+                            <label class="lbl">@L["محدودیت حجم فایل‌ها (مگابایت)"]</label>
+                            <div class="limits">
+                                <label>@L["عکس"] <input class="inp" type="number" min="1" max="500" value="@State.LimitImageMb" @onchange="e => State.SetLimits(imageMb: ToInt(e))" /></label>
+                                <label>@L["PDF"] <input class="inp" type="number" min="1" max="500" value="@State.LimitPdfMb" @onchange="e => State.SetLimits(pdfMb: ToInt(e))" /></label>
+                                <label>@L["متن و کد"] <input class="inp" type="number" min="1" max="100" value="@State.LimitTextMb" @onchange="e => State.SetLimits(textMb: ToInt(e))" /></label>
+                            </div>
+                            <label class="chk"><input type="checkbox" checked="@State.ShrinkImages" @onchange="e => State.SetLimits(shrink: (bool)(e.Value ?? false))" /> @L["کوچک‌کردن خودکار عکس‌های بزرگ (بیش از ۳ مگابایت)"]</label>
+                            <p class="muted small">@L["بعضی سرویس‌ها (مثل Claude) عکس بزرگ‌تر از ۵ مگابایت را نمی‌پذیرند؛ کوچک‌کردن خودکار آن را به حدود ۲۰۴۸ پیکسل (JPEG) می‌رساند."]</p>
+
+                            <label class="lbl">@L["میانبرها (دستورهای /)"]</label>
+                            <p class="muted small">@L["با نوشتن / در ابتدای پیام، میانبرها پیشنهاد می‌شوند. {{text}} جای متن بعد از دستور را می‌گیرد."]</p>
+                            <textarea class="inp code" rows="10" dir="ltr" autocapitalize="off" spellcheck="false"
+                                      value="@ScText" @oninput="e => { _scText = e.Value?.ToString() ?? string.Empty; _scStatus = null; }"></textarea>
+                            <div class="row">
+                                <button class="primary" type="button" @onclick="SaveShortcuts">@L["ذخیره"]</button>
+                                <button class="btn" type="button" @onclick="InsertShortcutSample">@L["درج نمونه"]</button>
+                                <button class="btn" type="button" @onclick="ImportShortcuts">@L["وارد کردن فایل JSON"]</button>
+                                <button class="btn" type="button" @onclick="ExportShortcuts">@L["ذخیره به‌صورت فایل"]</button>
+                                <button class="btn" type="button" @onclick="ClearShortcuts">@L["پاک کردن"]</button>
+                            </div>
+                            @if (_scStatus != null)
+                            {
+                                <p class="status" dir="auto">@_scStatus</p>
+                            }
+                            break;
+
+                        case "answer":
+                            <label class="lbl first">@L["تنظیمات پیش‌فرض پاسخ (برای همه)"]</label>
                             <GenFields Value="State.GenDefaults" ShowSystem="false" OnChanged="State.SaveGenDefaults"
                                        Hint="@L["مقدار پیش‌فرض همه‌ی APIها؛ تنظیمات هر API یا هر گفتگو آن را لغو می‌کند."]" />
                             <div class="row-btns">
                                 <button class="btn" @onclick="State.ResetGenDefaults">@L["بازنشانی"]</button>
                             </div>
 
-                            <label class="lbl">@L["توکن و هزینه"]</label>
-                            <p class="muted small">@L["تعداد توکن و هزینه فقط تخمین است. قیمت‌ها را خودتان از سایت سرویس‌دهنده وارد کنید."]</p>
-                            <AppSelect Title="@L["نمایش توکن و هزینه"]" Value="@State.CostOpts.Mode" ValueChanged="v => Cost(c => c.Mode = v)"
-                                       Options="@(new AppSelect.SelectOption[] { new("off", L["نمایش داده نشود"]), new("total", L["مجموع گفتگو (زیر کادر پیام)"]), new("message", L["هر پاسخ"]), new("both", L["هر دو"]) })" />
-                            @if (State.CostOpts.Mode != "off")
-                            {
-                                <label class="lbl">@L["نماد پول"]</label>
-                                <input class="inp" dir="ltr" maxlength="8" value="@State.CostOpts.Currency" @onchange="e => Cost(c => c.Currency = e.Value?.ToString() ?? string.Empty)" />
-
-                                <label class="lbl">@L["توکن هر تصویر"]: @State.CostOpts.ImageTokens</label>
-                                <input type="range" class="range" min="0" max="3000" step="50" value="@State.CostOpts.ImageTokens" @oninput="e => Cost(c => c.ImageTokens = ToInt(e))" />
-
-                                <label class="lbl">@L["نویسه در هر توکن (لاتین)"]: @State.CostOpts.LatinCharsPerToken.ToString("0.0")</label>
-                                <input type="range" class="range" min="2" max="6" step="0.1" value="@State.CostOpts.LatinCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.LatinCharsPerToken = ToDouble(e, 4))" />
-
-                                <label class="lbl">@L["نویسه در هر توکن (فارسی/عربی)"]: @State.CostOpts.ArabicCharsPerToken.ToString("0.0")</label>
-                                <input type="range" class="range" min="1" max="5" step="0.1" value="@State.CostOpts.ArabicCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.ArabicCharsPerToken = ToDouble(e, 2.2))" />
-
-                                <label class="lbl">@L["جدول قیمت مدل‌ها"]</label>
-                                <p class="muted small">@L["اولین ردیفی که بخشی از نام مدل در آن باشد استفاده می‌شود. ردیف با نام خالی برای همه‌ی مدل‌هاست. قیمت‌ها برای هر یک میلیون توکن."]</p>
-                                @foreach (var row in State.CostOpts.Prices.ToList())
-                                {
-                                    var r = row;
-                                    <div class="price-row">
-                                        <input class="inp" dir="ltr" placeholder="@L["بخشی از نام مدل"]" value="@r.Pattern" @onchange="e => Cost(c => r.Pattern = e.Value?.ToString() ?? string.Empty)" />
-                                        <input class="inp" type="number" step="any" min="0" dir="ltr" placeholder="@L["ورودی"]" value="@r.InputPerM.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => Cost(c => r.InputPerM = ToDouble(e, 0))" />
-                                        <input class="inp" type="number" step="any" min="0" dir="ltr" placeholder="@L["خروجی"]" value="@r.OutputPerM.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => Cost(c => r.OutputPerM = ToDouble(e, 0))" />
-                                        <input class="inp" type="number" min="0" dir="ltr" placeholder="context (K)" value="@r.ContextK" @onchange="e => Cost(c => r.ContextK = ToInt(e))" />
-                                        <button class="icon-btn sm" title="@L["حذف"]" @onclick="() => Cost(c => c.Prices.Remove(r))">✕</button>
-                                    </div>
-                                }
-                                <div class="row-btns">
-                                    <button class="btn" @onclick="() => Cost(c => c.Prices.Add(new PriceRow { Pattern = State.CurrentModel }))">@L["+ افزودن ردیف قیمت"]</button>
-                                    <button class="btn" @onclick="State.ResetCostOpts">@L["بازنشانی"]</button>
-                                </div>
-                            }
-
                             <label class="lbl">@L["نمایش فکر کردن مدل"]</label>
                             <AppSelect Title="@L["نمایش فکر کردن مدل"]" Value="@State.ThinkMode" ValueChanged="State.SetThinkMode"
                                        Options="@(new AppSelect.SelectOption[] { new("auto", L["باز هنگام فکر، بسته بعد از آن"]), new("open", L["همیشه باز"]), new("closed", L["همیشه بسته"]), new("hidden", L["نمایش داده نشود"]) })" />
                             <label class="lbl">@L["حداکثر ارتفاع جعبه‌ی فکر"]: @State.ThinkMaxHeight px</label>
                             <input type="range" class="range" min="100" max="900" step="20" value="@State.ThinkMaxHeight" @oninput="e => State.SetThinkMaxHeight(ToInt(e))" />
+                            break;
 
-                            <label class="lbl">@L["جستجو در وب"]</label>
+                        case "search":
+                            <label class="lbl first">@L["جستجو در وب"]</label>
                             <p class="muted small">@L["با دکمه‌ی 🌐 کنار کادر پیام روشن می‌شود. نتایج جستجو به مدل داده می‌شود و منابع زیر پاسخ می‌آید؛ با هر مدل چتی کار می‌کند."]</p>
                             <AppSelect Title="@L["موتور جستجو"]" Value="@State.SearchEngine" ValueChanged="State.SetSearchEngine"
                                        Options="@(new AppSelect.SelectOption[] { new("ddg", "DuckDuckGo (" + L["بدون کلید"] + ")"), new("brave", "Brave Search (" + L["نیاز به کلید"] + ")"), new("searxng", "SearXNG (" + L["سرور خودتان"] + ")"), new("custom", L["موتور سفارشی (آدرس + JSON)"]) })" />
@@ -431,31 +423,46 @@
                             {
                                 <p class="status" dir="auto">@_searchStatus</p>
                             }
+                            break;
 
-                            <label class="lbl">@L["محدودیت حجم فایل‌ها (مگابایت)"]</label>
-                            <div class="limits">
-                                <label>@L["عکس"] <input class="inp" type="number" min="1" max="500" value="@State.LimitImageMb" @onchange="e => State.SetLimits(imageMb: ToInt(e))" /></label>
-                                <label>@L["PDF"] <input class="inp" type="number" min="1" max="500" value="@State.LimitPdfMb" @onchange="e => State.SetLimits(pdfMb: ToInt(e))" /></label>
-                                <label>@L["متن و کد"] <input class="inp" type="number" min="1" max="100" value="@State.LimitTextMb" @onchange="e => State.SetLimits(textMb: ToInt(e))" /></label>
-                            </div>
-                            <label class="chk"><input type="checkbox" checked="@State.ShrinkImages" @onchange="e => State.SetLimits(shrink: (bool)(e.Value ?? false))" /> @L["کوچک‌کردن خودکار عکس‌های بزرگ (بیش از ۳ مگابایت)"]</label>
-                            <p class="muted small">@L["بعضی سرویس‌ها (مثل Claude) عکس بزرگ‌تر از ۵ مگابایت را نمی‌پذیرند؛ کوچک‌کردن خودکار آن را به حدود ۲۰۴۸ پیکسل (JPEG) می‌رساند."]</p>
-
-                            <label class="lbl">@L["میانبرها (دستورهای /)"]</label>
-                            <p class="muted small">@L["با نوشتن / در ابتدای پیام، میانبرها پیشنهاد می‌شوند. {{text}} جای متن بعد از دستور را می‌گیرد."]</p>
-                            <textarea class="inp code" rows="10" dir="ltr" autocapitalize="off" spellcheck="false"
-                                      value="@ScText" @oninput="e => { _scText = e.Value?.ToString() ?? string.Empty; _scStatus = null; }"></textarea>
-                            <div class="row">
-                                <button class="primary" type="button" @onclick="SaveShortcuts">@L["ذخیره"]</button>
-                                <button class="btn" type="button" @onclick="InsertShortcutSample">@L["درج نمونه"]</button>
-                                <button class="btn" type="button" @onclick="ImportShortcuts">@L["وارد کردن فایل JSON"]</button>
-                                <button class="btn" type="button" @onclick="ExportShortcuts">@L["ذخیره به‌صورت فایل"]</button>
-                                <button class="btn" type="button" @onclick="ClearShortcuts">@L["پاک کردن"]</button>
-                            </div>
-                            @if (_scStatus != null)
+                        case "cost":
+                            <label class="lbl first">@L["توکن و هزینه"]</label>
+                            <p class="muted small">@L["تعداد توکن و هزینه فقط تخمین است. قیمت‌ها را خودتان از سایت سرویس‌دهنده وارد کنید."]</p>
+                            <AppSelect Title="@L["نمایش توکن و هزینه"]" Value="@State.CostOpts.Mode" ValueChanged="v => Cost(c => c.Mode = v)"
+                                       Options="@(new AppSelect.SelectOption[] { new("off", L["نمایش داده نشود"]), new("total", L["مجموع گفتگو (زیر کادر پیام)"]), new("message", L["هر پاسخ"]), new("both", L["هر دو"]) })" />
+                            @if (State.CostOpts.Mode != "off")
                             {
-                                <p class="status" dir="auto">@_scStatus</p>
+                                <label class="lbl">@L["نماد پول"]</label>
+                                <input class="inp" dir="ltr" maxlength="8" value="@State.CostOpts.Currency" @onchange="e => Cost(c => c.Currency = e.Value?.ToString() ?? string.Empty)" />
+
+                                <label class="lbl">@L["توکن هر تصویر"]: @State.CostOpts.ImageTokens</label>
+                                <input type="range" class="range" min="0" max="3000" step="50" value="@State.CostOpts.ImageTokens" @oninput="e => Cost(c => c.ImageTokens = ToInt(e))" />
+
+                                <label class="lbl">@L["نویسه در هر توکن (لاتین)"]: @State.CostOpts.LatinCharsPerToken.ToString("0.0")</label>
+                                <input type="range" class="range" min="2" max="6" step="0.1" value="@State.CostOpts.LatinCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.LatinCharsPerToken = ToDouble(e, 4))" />
+
+                                <label class="lbl">@L["نویسه در هر توکن (فارسی/عربی)"]: @State.CostOpts.ArabicCharsPerToken.ToString("0.0")</label>
+                                <input type="range" class="range" min="1" max="5" step="0.1" value="@State.CostOpts.ArabicCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.ArabicCharsPerToken = ToDouble(e, 2.2))" />
+
+                                <label class="lbl">@L["جدول قیمت مدل‌ها"]</label>
+                                <p class="muted small">@L["اولین ردیفی که بخشی از نام مدل در آن باشد استفاده می‌شود. ردیف با نام خالی برای همه‌ی مدل‌هاست. قیمت‌ها برای هر یک میلیون توکن."]</p>
+                                @foreach (var row in State.CostOpts.Prices.ToList())
+                                {
+                                    var r = row;
+                                    <div class="price-row">
+                                        <input class="inp" dir="ltr" placeholder="@L["بخشی از نام مدل"]" value="@r.Pattern" @onchange="e => Cost(c => r.Pattern = e.Value?.ToString() ?? string.Empty)" />
+                                        <input class="inp" type="number" step="any" min="0" dir="ltr" placeholder="@L["ورودی"]" value="@r.InputPerM.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => Cost(c => r.InputPerM = ToDouble(e, 0))" />
+                                        <input class="inp" type="number" step="any" min="0" dir="ltr" placeholder="@L["خروجی"]" value="@r.OutputPerM.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => Cost(c => r.OutputPerM = ToDouble(e, 0))" />
+                                        <input class="inp" type="number" min="0" dir="ltr" placeholder="context (K)" value="@r.ContextK" @onchange="e => Cost(c => r.ContextK = ToInt(e))" />
+                                        <button class="icon-btn sm" title="@L["حذف"]" @onclick="() => Cost(c => c.Prices.Remove(r))">✕</button>
+                                    </div>
+                                }
+                                <div class="row-btns">
+                                    <button class="btn" @onclick="() => Cost(c => c.Prices.Add(new PriceRow { Pattern = State.CurrentModel }))">@L["+ افزودن ردیف قیمت"]</button>
+                                    <button class="btn" @onclick="State.ResetCostOpts">@L["بازنشانی"]</button>
+                                </div>
                             }
+
                             break;
 
                         case "data":
@@ -731,6 +738,9 @@ else if (_dlg == 2)
         new SectionItem("appearance", L["ظاهر"]),
         new SectionItem("api", L["API ها"]),
         new SectionItem("chat", L["گفتگو"]),
+        new SectionItem("answer", L["پاسخ مدل"]),
+        new SectionItem("search", L["جستجو در وب"]),
+        new SectionItem("cost", L["توکن و هزینه"]),
         new SectionItem("data", L["داده‌ها و لاگ"]),
         new SectionItem("about", L["درباره"])
     };
