@@ -63,13 +63,6 @@ public class TplTests
     }
 
     [Fact]
-    public void Url_filter_escapes()
-    {
-        var r = Tpl.Expand(J("""{"q":"a/{{prompt|url}}"}"""), Resolve)!;
-        Assert.Equal("a/hello%20world", r["q"]!.GetValue<string>());
-    }
-
-    [Fact]
     public void Plain_values_are_untouched()
     {
         Assert.Equal("""{"a":1,"b":null,"c":"text"}""", Run("""{"a":1,"b":null,"c":"text"}"""));

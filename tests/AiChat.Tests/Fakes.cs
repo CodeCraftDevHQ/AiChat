@@ -21,7 +21,7 @@ public sealed class FakeHandler : HttpMessageHandler
     {
         var body = request.Content == null ? "" : await request.Content.ReadAsStringAsync(ct);
         var headers = request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value), StringComparer.OrdinalIgnoreCase);
-        var seen = new Seen(request.Method, request.RequestUri!.ToString(), body,
+        var seen = new Seen(request.Method, request.RequestUri!.AbsoluteUri, body,
             request.Content?.Headers.ContentType?.ToString(), headers);
         Requests.Add(seen);
         return _reply(seen);

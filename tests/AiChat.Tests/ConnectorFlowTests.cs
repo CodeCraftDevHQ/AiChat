@@ -119,7 +119,7 @@ public class ConnectorFlowTests
             "body": { "prompt": "{{prompt}}", "image": { "file": "{{image_base64}}" } } },
           "response": {"type":"binary"} }
         """);
-        await RunAsync(h, cfg, User("no image"));
+        await RunAsync(h, cfg, User("no picture"));
         Assert.DoesNotContain("image", h.Requests[0].Body.Replace("Content-Type: image", ""));
     }
 

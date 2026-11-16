@@ -93,7 +93,7 @@ public class WebSearchTests
     [Fact]
     public async Task Region_safe_search_and_time_range_reach_the_request()
     {
-        var h = new FakeHandler(_ => FakeHandler.Text("<html></html>"));
+        var h = new FakeHandler(r => r.Url.Contains("brave") ? FakeHandler.Json("{}") : FakeHandler.Text("<html></html>"));
         var s = new WebSearchService(new HttpClient(h));
         await s.SearchAsync(WebSearchService.Ddg, "x", "", "", new SearchOptions { Region = "de-de", SafeSearch = "strict", TimeRange = "week" }, default);
         await s.SearchAsync(WebSearchService.Brave, "x", "K", "", new SearchOptions { Region = "DE", SafeSearch = "off", TimeRange = "day", Count = 2 }, default);
