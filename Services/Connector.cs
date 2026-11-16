@@ -363,6 +363,8 @@ sealed class ConnectorRun
     string _job = "";
     JsonNode? _item;
     int _outputs;
+    bool _seedUsed;
+    string? _curSeed;
 
     public List<string> Texts { get; } = new();
 
@@ -500,7 +502,7 @@ sealed class ConnectorRun
             "key" => (_cfg.ApiKey ?? "").Trim(),
             "job" => _job,
             "system" => _system,
-            "seed" => _seed,
+            "seed" => UseSeed(),
             "temperature" => _cfg.Temperature,
             "top_p" => _cfg.TopP,
             "max_tokens" => _cfg.MaxTokens,
@@ -804,6 +806,10 @@ sealed class ConnectorRun
             foreach (var t in JPath.Select(json, tp)) Texts.Add(JPath.Text(t));
 
         if (resp["results"] is not JsonArray rules) return;
+        // optional: "seeds" lists the seed of every result, in the same order as the results
+        var seeds = JPath.Text(resp["seeds"]) is { Length: > 0 } sp
+            ? JPath.Select(json, sp).Select(JPath.Text).ToList() : new List<string>();
+        var emitted = 0;
         foreach (var rule in rules.OfType<JsonObject>())
         {
             var from = JPath.Text(rule["from"]);
@@ -811,6 +817,8 @@ sealed class ConnectorRun
             var ruleMime = JPath.Text(rule["mime"]);
             foreach (var node in JPath.Select(json, from.Length > 0 ? from : "$"))
             {
+                _curSeed = emitted < seeds.Count && seeds[emitted].Length > 0 && seeds[emitted] != "-1" ? seeds[emitted] : null;
+                emitted++;
                 switch (how)
                 {
                     case "text":
@@ -827,6 +835,7 @@ sealed class ConnectorRun
                         break;
                 }
             }
+            _curSeed = null;
         }
     }
 
@@ -867,10 +876,13 @@ sealed class ConnectorRun
         await EmitAsync(mime, bytes);
     }
 
+    int UseSeed() { _seedUsed = true; return _seed; }
+
     async Task EmitAsync(string mime, byte[] bytes)
     {
         if (_onImage == null) throw new InvalidOperationException("Results cannot be shown here.");
-        await _onImage(mime, bytes);
+        var seed = _curSeed ?? (_seedUsed ? _seed.ToString() : null);
+        await _onImage(MimeMeta.Add(mime, "seed", seed), bytes);
         _outputs++;
     }
 
@@ -928,5 +940,25 @@ sealed class ConnectorRun
         }
         if (b.Length > 12 && Encoding.ASCII.GetString(b, 4, 4) == "ftyp") return "video/mp4";
         return "application/octet-stream";
+    }
+}
+
+
+/// <summary>Carries small metadata (e.g. the seed) next to a mime type: "image/png;seed=123".</summary>
+public static class MimeMeta
+{
+    public static string Add(string mime, string key, string? value) =>
+        string.IsNullOrEmpty(value) ? mime : $"{mime};{key}={value}";
+
+    public static (string Mime, Dictionary<string, string> Meta) Split(string? mime)
+    {
+        var parts = (mime ?? "").Split(';');
+        var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in parts.Skip(1))
+        {
+            var i = p.IndexOf('=');
+            if (i > 0) meta[p[..i].Trim()] = p[(i + 1)..].Trim();
+        }
+        return (parts[0].Trim(), meta);
     }
 }

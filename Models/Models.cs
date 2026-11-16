@@ -121,6 +121,9 @@ public class Attachment
     /// <summary>PDF only: "text" = send extracted text (default), "file" = send the original PDF (Claude / Gemini).</summary>
     public string PdfMode { get; set; } = "text";
 
+    /// <summary>Generated images: the seed the generator reported (or that was sent), for re-use.</summary>
+    public string? Seed { get; set; }
+
     /// <summary>File name inside the app's attachments folder.</summary>
     public string StoredName { get; set; } = "";
 

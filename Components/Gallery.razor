@@ -1,0 +1,91 @@
+@inherits StateComponent
+
+@if (State.GalleryOpen)
+{
+    <div class="modal-backdrop" @onclick="State.CloseGallery">
+        <div class="modal wide gallery" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>@L["گالری"]</h2>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseGallery">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            </div>
+            <div class="gal-filters">
+                <div class="seg">
+                    <button class="@(_kind == "" ? "on" : "")" @onclick='() => SetKind("")'>@L["همه"]</button>
+                    <button class="@(_kind == "image" ? "on" : "")" @onclick='() => SetKind("image")'>@L["تصویر"]</button>
+                    <button class="@(_kind == "video" ? "on" : "")" @onclick='() => SetKind("video")'>@L["ویدیو"]</button>
+                    <button class="@(_kind == "audio" ? "on" : "")" @onclick='() => SetKind("audio")'>@L["صدا"]</button>
+                </div>
+                <input class="inp" dir="auto" placeholder="@L["جستجو در پرامپت و عنوان گفتگو…"]" @bind="_query" @bind:event="oninput" />
+            </div>
+            <div class="p-body">
+                @{ var all = Items(); var shown = all.Take(_take).ToList(); }
+                @if (all.Count == 0)
+                {
+                    <p class="muted">@L["هنوز چیزی ساخته نشده است."]</p>
+                }
+                else
+                {
+                    <div class="gal-grid">
+                        @foreach (var it in shown)
+                        {
+                            <div class="gal-item" @key="it.Att.Id">
+                                <AttachmentChip Attachment="it.Att" CanReuse="true" />
+                                <div class="gal-cap">
+                                    <span class="gal-prompt" dir="auto" title="@it.Prompt">@it.Prompt</span>
+                                    <small class="muted" dir="auto">@it.Conv.Title</small>
+                                    <div class="gal-row">
+                                        @if (it.Att.Seed != null) { <small class="muted">🎲 @it.Att.Seed</small> }
+                                        <span class="spacer"></span>
+                                        <button class="btn sm" @onclick="() => Go(it.Conv)">@L["رفتن به گفتگو"]</button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    @if (all.Count > shown.Count)
+                    {
+                        <div class="gal-more"><button class="btn" @onclick="More">@L["نمایش بیشتر"] (@(all.Count - shown.Count))</button></div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    record Item(Attachment Att, string Prompt, Conversation Conv);
+
+    string _kind = "";
+    string _query = "";
+    int _take = 60;
+
+    void SetKind(string k) { _kind = k; _take = 60; }
+    void More() => _take += 60;
+    void Go(Conversation c) { State.CloseGallery(); State.OpenConversation(c); }
+
+    List<Item> Items()
+    {
+        var list = new List<Item>();
+        foreach (var conv in State.Conversations.OrderByDescending(c => c.Updated))
+        {
+            string prompt = "";
+            foreach (var m in conv.Messages)
+            {
+                if (m.Role == "user") { prompt = m.Content; continue; }
+                foreach (var a in m.Attachments)
+                {
+                    if (a.Kind is not ("image" or "video" or "audio")) continue;
+                    if (_kind.Length > 0 && a.Kind != _kind) continue;
+                    if (_query.Length > 0 &&
+                        !(prompt.Contains(_query, StringComparison.OrdinalIgnoreCase) || conv.Title.Contains(_query, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    list.Add(new Item(a, prompt, conv));
+                }
+            }
+        }
+        // newest conversations first; inside a conversation, newest result first
+        return list.GroupBy(i => i.Conv).SelectMany(g => g.Reverse()).ToList();
+    }
+}

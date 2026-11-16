@@ -21,6 +21,10 @@
         {
             <button class="att-use" title="@L["استفاده در پیام بعدی"]" @onclick="Reuse" @onclick:stopPropagation="true">↪</button>
         }
+        @if (Attachment.Seed != null)
+        {
+            <button class="att-seed" title="@L.F("استفاده از Seed {0}", Attachment.Seed)" @onclick="UseSeed" @onclick:stopPropagation="true">🎲</button>
+        }
     </div>
 }
 else if (Attachment.Kind is "video" or "audio")
@@ -69,6 +73,7 @@ else
     [Parameter] public bool CanReuse { get; set; }
 
     Task Reuse() => State.UseAsInputAsync(Attachment);
+    Task UseSeed() => State.UseSeedAsync(Attachment);
     [Parameter] public EventCallback OnRemove { get; set; }
 
     protected override async Task OnParametersSetAsync()

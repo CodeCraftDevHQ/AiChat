@@ -21,6 +21,7 @@ public static class ConnectorTemplates
     "list": "$.model_filenames[*]"
   },
   "inputs": [
+    { "id": "seed", "label": "Seed (-1 = random)", "type": "number", "default": "-1" },
     {
       "id": "aspect",
       "label": "Aspect ratio",
@@ -82,7 +83,7 @@ public static class ConnectorTemplates
       "performance_selection": "{{input.performance}}",
       "aspect_ratios_selection": "{{input.aspect}}",
       "image_number": 1,
-      "image_seed": -1,
+      "image_seed": "{{input.seed}}",
       "sharpness": 2,
       "guidance_scale": 4,
       "base_model_name": "{{model}}",
@@ -119,6 +120,7 @@ public static class ConnectorTemplates
       "progressMax": 100
     },
     "response": {
+      "seeds": "$.job_result[*].seed",
       "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
     }
   }
@@ -138,6 +140,7 @@ public static class ConnectorTemplates
     "list": "$.model_filenames[*]"
   },
   "inputs": [
+    { "id": "seed", "label": "Seed (-1 = random)", "type": "number", "default": "-1" },
     {
       "id": "method",
       "label": "Method",
@@ -185,7 +188,7 @@ public static class ConnectorTemplates
       "style_selections": [],
       "performance_selection": "{{input.performance}}",
       "image_number": 1,
-      "image_seed": -1,
+      "image_seed": "{{input.seed}}",
       "sharpness": 2,
       "guidance_scale": 4,
       "base_model_name": "{{model}}",
@@ -217,6 +220,7 @@ public static class ConnectorTemplates
       "progressMax": 100
     },
     "response": {
+      "seeds": "$.job_result[*].seed",
       "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
     }
   },
@@ -237,6 +241,7 @@ public static class ConnectorTemplates
     "list": "$.model_filenames[*]"
   },
   "inputs": [
+    { "id": "seed", "label": "Seed (-1 = random)", "type": "number", "default": "-1" },
     {
       "id": "cn_type",
       "label": "Image use",
@@ -322,7 +327,7 @@ public static class ConnectorTemplates
       "performance_selection": "{{input.performance}}",
       "aspect_ratios_selection": "{{input.aspect}}",
       "image_number": 1,
-      "image_seed": -1,
+      "image_seed": "{{input.seed}}",
       "sharpness": 2,
       "guidance_scale": 4,
       "base_model_name": "{{model}}",
@@ -374,6 +379,7 @@ public static class ConnectorTemplates
       "progressMax": 100
     },
     "response": {
+      "seeds": "$.job_result[*].seed",
       "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
     }
   }
@@ -393,6 +399,7 @@ public static class ConnectorTemplates
     "list": "$.model_filenames[*]"
   },
   "inputs": [
+    { "id": "seed", "label": "Seed (-1 = random)", "type": "number", "default": "-1" },
     {
       "id": "direction",
       "label": "Direction",
@@ -454,7 +461,7 @@ public static class ConnectorTemplates
       "performance_selection": "{{input.performance}}",
       "aspect_ratios_selection": "{{input.aspect}}",
       "image_number": 1,
-      "image_seed": -1,
+      "image_seed": "{{input.seed}}",
       "sharpness": 2,
       "guidance_scale": 4,
       "base_model_name": "{{model}}",
@@ -492,6 +499,7 @@ public static class ConnectorTemplates
       "progressMax": 100
     },
     "response": {
+      "seeds": "$.job_result[*].seed",
       "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
     }
   },
@@ -512,6 +520,7 @@ public static class ConnectorTemplates
     "list": "$.model_filenames[*]"
   },
   "inputs": [
+    { "id": "seed", "label": "Seed (-1 = random)", "type": "number", "default": "-1" },
     {
       "id": "performance",
       "label": "Performance",
@@ -561,7 +570,7 @@ public static class ConnectorTemplates
       "performance_selection": "{{input.performance}}",
       "aspect_ratios_selection": "{{input.aspect}}",
       "image_number": 1,
-      "image_seed": -1,
+      "image_seed": "{{input.seed}}",
       "sharpness": 2,
       "guidance_scale": 4,
       "base_model_name": "{{model}}",
@@ -593,6 +602,7 @@ public static class ConnectorTemplates
       "progressMax": 100
     },
     "response": {
+      "seeds": "$.job_result[*].seed",
       "results": [ { "from": "$.job_result[*].base64", "as": "base64", "mime": "image/png" } ]
     }
   }

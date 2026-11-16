@@ -417,5 +417,16 @@ public static class Translations
         ["یک مدل انتخاب کنید (یا نام مدل را در تنظیمات وارد کنید)."] = "Choose a model (or enter a model name in Settings).",
         ["— انتخاب کنید (اختیاری) —"] = "— Select (optional) —",
         ["— مدل —"] = "— Model —",
+        ["گالری"] = "Gallery",
+        ["تصویر"] = "Image",
+        ["ویدیو"] = "Video",
+        ["صدا"] = "Audio",
+        ["جستجو در پرامپت و عنوان گفتگو…"] = "Search prompts and chat titles…",
+        ["هنوز چیزی ساخته نشده است."] = "Nothing has been generated yet.",
+        ["رفتن به گفتگو"] = "Go to chat",
+        ["نمایش بیشتر"] = "Show more",
+        ["استفاده از Seed {0}"] = "Use seed {0}",
+        ["Seed {0} تنظیم شد ✓"] = "Seed {0} set ✓",
+        ["API فعلی ورودی «seed» ندارد؛ یک اتصال‌دهندهٔ تصویر (مثلاً Fooocus) انتخاب کنید."] = "The current API has no “seed” input; pick an image connector (e.g. Fooocus).",
     };
 }
