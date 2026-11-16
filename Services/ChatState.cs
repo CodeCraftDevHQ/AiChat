@@ -510,6 +510,7 @@ public class ChatState
         catch { GenDefaults = new(); }
         try { CostOpts = System.Text.Json.JsonSerializer.Deserialize<CostOptions>(Preferences.Default.Get("cost_opts", "")) ?? new(); }
         catch { CostOpts = new(); }
+        ConnectorCatalogUrl = Preferences.Default.Get("connector_catalog", ConnectorRepo.DefaultCatalog);
         ThinkMode = Preferences.Default.Get("think_mode", "auto");
         ThinkMaxHeight = Preferences.Default.Get("think_h", 320);
         MarkdownRenderer.SetThinkOptions(ThinkMode, ThinkMaxHeight);
@@ -545,6 +546,18 @@ public class ChatState
 
         Notify();
     }
+
+    // ------------------------------------------------------------ connectors from a URL / catalog
+
+    public string ConnectorCatalogUrl { get; private set; } = ConnectorRepo.DefaultCatalog;
+
+    public void SetConnectorCatalogUrl(string url)
+    {
+        ConnectorCatalogUrl = string.IsNullOrWhiteSpace(url) ? ConnectorRepo.DefaultCatalog : url.Trim();
+        Preferences.Default.Set("connector_catalog", ConnectorCatalogUrl);
+    }
+
+    public Task<string> FetchConnectorTextAsync(string url) => ConnectorRepo.FetchAsync(_http, url, CancellationToken.None);
 
     // ------------------------------------------------------------ answer settings (temperature, top_p, max tokens, system prompts)
 

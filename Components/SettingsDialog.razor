@@ -235,6 +235,7 @@
                                                    Options="@(ConnectorTemplates.All.Select(t => new AppSelect.SelectOption(t.Name, L[t.Name])).ToList())" />
                                         <div class="row">
                                             <button class="btn sm" type="button" @onclick="() => OpenDlg(1)">❓ @L["راهنما و پرامپت هوش مصنوعی"]</button>
+                                            <button class="btn sm" type="button" @onclick="() => OpenDlg(2)">🌐 @L["افزودن از آدرس / کاتالوگ"]</button>
                                         </div>
                                         @if (ConnectorHelp() is { Length: > 0 } help)
                                         {
@@ -559,9 +560,132 @@ else if (_dlg == 1)
         </div>
     </div>
 }
+else if (_dlg == 2)
+{
+    <div class="modal-backdrop" @onclick="CloseDlg">
+        <div class="sheet wide help-sheet" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>🌐 @L["افزودن اتصال از آدرس / کاتالوگ"]</strong>
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="CloseDlg">✕</button>
+            </div>
+            <div class="help-body">
+                @if (_pvJson == null)
+                {
+                    <label class="lbl first">@L["آدرس مستقیم فایل JSON"]</label>
+                    <p class="muted small">@L["لینک صفحه‌ی GitHub یا فایل raw هر دو قبول است."]</p>
+                    <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="https://github.com/.../connector.json" value="@_repoUrl"
+                           @oninput="e => _repoUrl = e.Value?.ToString() ?? string.Empty" />
+                    <div class="row"><button class="btn" type="button" disabled="@_repoBusy" @onclick="() => FetchPreview(_repoUrl)">@L["دریافت"]</button></div>
+
+                    <label class="lbl">@L["کاتالوگ اتصال‌ها"]</label>
+                    <p class="muted small">@L["فهرستی از اتصال‌های آماده (مثلاً یک مخزن GitHub). آدرس فهرست را می‌توانید عوض کنید."]</p>
+                    <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" value="@State.ConnectorCatalogUrl"
+                           @onchange="e => State.SetConnectorCatalogUrl(e.Value?.ToString() ?? string.Empty)" />
+                    <div class="row"><button class="btn" type="button" disabled="@_repoBusy" @onclick="LoadCatalog">@L["بارگذاری فهرست"]</button></div>
+
+                    @if (_repoStatus != null)
+                    {
+                        <p class="status" dir="auto">@_repoStatus</p>
+                    }
+
+                    @foreach (var item in _catalog)
+                    {
+                        var it = item;
+                        <div class="tpl-row">
+                            <div class="tpl-name"><b dir="auto">@it.Name</b>
+                                <span class="muted small" dir="auto">@it.Description @(it.Author.Length > 0 ? "· " + it.Author : "")</span></div>
+                            <button class="btn sm" type="button" disabled="@_repoBusy" @onclick="() => FetchPreview(it.Url)">@L["مشاهده"]</button>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <label class="lbl first" dir="auto">@(_pvInfo!.Name.Length > 0 ? _pvInfo.Name : L["اتصال دریافت‌شده"])</label>
+                    @if (_pvInfo.Help.Length > 0)
+                    {
+                        <p class="muted" dir="auto">@_pvInfo.Help</p>
+                    }
+                    <p><b>@L["این اتصال به این سرورها درخواست می‌فرستد:"]</b></p>
+                    @if (_pvInfo.Hosts.Count == 0)
+                    {
+                        <p class="muted small">@L["هیچ آدرس کاملی در آن نیست؛ فقط به آدرس پایه‌ای که خودتان وارد می‌کنید درخواست می‌رود."]</p>
+                    }
+                    else
+                    {
+                        <ul dir="ltr">
+                            @foreach (var h in _pvInfo.Hosts)
+                            {
+                                <li>@h</li>
+                            }
+                        </ul>
+                    }
+                    <p class="muted small">@L["هشدار: اتصال‌ها می‌توانند پیام‌ها، فایل‌ها و کلید API شما را به آدرس‌های داخلشان بفرستند. فقط از منبع قابل‌اعتماد استفاده کنید."]</p>
+                    <textarea class="inp code" rows="10" dir="ltr" readonly>@_pvJson</textarea>
+                    <div class="row">
+                        <button class="primary" type="button" @onclick="UsePreview">@L["استفاده"]</button>
+                        <button class="btn" type="button" @onclick="() => { _pvJson = null; _pvInfo = null; }">@L["بازگشت"]</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     int _dlg = -1;
+
+    // connector from a URL / catalog
+    string _repoUrl = "";
+    string? _repoStatus, _pvJson;
+    ConnectorInfo? _pvInfo;
+    List<CatalogItem> _catalog = new();
+    bool _repoBusy;
+
+    async Task LoadCatalog()
+    {
+        _repoBusy = true;
+        _repoStatus = L["در حال دریافت..."];
+        StateHasChanged();
+        try
+        {
+            var text = await State.FetchConnectorTextAsync(State.ConnectorCatalogUrl);
+            _catalog = ConnectorRepo.ParseCatalog(text, State.ConnectorCatalogUrl);
+            _repoStatus = _catalog.Count == 0 ? L["فهرست خالی است."] : null;
+        }
+        catch (Exception ex) { _repoStatus = L["خطا: "] + ex.Message; }
+        _repoBusy = false;
+    }
+
+    async Task FetchPreview(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        _repoBusy = true;
+        _repoStatus = L["در حال دریافت..."];
+        StateHasChanged();
+        try
+        {
+            var json = await State.FetchConnectorTextAsync(url);
+            var info = ConnectorRepo.Inspect(json, out var err);
+            if (info == null) _repoStatus = L["این فایل یک اتصال معتبر نیست: "] + err;
+            else { _pvJson = json; _pvInfo = info; _repoStatus = null; }
+        }
+        catch (Exception ex) { _repoStatus = L["خطا: "] + ex.Message; }
+        _repoBusy = false;
+    }
+
+    void UsePreview()
+    {
+        if (_editing == null || _pvJson == null || _pvInfo == null) return;
+        _editing.ConnectorJson = _pvJson.Trim();
+        _editing.ConnectorInputs = new();
+        if (_pvInfo.BaseUrl.Length > 0) _editing.BaseUrl = _pvInfo.BaseUrl;
+        if (_pvInfo.Name.Length > 0 && (_isNew || string.IsNullOrWhiteSpace(_editing.Name) || _editing.Name == "OpenAI")) _editing.Name = _pvInfo.Name;
+        _modelsText = "";
+        _status = L["اتصال بارگذاری شد؛ در صورت نیاز آدرس و کلید را تنظیم کنید."];
+        _pvJson = null;
+        _pvInfo = null;
+        CloseDlg();
+    }
     bool _promptCopied;
 
     void OpenDlg(int which)

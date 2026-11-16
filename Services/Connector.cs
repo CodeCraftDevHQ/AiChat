@@ -178,6 +178,14 @@ public static class ConnectorSpec
         return null;
     }
 
+    /// <summary>Any JSON (object or array) with comments and trailing commas allowed; null when it is not valid.</summary>
+    public static JsonNode? ParseLenient(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }); }
+        catch (JsonException) { return null; }
+    }
+
     public static List<ConnInput> Inputs(string? json) =>
         ParseInputs(TryParse(json, out _)?["inputs"] as JsonArray);
 
