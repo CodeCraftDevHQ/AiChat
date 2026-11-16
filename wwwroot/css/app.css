@@ -741,3 +741,7 @@ details.think > .think-body { max-height: 320px; overflow-y: auto; padding-botto
 .gal-cap small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gal-row { display: flex; align-items: center; gap: 6px; }
 .gal-more { text-align: center; padding: 14px 0 4px; }
+
+/* .btn defined after .primary would make "btn primary" buttons transparent with dark text */
+.btn.primary { background: var(--text); color: var(--bg); border: 0; border-radius: 999px; font-weight: 600; }
+.btn.primary:hover { background: var(--text); opacity: .88; }

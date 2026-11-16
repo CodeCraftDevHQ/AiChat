@@ -4,6 +4,7 @@ using Android.OS;
 using Android.Views;
 using AiChat.Services;
 using AndroidX.Activity;
+using AndroidX.Core.View;
 
 namespace AiChat;
 
@@ -20,6 +21,23 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);
         OnBackPressedDispatcher.AddCallback(this, new BackCallback(this));
+
+        // Keep the app out from under the status bar, navigation bar, camera cut-out and keyboard.
+        // (Newer Android versions draw edge-to-edge and the web view's env(safe-area-inset-*) is unreliable.)
+        var content = FindViewById(Android.Resource.Id.Content);
+        if (content != null)
+            ViewCompat.SetOnApplyWindowInsetsListener(content, new InsetsListener());
+    }
+
+    sealed class InsetsListener : Java.Lang.Object, IOnApplyWindowInsetsListener
+    {
+        public WindowInsetsCompat OnApplyWindowInsets(Android.Views.View v, WindowInsetsCompat insets)
+        {
+            var types = WindowInsetsCompat.Type.SystemBars() | WindowInsetsCompat.Type.DisplayCutout() | WindowInsetsCompat.Type.Ime();
+            var i = insets.GetInsets(types);
+            v.SetPadding(i.Left, i.Top, i.Right, i.Bottom);
+            return WindowInsetsCompat.Consumed;
+        }
     }
 
     /// <summary>
