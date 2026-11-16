@@ -142,6 +142,7 @@
         <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 260px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
             <button @onclick="PinFromMenu">@(_menuConv.Pinned ? L["برداشتن پین"] : L["پین کردن"])</button>
             <button @onclick="RenameFromMenu">@L["تغییر نام"]</button>
+            <button @onclick="ConvSettingsFromMenu">@L["تنظیمات پاسخ این گفتگو"]</button>
             @if (State.Projects.Count > 0 || _menuConv.ProjectId != null)
             {
                 <button @onclick="() => _moveOpen = !_moveOpen">@L["انتقال به پروژه ‹"]</button>
@@ -287,6 +288,13 @@
         var c = _menuConv;
         CloseMenu();
         if (c != null) await State.TogglePinAsync(c);
+    }
+
+    void ConvSettingsFromMenu()
+    {
+        var c = _menuConv;
+        CloseMenu();
+        if (c != null) State.OpenConvSettings(c);
     }
 
     void RenameFromMenu()

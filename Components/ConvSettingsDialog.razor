@@ -1,0 +1,48 @@
+@inherits StateComponent
+
+@if (State.ConvSettingsTarget is { } conv)
+{
+    <div class="modal-backdrop" @onclick="State.CloseConvSettings">
+        <div class="modal narrow" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>@L["تنظیمات پاسخ این گفتگو"]</h2>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseConvSettings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            </div>
+            <div class="p-body">
+                <p class="muted small" dir="auto">@conv.Title</p>
+                @if (_draft != null)
+                {
+                    <GenFields Value="_draft" Hint="@L["فقط برای همین گفتگو؛ مقدارهای API و تنظیمات عمومی را لغو می‌کند."]" />
+                }
+            </div>
+            <div class="p-foot">
+                <button class="btn" @onclick="Reset">@L["بازنشانی"]</button>
+                <span class="spacer"></span>
+                <button class="btn" @onclick="State.CloseConvSettings">@L["انصراف"]</button>
+                <button class="primary" @onclick="Save">@L["ذخیره"]</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    GenSettings? _draft;
+    string? _forId;
+
+    protected override void OnParametersSet()
+    {
+        var c = State.ConvSettingsTarget;
+        if (c == null) { _draft = null; _forId = null; return; }
+        if (_forId != c.Id) { _draft = c.Gen?.Copy() ?? new GenSettings(); _forId = c.Id; }
+    }
+
+    void Reset() => _draft = new GenSettings();
+
+    async Task Save()
+    {
+        if (State.ConvSettingsTarget is { } c && _draft != null)
+            await State.SaveConvSettingsAsync(c, _draft);
+    }
+}

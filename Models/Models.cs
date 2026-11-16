@@ -65,8 +65,20 @@ public class ProviderConfig
     public string ImageStyles { get; set; } = "Fooocus V2, Fooocus Enhance, Fooocus Sharp";
     public string NegativePrompt { get; set; } = "";
 
+    /// <summary>Answer settings of this API (temperature, top_p, max tokens, extra system prompt).</summary>
+    public GenSettings Gen { get; set; } = new();
+
+    // The values actually used for one request (filled by the app from chat > API > global; never saved).
+    [JsonIgnore] public double? Temperature { get; set; }
+    [JsonIgnore] public double? TopP { get; set; }
+    [JsonIgnore] public int? MaxTokens { get; set; }
+
     public ProviderConfig Clone() => new()
     {
+        Gen = Gen.Copy(),
+        Temperature = Temperature,
+        TopP = TopP,
+        MaxTokens = MaxTokens,
         Id = Id,
         Name = Name,
         Type = Type,
@@ -164,8 +176,39 @@ public class ChatMessage
     }
 }
 
+/// <summary>Optional answer settings. null / empty = not set (the next layer decides: chat > API > global > the service default).</summary>
+public class GenSettings
+{
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public int? MaxTokens { get; set; }
+    /// <summary>Extra system instructions of this layer (added after the global ones).</summary>
+    public string SystemPrompt { get; set; } = "";
+
+    public GenSettings Copy() => new() { Temperature = Temperature, TopP = TopP, MaxTokens = MaxTokens, SystemPrompt = SystemPrompt };
+
+    public bool IsEmpty => Temperature == null && TopP == null && MaxTokens == null && string.IsNullOrWhiteSpace(SystemPrompt);
+
+    /// <summary>Later layers override earlier ones (numbers only; system prompts are joined by the caller).</summary>
+    public static GenSettings Resolve(params GenSettings?[] layers)
+    {
+        var r = new GenSettings();
+        foreach (var l in layers)
+        {
+            if (l == null) continue;
+            r.Temperature = l.Temperature ?? r.Temperature;
+            r.TopP = l.TopP ?? r.TopP;
+            r.MaxTokens = l.MaxTokens ?? r.MaxTokens;
+        }
+        return r;
+    }
+}
+
 public class Conversation
 {
+    /// <summary>Settings of this chat only (null = none).</summary>
+    public GenSettings? Gen { get; set; }
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Title { get; set; } = "گفتگوی جدید";
     public string? ProviderId { get; set; }

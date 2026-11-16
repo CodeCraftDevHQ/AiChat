@@ -189,6 +189,14 @@ static class ProviderHttp
     public static string ModelsPath(ProviderConfig cfg, string defaultPath) =>
         string.IsNullOrWhiteSpace(cfg.ModelsPath) ? defaultPath : cfg.ModelsPath.Trim();
 
+    /// <summary>Adds temperature / top_p / max_tokens when they are set (before the extra body, so that can still override).</summary>
+    public static void ApplyGen(JsonObject body, ProviderConfig cfg, string maxTokensField = "max_tokens")
+    {
+        if (cfg.Temperature != null) body["temperature"] = cfg.Temperature;
+        if (cfg.TopP != null) body["top_p"] = cfg.TopP;
+        if (cfg.MaxTokens != null) body[maxTokensField] = cfg.MaxTokens;
+    }
+
     /// <summary>Merges the user's "extra body" JSON into the request body. A null value removes the field.</summary>
     public static JsonObject MergeBody(JsonObject body, ProviderConfig cfg)
     {
@@ -505,6 +513,7 @@ public class OpenAiCompatibleProvider : IChatProvider
         }
 
         var body = new JsonObject { ["model"] = model, ["stream"] = !cfg.NoStream, ["messages"] = messages };
+        ProviderHttp.ApplyGen(body, cfg);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "chat/completions")))
         {
@@ -671,10 +680,12 @@ public class AnthropicProvider : IChatProvider
         var body = new JsonObject
         {
             ["model"] = model,
-            ["max_tokens"] = 8192,
+            ["max_tokens"] = cfg.MaxTokens ?? 8192,
             ["stream"] = true,
             ["messages"] = messages
         };
+        if (cfg.Temperature != null) body["temperature"] = cfg.Temperature;
+        if (cfg.TopP != null) body["top_p"] = cfg.TopP;
         if (!string.IsNullOrWhiteSpace(systemPrompt)) body["system"] = systemPrompt;
 
         using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "messages")))
@@ -777,6 +788,14 @@ public class GeminiProvider : IChatProvider
         }
 
         var body = new JsonObject { ["contents"] = contents };
+        if (cfg.Temperature != null || cfg.TopP != null || cfg.MaxTokens != null)
+        {
+            var gc = new JsonObject();
+            if (cfg.Temperature != null) gc["temperature"] = cfg.Temperature;
+            if (cfg.TopP != null) gc["topP"] = cfg.TopP;
+            if (cfg.MaxTokens != null) gc["maxOutputTokens"] = cfg.MaxTokens;
+            body["generationConfig"] = gc;
+        }
         if (!string.IsNullOrWhiteSpace(systemPrompt))
         {
             body["systemInstruction"] = new JsonObject

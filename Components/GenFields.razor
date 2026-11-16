@@ -1,0 +1,61 @@
+@inherits StateComponent
+
+<p class="muted small">@(Hint ?? L["اگر تیک نخورد، مقدار پیش‌فرض خود سرویس یا لایه‌ی بالاتر استفاده می‌شود."])</p>
+
+<label class="check">
+    <input type="checkbox" checked="@(Value.Temperature != null)" @onchange="e => Toggle(e, () => Value.Temperature = 0.7, () => Value.Temperature = null)" />
+    <span>Temperature @(Value.Temperature != null ? ": " + Value.Temperature.Value.ToString("0.00", Inv) : "")</span>
+</label>
+@if (Value.Temperature != null)
+{
+    <input type="range" class="range" min="0" max="2" step="0.05" value="@Value.Temperature.Value.ToString(Inv)" @oninput="e => Set(() => Value.Temperature = Dbl(e, 0.7))" />
+    <p class="muted small">@L["کم = دقیق و قابل پیش‌بینی، زیاد = خلاق و متنوع."]</p>
+}
+
+<label class="check" style="margin-top:8px">
+    <input type="checkbox" checked="@(Value.TopP != null)" @onchange="e => Toggle(e, () => Value.TopP = 1.0, () => Value.TopP = null)" />
+    <span>Top P @(Value.TopP != null ? ": " + Value.TopP.Value.ToString("0.00", Inv) : "")</span>
+</label>
+@if (Value.TopP != null)
+{
+    <input type="range" class="range" min="0" max="1" step="0.05" value="@Value.TopP.Value.ToString(Inv)" @oninput="e => Set(() => Value.TopP = Dbl(e, 1.0))" />
+}
+
+<label class="check" style="margin-top:8px">
+    <input type="checkbox" checked="@(Value.MaxTokens != null)" @onchange="e => Toggle(e, () => Value.MaxTokens = 2048, () => Value.MaxTokens = null)" />
+    <span>@L["حداکثر طول پاسخ (توکن)"]</span>
+</label>
+@if (Value.MaxTokens != null)
+{
+    <input class="inp" type="number" min="1" max="1000000" dir="ltr" value="@Value.MaxTokens" @onchange="e => Set(() => Value.MaxTokens = Math.Clamp(Int(e, 2048), 1, 1_000_000))" />
+}
+
+@if (ShowSystem)
+{
+    <label class="lbl">@L["دستور سیستمی اضافه"]</label>
+    <textarea class="inp" rows="4" dir="auto" placeholder="@L["به پیام سیستمی عمومی اضافه می‌شود."]" value="@Value.SystemPrompt"
+              @onchange="e => Set(() => Value.SystemPrompt = e.Value?.ToString() ?? string.Empty)"></textarea>
+}
+
+@code {
+    static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    [Parameter, EditorRequired] public GenSettings Value { get; set; } = default!;
+    [Parameter] public bool ShowSystem { get; set; } = true;
+    [Parameter] public string? Hint { get; set; }
+    /// <summary>Called after every change (to save, for example).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    static double Dbl(ChangeEventArgs e, double fallback) =>
+        double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, Inv, out var v) ? v : fallback;
+
+    static int Int(ChangeEventArgs e, int fallback) => int.TryParse(e.Value?.ToString(), out var v) ? v : fallback;
+
+    async Task Set(Action change)
+    {
+        change();
+        await OnChanged.InvokeAsync();
+    }
+
+    Task Toggle(ChangeEventArgs e, Action on, Action off) => Set(e.Value is true ? on : off);
+}

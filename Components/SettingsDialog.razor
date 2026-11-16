@@ -190,6 +190,12 @@
                                         <textarea class="inp" rows="3" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="X-Org: my-team" @bind="_editing.Headers" @bind:event="oninput"></textarea>
                                         <p class="muted small">@L["در مقدار می‌توانید {apiKey} را بنویسید تا با کلید جایگزین شود."]</p>
 
+                                        @if (!_editing.IsGenerator)
+                                        {
+                                            <label class="lbl">@L["تنظیمات پاسخ این API"]</label>
+                                            <GenFields Value="_editing.Gen" Hint="@L["فقط برای این API؛ تنظیمات عمومی را لغو می‌کند و گفتگو می‌تواند دوباره لغوش کند."]" />
+                                        }
+
                                         <label class="lbl">@L["پارامترهای اضافی بدنه (JSON)"]</label>
                                         <textarea class="inp" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder='{"temperature": 0.7}' @bind="_editing.ExtraBody" @bind:event="oninput"></textarea>
                                         <p class="muted small">@L["این فیلدها به هر درخواست اضافه می‌شوند. مقدار null آن فیلد را حذف می‌کند."]</p>
@@ -290,6 +296,13 @@
                             <textarea class="inp" rows="6" dir="auto" placeholder="@L["مثلاً: همیشه به فارسی پاسخ بده."]"
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
+
+                            <label class="lbl">@L["تنظیمات پیش‌فرض پاسخ (برای همه)"]</label>
+                            <GenFields Value="State.GenDefaults" ShowSystem="false" OnChanged="State.SaveGenDefaults"
+                                       Hint="@L["مقدار پیش‌فرض همه‌ی APIها؛ تنظیمات هر API یا هر گفتگو آن را لغو می‌کند."]" />
+                            <div class="row-btns">
+                                <button class="btn" @onclick="State.ResetGenDefaults">@L["بازنشانی"]</button>
+                            </div>
 
                             <label class="lbl">@L["توکن و هزینه"]</label>
                             <p class="muted small">@L["تعداد توکن و هزینه فقط تخمین است. قیمت‌ها را خودتان از سایت سرویس‌دهنده وارد کنید."]</p>

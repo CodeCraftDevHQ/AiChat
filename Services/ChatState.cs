@@ -506,6 +506,8 @@ public class ChatState
         UserPresets = await _storage.LoadUserPresetsAsync();
         LockAfterMin = Preferences.Default.Get("lock_after_min", 0);
         WebSearchOn = Preferences.Default.Get("web_search", false);
+        try { GenDefaults = System.Text.Json.JsonSerializer.Deserialize<GenSettings>(Preferences.Default.Get("gen_defaults", "")) ?? new(); }
+        catch { GenDefaults = new(); }
         try { CostOpts = System.Text.Json.JsonSerializer.Deserialize<CostOptions>(Preferences.Default.Get("cost_opts", "")) ?? new(); }
         catch { CostOpts = new(); }
         ThinkMode = Preferences.Default.Get("think_mode", "auto");
@@ -544,6 +546,62 @@ public class ChatState
         Notify();
     }
 
+    // ------------------------------------------------------------ answer settings (temperature, top_p, max tokens, system prompts)
+
+    /// <summary>Global defaults (lowest layer: chat settings > API settings > these).</summary>
+    public GenSettings GenDefaults { get; private set; } = new();
+
+    public void SaveGenDefaults()
+    {
+        Preferences.Default.Set("gen_defaults", System.Text.Json.JsonSerializer.Serialize(GenDefaults));
+        Notify();
+    }
+
+    public void ResetGenDefaults()
+    {
+        GenDefaults = new();
+        SaveGenDefaults();
+    }
+
+    /// <summary>The provider copy used for one request, with the effective numbers filled in.</summary>
+    ProviderConfig WithGen(ProviderConfig provider, Conversation? conv)
+    {
+        var eff = GenSettings.Resolve(GenDefaults, provider.Gen, conv?.Gen);
+        var copy = provider.Clone();
+        copy.Temperature = eff.Temperature;
+        copy.TopP = eff.TopP;
+        copy.MaxTokens = eff.MaxTokens;
+        return copy;
+    }
+
+    /// <summary>All system instructions in order: global, API, project, this chat.</summary>
+    string BuildSystem(ProviderConfig provider, Project? project, Conversation? conv) =>
+        string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt }
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    public Conversation? ConvSettingsTarget { get; private set; }
+
+    public void OpenConvSettings(Conversation c)
+    {
+        ConvSettingsTarget = c;
+        if (IsNarrow) SidebarOpen = false;
+        Notify();
+    }
+
+    public void CloseConvSettings()
+    {
+        ConvSettingsTarget = null;
+        Notify();
+    }
+
+    public async Task SaveConvSettingsAsync(Conversation c, GenSettings gen)
+    {
+        c.Gen = gen.IsEmpty ? null : gen;
+        _statsKey = null;
+        await _storage.SaveConversationsAsync(Conversations);
+        CloseConvSettings();
+    }
+
     // ------------------------------------------------------------ token and cost estimate
 
     public CostOptions CostOpts { get; private set; } = new();
@@ -569,11 +627,11 @@ public class ChatState
     {
         if (conv == null || conv.Messages.Count == 0) return null;
         var last = conv.Messages[^1];
-        var key = (conv.Id, conv.Messages.Count, (last.Content?.Length ?? 0) + last.Attachments.Count, SystemPrompt.Length + CurrentModel.Length);
+        var key = (conv.Id, conv.Messages.Count, (last.Content?.Length ?? 0) + last.Attachments.Count, SystemPrompt.Length + CurrentModel.Length + (conv.Gen?.SystemPrompt.Length ?? 0) + (CurrentProvider?.Gen.SystemPrompt.Length ?? 0));
         if (_statsKey == key && _stats != null) return _stats;
 
         var project = ProjectOf(conv);
-        var baseTokens = TokenCost.Estimate(SystemPrompt, CostOpts) + TokenCost.Estimate(project?.Instructions, CostOpts) +
+        var baseTokens = TokenCost.Estimate(SystemPrompt, CostOpts) + TokenCost.Estimate(CurrentProvider?.Gen.SystemPrompt, CostOpts) + TokenCost.Estimate(conv.Gen?.SystemPrompt, CostOpts) + TokenCost.Estimate(project?.Instructions, CostOpts) +
                          (project?.Files.Sum(a => TokenCost.ForAttachment(a, CostOpts)) ?? 0);
         _stats = TokenCost.Analyze(conv.Messages, baseTokens, CurrentModel, CostOpts);
         _statsKey = key;
@@ -1679,8 +1737,8 @@ public class ChatState
         var fileCount = history.Sum(m => m.Attachments.Count);
         _log.Info($"Request: {provider.Name} ({provider.Type}) / {model}, {history.Count} messages, {fileCount} attachments" +
                   (project != null ? $", project '{project.Name}'" : ""));
-        var system = string.Join("\n\n",
-            new[] { SystemPrompt, project?.Instructions }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var system = BuildSystem(provider, project, conv);
+        provider = WithGen(provider, conv);
         if (project is { Files.Count: > 0 })
             history.Insert(0, new ChatMessage
             {
