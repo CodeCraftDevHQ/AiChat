@@ -14,9 +14,7 @@
                 <input class="inp" dir="auto" placeholder="@L["جستجو…"]" value="@_query" @oninput="OnQuery" />
             </div>
             <div class="p-body">
-                @{
-                    var items = Items();
-                }
+                var items = Items();
                 @if (State.Shortcuts.Count == 0)
                 {
                     <p class="muted">@L["هنوز پرامپتی ساخته نشده است."]</p>

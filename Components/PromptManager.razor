@@ -25,9 +25,7 @@ else
     <p class="muted small">@L["پرامپت‌های آماده. با نوشتن / در کادر پیام یا دکمه‌ی 📚 کنار آن استفاده می‌شوند."]</p>
     <input class="inp" dir="auto" placeholder="@L["جستجو…"]" value="@_query" @oninput="OnQuery" />
 
-    @{
-        var shown = Filtered();
-    }
+    var shown = Filtered();
     @if (State.Shortcuts.Count == 0)
     {
         <p class="muted">@L["هنوز پرامپتی ساخته نشده است."]</p>
