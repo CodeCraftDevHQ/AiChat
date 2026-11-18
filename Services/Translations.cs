@@ -430,5 +430,12 @@ public static class Translations
         ["API فعلی ورودی «seed» ندارد؛ یک اتصال‌دهندهٔ تصویر (مثلاً Fooocus) انتخاب کنید."] = "The current API has no “seed” input; pick an image connector (e.g. Fooocus).",
         ["پاسخ مدل"] = "Model answers",
         ["امنیت و حریم خصوصی"] = "Security & privacy",
+        ["ادامه‌ی تست"] = "Continue test",
+        ["فقط مدل‌هایی که هنوز تست نشده‌اند یا به محدودیت خورده‌اند تست می‌شوند."] = "Only models that were not tested yet or hit a rate limit are tested.",
+        ["وقتی خطای محدودیت (429) آمد"] = "When a rate-limit error (429) comes",
+        ["فقط همان مدل را ⏳ کن و تست ادامه یابد (پیشنهادی)"] = "Mark only that model ⏳ and go on (recommended)",
+        ["کل تست صبر کند تا محدودیت تمام شود و ادامه دهد"] = "Pause the whole test until the limit resets, then go on",
+        ["تست متوقف شود"] = "Stop the test",
+        ["کلیدواژه‌های محدودیتِ خودِ مدل (همیشه فقط همان مدل را ⏳ می‌کند)"] = "Model-level limit words (always mark only that model ⏳)",
     };
 }

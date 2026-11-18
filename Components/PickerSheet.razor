@@ -34,6 +34,12 @@
                     {
                         <button class="btn sm" title="@L["هر مدل یک پیام کوتاه می‌گیرد (هزینه‌ی ناچیز). فقط مدل‌هایی که الان در لیست دیده می‌شوند تست می‌شوند."]"
                                 disabled="@(items.Count == 0)" @onclick="() => State.TestModelsAsync(items)">🧪 @L["تست مدل‌ها"] (@items.Count)</button>
+                        var pending = State.PendingTestModels(items);
+                        @if (pending.Count > 0 && pending.Count < items.Count)
+                        {
+                            <button class="btn sm" title="@L["فقط مدل‌هایی که هنوز تست نشده‌اند یا به محدودیت خورده‌اند تست می‌شوند."]"
+                                    @onclick="() => State.TestModelsAsync(pending)">▶ @L["ادامه‌ی تست"] (@pending.Count)</button>
+                        }
                     }
                     @if (State.CurrentProvider?.IsGenerator != true)
                     {
@@ -105,9 +111,17 @@
                             <span>@L["تعداد تست هم‌زمان"]</span>
                             <input type="number" class="inp" min="1" max="6" @bind="State.TestParallel" @bind:event="onchange" />
                         </label>
-                        <label class="check">
-                            <input type="checkbox" @bind="State.TestContinueOnLimit" />
-                            <span>@L["بعد از رسیدن به محدودیت صبر کن و ادامه بده"]</span>
+                        <label>
+                            <span>@L["وقتی خطای محدودیت (429) آمد"]</span>
+                            <select class="inp" value="@State.TestLimitMode" @onchange="OnLimitMode">
+                                <option value="0">@L["فقط همان مدل را ⏳ کن و تست ادامه یابد (پیشنهادی)"]</option>
+                                <option value="1">@L["کل تست صبر کند تا محدودیت تمام شود و ادامه دهد"]</option>
+                                <option value="2">@L["تست متوقف شود"]</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>@L["کلیدواژه‌های محدودیتِ خودِ مدل (همیشه فقط همان مدل را ⏳ می‌کند)"]</span>
+                            <input class="inp" dir="ltr" placeholder="provider returned error" @bind="State.TestModelLimitWords" @bind:event="onchange" />
                         </label>
                         <label>
                             <span>@L["کلیدواژه‌های تشخیص محدودیت (با ویرگول جدا کنید)"]</span>
@@ -182,6 +196,8 @@
 
     string CountText(List<string> all, string filter) =>
         filter == "all" ? $"({all.Count})" : $"({all.Count(m => Matches(m, filter))})";
+
+    void OnLimitMode(ChangeEventArgs e) => State.TestLimitMode = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
 
     void SetFilter(string k) => State.TestFilter = k;
 

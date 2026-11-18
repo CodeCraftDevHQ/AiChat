@@ -1027,16 +1027,20 @@ public class ChatState
 
     // ---- user settings of the test (saved)
     int _testBatch, _testWindow = 60, _testParallel = 3;
-    bool _testContinue = true;
-    string _testWords = "";
+    int _testLimitMode;
+    string _testWords = "", _testModelWords = "provider returned error";
 
     /// <summary>Max models tested per period; 0 = automatic (learned from the first rate-limit answer).</summary>
     public int TestBatch { get => _testBatch; set { _testBatch = Math.Clamp(value, 0, 1000); Preferences.Default.Set("test_batch", _testBatch); } }
     /// <summary>Length of that period in seconds.</summary>
     public int TestWindow { get => _testWindow; set { _testWindow = Math.Clamp(value, 5, 3600); Preferences.Default.Set("test_window", _testWindow); } }
     public int TestParallel { get => _testParallel; set { _testParallel = Math.Clamp(value, 1, 6); Preferences.Default.Set("test_parallel", _testParallel); } }
-    /// <summary>true = wait for the limit to reset and continue; false = stop at the first limit.</summary>
-    public bool TestContinueOnLimit { get => _testContinue; set { _testContinue = value; Preferences.Default.Set("test_continue", value); } }
+    /// <summary>What a rate-limit answer does: 0 = only that model gets ⏳ and the test goes on (default);
+    /// 1 = pause the whole test, wait for the limit to reset and continue; 2 = stop the test.</summary>
+    public int TestLimitMode { get => _testLimitMode; set { _testLimitMode = Math.Clamp(value, 0, 2); Preferences.Default.Set("test_limit_mode", _testLimitMode); } }
+    /// <summary>Errors containing one of these words are limits of that single model (e.g. OpenRouter's upstream
+    /// "Provider returned error"), whatever the mode: the model is marked, the test never pauses or stops for it.</summary>
+    public string TestModelLimitWords { get => _testModelWords; set { _testModelWords = value ?? ""; Preferences.Default.Set("test_model_words", _testModelWords); } }
     /// <summary>Extra words (comma separated); an error containing one of them counts as a rate limit.</summary>
     public string TestLimitWords { get => _testWords; set { _testWords = value ?? ""; Preferences.Default.Set("test_words", _testWords); } }
     /// <summary>Text of the last error that was recognized as a rate limit.</summary>
@@ -1052,10 +1056,11 @@ public class ChatState
 
     void LoadTestSettings()
     {
-        _testBatch = Preferences.Default.Get("test_batch", 0);
+        _testBatch = Preferences.Default.Get("test_batch", 10);
         _testWindow = Preferences.Default.Get("test_window", 60);
         _testParallel = Preferences.Default.Get("test_parallel", 3);
-        _testContinue = Preferences.Default.Get("test_continue", true);
+        _testLimitMode = Preferences.Default.Get("test_limit_mode", 0);
+        _testModelWords = Preferences.Default.Get("test_model_words", "provider returned error");
         _testWords = Preferences.Default.Get("test_words", "");
         LastLimitMessage = Preferences.Default.Get("last_limit_msg", "");
     }
@@ -1065,6 +1070,8 @@ public class ChatState
     readonly List<DateTime> _starts = new();   // reserved request start times (sliding window)
     readonly List<DateTime> _okTimes = new();  // recent successful answers, used to learn the limit
     DateTime _pauseUntil, _pauseSetAt;
+    int _pausesNoOk;                           // pauses in a row without any model succeeding in between
+    DateTime _lastOkAt = DateTime.MinValue;
     int _learnedBatch;                         // limit learned from the server (0 = none yet)
     string? _abortReason;
     readonly SemaphoreSlim _testSaveGate = new(1, 1);
@@ -1163,6 +1170,8 @@ public class ChatState
         TestMessage = null;
         _abortReason = null;
         _learnedBatch = 0;
+        _pausesNoOk = 0;
+        _lastOkAt = DateTime.MinValue;
         _pauseUntil = _pauseSetAt = DateTime.MinValue;
         lock (_rateLock) { _starts.Clear(); _okTimes.Clear(); }
         _testCts = new CancellationTokenSource();
@@ -1170,7 +1179,7 @@ public class ChatState
         var impl = _factory.Create(provider.Type);
         var words = SplitWords(_testWords);
         var next = -1;
-        _log.Info($"Model test: {provider.Name}, {models.Count} models, batch={_testBatch}/{_testWindow}s, parallel={_testParallel}, continue={_testContinue}");
+        _log.Info($"Model test: {provider.Name}, {models.Count} models, batch={_testBatch}/{_testWindow}s, parallel={_testParallel}, limitMode={_testLimitMode}");
         Notify();
 
         async Task TestOne(string model)
@@ -1194,7 +1203,7 @@ public class ChatState
                     await foreach (var _ in impl.StreamAsync(provider, model, hi, "Reply with one word.", null, cts.Token))
                         break;
                     result = new ModelTestResult(true, null, false, DateTime.Now);
-                    lock (_rateLock) _okTimes.Add(DateTime.UtcNow);
+                    lock (_rateLock) { _okTimes.Add(DateTime.UtcNow); _lastOkAt = DateTime.UtcNow; _pausesNoOk = 0; }
                 }
                 catch (OperationCanceledException) when (!all.IsCancellationRequested)
                 {
@@ -1213,6 +1222,14 @@ public class ChatState
                     LastLimitMessage = d.Text.Length > 300 ? d.Text[..300] : d.Text;
                     Preferences.Default.Set("last_limit_msg", LastLimitMessage);
 
+                    // a limit of this one model (default mode, or its error text matches the "model limit" words)
+                    var lowText = d.Text.ToLowerInvariant();
+                    if (_testLimitMode == 0 || SplitWords(_testModelWords).Any(w => lowText.Contains(w.ToLowerInvariant())))
+                    {
+                        result = new ModelTestResult(false, LastLimitMessage, true, DateTime.Now);
+                        break;
+                    }
+
                     if (d.Daily || d.RetrySeconds > 900)
                     {
                         _abortReason = L["سهمیه‌ی روزانه یا طولانی‌مدت این API تمام شده است؛ تست متوقف شد."];
@@ -1225,9 +1242,19 @@ public class ChatState
                     lock (_rateLock) stale = t0 < _pauseSetAt;
                     if (stale) continue;
 
-                    if (!_testContinue)
+                    if (_testLimitMode == 2)
                     {
                         _abortReason = L["به محدودیت رسید و طبق تنظیمات، تست متوقف شد."];
+                        result = new ModelTestResult(false, LastLimitMessage, true, DateTime.Now);
+                        break;
+                    }
+
+                    // The limit came back although the pause is over and other models work (or the pauses never help):
+                    // it belongs to this model (e.g. its own quota is 0), not to the speed of the test. Do not pause everybody again.
+                    bool modelOnly;
+                    lock (_rateLock) modelOnly = (limitHits >= 1 && _lastOkAt > _pauseSetAt) || _pausesNoOk >= 2;
+                    if (modelOnly)
+                    {
                         result = new ModelTestResult(false, LastLimitMessage, true, DateTime.Now);
                         break;
                     }
@@ -1235,6 +1262,7 @@ public class ChatState
                     limitHits++;
                     lock (_rateLock)
                     {
+                        _pausesNoOk++;
                         var now = DateTime.UtcNow;
                         var wait = TimeSpan.FromSeconds(Math.Min(d.RetrySeconds ?? _testWindow, 900) + 1);
                         _pauseSetAt = now;
@@ -1288,6 +1316,10 @@ public class ChatState
     }
 
     int _testDoneCounter;
+
+    /// <summary>Models of the list that were not tested yet, or only reached a rate limit (what "continue test" does).</summary>
+    public List<string> PendingTestModels(IEnumerable<string> models) =>
+        models.Where(m => TestResultOf(m) is null or { RateLimited: true }).ToList();
 
     public void OpenPicker(string kind) { Picker = kind; PickerFilter = ""; Notify(); }
     public void ClosePicker() { Picker = null; Notify(); }
