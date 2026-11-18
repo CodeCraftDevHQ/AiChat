@@ -5,7 +5,7 @@
     <div class="persona-edit">
         <div class="row">
             <input class="inp persona-icon" maxlength="4" value="@_edit.Icon" @onchange="e => _edit.Icon = e.Value?.ToString() ?? string.Empty" />
-            <input class="inp" dir="auto" placeholder="@L["نام شخصیت"]" value="@_edit.Name" @onchange="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
+            <input class="inp" dir="auto" placeholder="@L["نام شخصیت"]" value="@_edit.Name" @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
         </div>
 
         <GenFields Value="_edit.Gen" Hint="@L["دستور سیستمی همان توضیح شخصیت است. عددهای تیک‌خورده، مقدار API و تنظیمات عمومی را برای این شخصیت لغو می‌کنند."]" />
@@ -27,7 +27,7 @@
         <AppSelect Title="@L["ابزارها"]" Value="@ToolsValue()" ValueChanged="OnTools" Options="ToolsOptions()" />
 
         <div class="row">
-            <button class="primary" @onclick="Save" disabled="@string.IsNullOrWhiteSpace(_edit.Name)">@L["ذخیره"]</button>
+            <button class="primary" @onclick="Save">@L["ذخیره"]</button>
             <button class="btn" @onclick="() => _edit = null">@L["انصراف"]</button>
         </div>
     </div>
@@ -113,7 +113,7 @@ else
 
     void Save()
     {
-        if (_edit == null) return;
+        if (_edit == null || string.IsNullOrWhiteSpace(_edit.Name)) return;
         _edit.Name = _edit.Name.Trim();
         if (string.IsNullOrWhiteSpace(_edit.Icon)) _edit.Icon = "🧑";
         State.SavePersona(_edit);

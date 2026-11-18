@@ -506,5 +506,6 @@ public static class Translations
         ["چیزی پیدا نشد."] = "Nothing found.",
         ["مدیریت"] = "Manage",
         ["میانبرهای / و پرامپت‌های آماده در «کتابخانه‌ی پرامپت» مدیریت می‌شوند."] = "Slash shortcuts and ready-made prompts are managed in the \"Prompt library\".",
+        ["نام و متن پرامپت را وارد کنید."] = "Enter the name and the prompt text.",
     };
 }

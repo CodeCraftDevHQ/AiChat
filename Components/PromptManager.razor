@@ -4,14 +4,14 @@
 {
     <div class="persona-edit">
         <label class="lbl first">@L["نام دستور (بدون فاصله؛ با /نام صدا زده می‌شود)"]</label>
-        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" value="@_name" @onchange="OnName" />
+        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="translate" value="@_name" @oninput="OnName" />
         <label class="lbl">@L["توضیح کوتاه"]</label>
-        <input class="inp" dir="auto" value="@_desc" @onchange="OnDesc" />
+        <input class="inp" dir="auto" placeholder="Translate text to English" value="@_desc" @oninput="OnDesc" />
         <label class="lbl">@L["متن پرامپت"]</label>
-        <textarea class="inp" rows="8" dir="auto" value="@_prompt" @onchange="OnPrompt"></textarea>
+        <textarea class="inp" rows="8" dir="auto" placeholder="Translate the following text to English. Reply with the translation only:&#10;&#10;{{text}}" value="@_prompt" @oninput="OnPrompt"></textarea>
         <p class="muted small">@L["{{text}} جای متن بعد از دستور را می‌گیرد. اگر نباشد، متن شما بعد از پرامپت اضافه می‌شود."]</p>
         <div class="row">
-            <button class="primary" type="button" disabled="@(_name.Trim().Length == 0 || _prompt.Trim().Length == 0)" @onclick="Save">@L["ذخیره"]</button>
+            <button class="primary" type="button" @onclick="Save">@L["ذخیره"]</button>
             <button class="btn" type="button" @onclick="Cancel">@L["انصراف"]</button>
         </div>
         @if (_status != null)
@@ -92,7 +92,7 @@ else
     }
 
     void OnQuery(ChangeEventArgs e) => _query = e.Value?.ToString() ?? string.Empty;
-    void OnName(ChangeEventArgs e) => _name = (e.Value?.ToString() ?? string.Empty).Trim().TrimStart('/');
+    void OnName(ChangeEventArgs e) => _name = e.Value?.ToString() ?? string.Empty;
     void OnDesc(ChangeEventArgs e) => _desc = e.Value?.ToString() ?? string.Empty;
     void OnPrompt(ChangeEventArgs e) => _prompt = e.Value?.ToString() ?? string.Empty;
     void OnJson(ChangeEventArgs e) { _json = e.Value?.ToString() ?? string.Empty; _status = null; }
@@ -112,7 +112,8 @@ else
 
     void Save()
     {
-        _name = _name.Trim();
+        if (_name.Trim().Length == 0 || _prompt.Trim().Length == 0) { _status = L["نام و متن پرامپت را وارد کنید."]; return; }
+        _name = _name.Trim().TrimStart('/');
         if (_name.Any(char.IsWhiteSpace)) { _status = L["نام دستور نباید فاصله داشته باشد."]; return; }
         if (State.Shortcuts.Any(x => x.Name.Equals(_name, StringComparison.OrdinalIgnoreCase)
                                      && !x.Name.Equals(_orig, StringComparison.OrdinalIgnoreCase)))

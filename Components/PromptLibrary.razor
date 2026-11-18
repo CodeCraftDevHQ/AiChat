@@ -14,17 +14,16 @@
                 <input class="inp" dir="auto" placeholder="@L["جستجو…"]" value="@_query" @oninput="OnQuery" />
             </div>
             <div class="p-body">
-                var items = Items();
                 @if (State.Shortcuts.Count == 0)
                 {
                     <p class="muted">@L["هنوز پرامپتی ساخته نشده است."]</p>
                     <button class="btn" @onclick="OpenManager">@L["افزودن در تنظیمات"]</button>
                 }
-                else if (items.Count == 0)
+                else if (Items().Count == 0)
                 {
                     <p class="muted">@L["چیزی پیدا نشد."]</p>
                 }
-                @foreach (var sc in items)
+                @foreach (var sc in Items())
                 {
                     var item = sc;
                     <button class="prompt-item" @onclick="() => State.UsePrompt(item)">
