@@ -51,6 +51,28 @@ public class ToolSet
         return arr;
     }
 
+    /// <summary>Claude "tools" array.</summary>
+    public JsonArray ToAnthropic()
+    {
+        var arr = new JsonArray();
+        foreach (var t in Tools)
+            arr.Add(new JsonObject { ["name"] = t.Name, ["description"] = t.Description, ["input_schema"] = t.Parameters.DeepClone() });
+        return arr;
+    }
+
+    /// <summary>Gemini "tools" array (one entry with all function declarations; no schema for tools without arguments).</summary>
+    public JsonArray ToGemini()
+    {
+        var decls = new JsonArray();
+        foreach (var t in Tools)
+        {
+            var d = new JsonObject { ["name"] = t.Name, ["description"] = t.Description };
+            if (t.Parameters["properties"] is JsonObject { Count: > 0 }) d["parameters"] = t.Parameters.DeepClone();
+            decls.Add(d);
+        }
+        return new JsonArray(new JsonObject { ["functionDeclarations"] = decls });
+    }
+
     public static JsonObject ParseArgs(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return new JsonObject();

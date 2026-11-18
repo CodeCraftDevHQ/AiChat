@@ -140,4 +140,61 @@ public class ToolTests
         Assert.Equal("Hi", sb.ToString());
         Assert.DoesNotContain("\"tools\"", h.Requests[0].Body);
     }
+
+    [Fact]
+    public async Task Claude_tool_use_round_trip()
+    {
+        var n = 0;
+        var h = new FakeHandler(_ => n++ == 0
+            ? FakeHandler.Text(
+                "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"tu1\",\"name\":\"echo\",\"input\":{}}}\n\n" +
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"text\\\":\\\"hi\\\"}\"}}\n\n" +
+                "data: {\"type\":\"message_stop\"}\n\n")
+            : FakeHandler.Text(
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Done\"}}\n\n" +
+                "data: {\"type\":\"message_stop\"}\n\n"));
+        var p = new AnthropicProvider(new HttpClient(h));
+        var cfg = new ProviderConfig { Type = ProviderType.Anthropic, BaseUrl = "http://claude.local/v1", Tools = Echo() };
+
+        var sb = new System.Text.StringBuilder();
+        await foreach (var t in p.StreamAsync(cfg, "m", User("go"), null, null, CancellationToken.None))
+            if (!t.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) sb.Append(t);
+
+        Assert.Contains("> 🔧 Echo: hi", sb.ToString());
+        Assert.EndsWith("Done", sb.ToString());
+        Assert.Contains("\"input_schema\"", h.Requests[0].Body);
+        Assert.Contains("\"tool_result\"", h.Requests[1].Body);
+        Assert.Contains("\"tool_use_id\":\"tu1\"", h.Requests[1].Body);
+        Assert.Contains("ECHO:hi", h.Requests[1].Body);
+    }
+
+    [Fact]
+    public async Task Gemini_function_call_round_trip_keeps_the_signature()
+    {
+        var n = 0;
+        var h = new FakeHandler(_ => n++ == 0
+            ? FakeHandler.Text("data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"echo\",\"args\":{\"text\":\"hi\"}},\"thoughtSignature\":\"SIG\"}]}}]}\n\n")
+            : FakeHandler.Text("data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Done\"}]}}]}\n\n"));
+        var p = new GeminiProvider(new HttpClient(h));
+        var cfg = new ProviderConfig { Type = ProviderType.Gemini, BaseUrl = "http://gem.local/v1beta", Tools = Echo() };
+
+        var sb = new System.Text.StringBuilder();
+        await foreach (var t in p.StreamAsync(cfg, "gemini-x", User("go"), null, null, CancellationToken.None))
+            if (!t.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) sb.Append(t);
+
+        Assert.Contains("> 🔧 Echo: hi", sb.ToString());
+        Assert.EndsWith("Done", sb.ToString());
+        Assert.Contains("functionDeclarations", h.Requests[0].Body);
+        Assert.Contains("functionResponse", h.Requests[1].Body);
+        Assert.Contains("SIG", h.Requests[1].Body);
+        Assert.Contains("ECHO:hi", h.Requests[1].Body);
+    }
+
+    [Fact]
+    public void Gemini_declaration_omits_the_schema_for_tools_without_arguments()
+    {
+        var set = new ToolSet { Tools = { new ToolDef { Name = "now", Description = "d" } } };
+        var decl = set.ToGemini()[0]!["functionDeclarations"]![0]!;
+        Assert.Null(decl["parameters"]);
+    }
 }

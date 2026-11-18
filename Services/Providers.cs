@@ -781,57 +781,107 @@ public class AnthropicProvider : IChatProvider
             messages.Add(new JsonObject { ["role"] = t.Role, ["content"] = parts });
         }
 
-        var body = new JsonObject
-        {
-            ["model"] = model,
-            ["max_tokens"] = cfg.MaxTokens ?? 8192,
-            ["stream"] = true,
-            ["messages"] = messages
-        };
-        if (cfg.Temperature != null) body["temperature"] = cfg.Temperature;
-        if (cfg.TopP != null) body["top_p"] = cfg.TopP;
-        if (!string.IsNullOrWhiteSpace(systemPrompt)) body["system"] = systemPrompt;
+        var tools = cfg.Tools is { Tools.Count: > 0 } ? cfg.Tools : null;
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "messages")))
+        for (var round = 0; ; round++)
         {
-            Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg))
-        };
-        req.Headers.Add("x-api-key", cfg.ApiKey.Trim());
-        req.Headers.Add("anthropic-version", Version);
-
-        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
-        using var _respGuard = new SafeDispose(resp);
-        await ProviderHttp.EnsureSuccessAsync(resp, ct);
-
-        await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
-        {
-            string? text = null;
-            bool stop = false;
-            try
+            var body = new JsonObject
             {
-                using var doc = JsonDocument.Parse(data);
-                var root = doc.RootElement;
-                var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+                ["model"] = model,
+                ["max_tokens"] = cfg.MaxTokens ?? 8192,
+                ["stream"] = true,
+                ["messages"] = messages
+            };
+            if (cfg.Temperature != null) body["temperature"] = cfg.Temperature;
+            if (cfg.TopP != null) body["top_p"] = cfg.TopP;
+            if (!string.IsNullOrWhiteSpace(systemPrompt)) body["system"] = systemPrompt;
+            if (tools != null && round < tools.MaxRounds) body["tools"] = tools.ToAnthropic();
 
-                if (type == "error")
-                    throw new HttpRequestException(ProviderHttp.ExtractError(data));
+            using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "messages")))
+            {
+                Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg))
+            };
+            req.Headers.Add("x-api-key", cfg.ApiKey.Trim());
+            req.Headers.Add("anthropic-version", Version);
 
-                if (type == "message_stop") stop = true;
-                else if (type == "content_block_delta" &&
-                         root.TryGetProperty("delta", out var delta) &&
-                         delta.TryGetProperty("type", out var dt) && dt.GetString() == "text_delta" &&
-                         delta.TryGetProperty("text", out var tx))
+            var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
+            using var _respGuard = new SafeDispose(resp);
+            await ProviderHttp.EnsureSuccessAsync(resp, ct);
+
+            var said = new StringBuilder();
+            var uses = new SortedDictionary<int, ToolCallAcc>();   // tool_use blocks by their index
+
+            await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
+            {
+                string? text = null;
+                bool stop = false;
+                try
                 {
-                    text = tx.GetString();
+                    using var doc = JsonDocument.Parse(data);
+                    var root = doc.RootElement;
+                    var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+                    var index = root.TryGetProperty("index", out var ixp) && ixp.ValueKind == JsonValueKind.Number ? ixp.GetInt32() : -1;
+
+                    if (type == "error")
+                        throw new HttpRequestException(ProviderHttp.ExtractError(data));
+
+                    if (type == "message_stop") stop = true;
+                    else if (type == "content_block_start" && root.TryGetProperty("content_block", out var cb) &&
+                             cb.TryGetProperty("type", out var cbt) && cbt.GetString() == "tool_use")
+                    {
+                        uses[index] = new ToolCallAcc
+                        {
+                            Id = cb.TryGetProperty("id", out var cid) ? cid.GetString() ?? "" : "",
+                            Name = cb.TryGetProperty("name", out var cn) ? cn.GetString() ?? "" : ""
+                        };
+                    }
+                    else if (type == "content_block_delta" &&
+                             root.TryGetProperty("delta", out var delta) &&
+                             delta.TryGetProperty("type", out var dt))
+                    {
+                        if (dt.GetString() == "text_delta" && delta.TryGetProperty("text", out var tx))
+                            text = tx.GetString();
+                        else if (dt.GetString() == "input_json_delta" && uses.TryGetValue(index, out var u) &&
+                                 delta.TryGetProperty("partial_json", out var pj))
+                            u.Args.Append(pj.GetString());
+                    }
                 }
-            }
-            catch (JsonException)
-            {
-                continue;
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(text)) { said.Append(text); yield return text; }
+                if (stop) break;
             }
 
-            if (!string.IsNullOrEmpty(text)) yield return text;
-            if (stop) yield break;
+            if (uses.Count == 0 || tools == null || round >= tools.MaxRounds) yield break;
+
+            // the assistant turn (text + tool_use blocks), then our tool_result blocks
+            var assistant = new JsonArray();
+            if (said.ToString().Trim().Length > 0) assistant.Add(new JsonObject { ["type"] = "text", ["text"] = said.ToString().Trim() });
+            var results = new JsonArray();
+            foreach (var (_, use) in uses)
+            {
+                var args = use.Args.Length > 0 ? use.Args.ToString() : "{}";
+                assistant.Add(new JsonObject
+                {
+                    ["type"] = "tool_use",
+                    ["id"] = use.Id,
+                    ["name"] = use.Name,
+                    ["input"] = ToolSet.ParseArgs(args)
+                });
+
+                if (tools.ShowCalls)
+                    yield return (said.Length > 0 && !said.ToString().EndsWith("\n\n") ? "\n\n" : "") + tools.CallLine(use.Name, args);
+                yield return ProviderStatus.Prefix + "🔧 " + (tools.Find(use.Name)?.Label ?? use.Name) + "...";
+                said.Append("\n\n");
+
+                var result = await tools.ExecuteAsync(use.Name, args, ct);
+                results.Add(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = use.Id, ["content"] = result });
+            }
+            messages.Add(new JsonObject { ["role"] = "assistant", ["content"] = assistant });
+            messages.Add(new JsonObject { ["role"] = "user", ["content"] = results });
         }
     }
 
@@ -908,59 +958,101 @@ public class GeminiProvider : IChatProvider
             };
         }
 
-        var url = ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, $"models/{CleanModel(model)}:streamGenerateContent?alt=sse", CleanModel(model)));
-        using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg)) };
-        req.Headers.Add("x-goog-api-key", cfg.ApiKey.Trim());
+        var tools = cfg.Tools is { Tools.Count: > 0 } ? cfg.Tools : null;
 
-        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
-        using var _respGuard = new SafeDispose(resp);
-        await ProviderHttp.EnsureSuccessAsync(resp, ct);
-
-        await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
+        for (var round = 0; ; round++)
         {
-            string? text = null;
-            try
+            if (tools != null && round < tools.MaxRounds) body["tools"] = tools.ToGemini();
+            else body.Remove("tools");
+
+            var url = ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, $"models/{CleanModel(model)}:streamGenerateContent?alt=sse", CleanModel(model)));
+            using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg)) };
+            req.Headers.Add("x-goog-api-key", cfg.ApiKey.Trim());
+
+            var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
+            using var _respGuard = new SafeDispose(resp);
+            await ProviderHttp.EnsureSuccessAsync(resp, ct);
+
+            var said = new StringBuilder();
+            var callParts = new List<JsonNode>();   // functionCall parts exactly as the model sent them (they may carry a signature)
+
+            await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
             {
-                using var doc = JsonDocument.Parse(data);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("error", out _))
-                    throw new HttpRequestException(ProviderHttp.ExtractError(data));
-
-                if (root.TryGetProperty("candidates", out var cands) &&
-                    cands.ValueKind == JsonValueKind.Array && cands.GetArrayLength() > 0 &&
-                    cands[0].TryGetProperty("content", out var content) &&
-                    content.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array)
+                string? text = null;
+                try
                 {
-                    var sb = new StringBuilder();
-                    foreach (var part in parts.EnumerateArray())
-                    {
-                        if (part.TryGetProperty("thought", out var th) && th.ValueKind == JsonValueKind.True) continue;
-                        if (part.TryGetProperty("text", out var tx) && tx.ValueKind == JsonValueKind.String)
-                            sb.Append(tx.GetString());
+                    using var doc = JsonDocument.Parse(data);
+                    var root = doc.RootElement;
 
-                        // Image output (Gemini image models): inlineData { mimeType, data }
-                        if ((part.TryGetProperty("inlineData", out var inl) || part.TryGetProperty("inline_data", out inl)) &&
-                            inl.ValueKind == JsonValueKind.Object && onImage != null)
+                    if (root.TryGetProperty("error", out _))
+                        throw new HttpRequestException(ProviderHttp.ExtractError(data));
+
+                    if (root.TryGetProperty("candidates", out var cands) &&
+                        cands.ValueKind == JsonValueKind.Array && cands.GetArrayLength() > 0 &&
+                        cands[0].TryGetProperty("content", out var content) &&
+                        content.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array)
+                    {
+                        var sb = new StringBuilder();
+                        foreach (var part in parts.EnumerateArray())
                         {
-                            var mime = inl.TryGetProperty("mimeType", out var mt) ? mt.GetString()
-                                : inl.TryGetProperty("mime_type", out var mt2) ? mt2.GetString() : null;
-                            if (inl.TryGetProperty("data", out var d) && d.GetString() is { Length: > 0 } b64)
+                            if (part.TryGetProperty("thought", out var th) && th.ValueKind == JsonValueKind.True) continue;
+                            if (part.TryGetProperty("functionCall", out _) || part.TryGetProperty("function_call", out _))
                             {
-                                try { await onImage(mime ?? "image/png", Convert.FromBase64String(b64)); }
-                                catch (FormatException) { }
+                                if (JsonNode.Parse(part.GetRawText()) is JsonNode fc) callParts.Add(fc);
+                                continue;
+                            }
+                            if (part.TryGetProperty("text", out var tx) && tx.ValueKind == JsonValueKind.String)
+                                sb.Append(tx.GetString());
+
+                            // Image output (Gemini image models): inlineData { mimeType, data }
+                            if ((part.TryGetProperty("inlineData", out var inl) || part.TryGetProperty("inline_data", out inl)) &&
+                                inl.ValueKind == JsonValueKind.Object && onImage != null)
+                            {
+                                var mime = inl.TryGetProperty("mimeType", out var mt) ? mt.GetString()
+                                    : inl.TryGetProperty("mime_type", out var mt2) ? mt2.GetString() : null;
+                                if (inl.TryGetProperty("data", out var d) && d.GetString() is { Length: > 0 } b64)
+                                {
+                                    try { await onImage(mime ?? "image/png", Convert.FromBase64String(b64)); }
+                                    catch (FormatException) { }
+                                }
                             }
                         }
+                        text = sb.ToString();
                     }
-                    text = sb.ToString();
                 }
-            }
-            catch (JsonException)
-            {
-                continue;
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(text)) { said.Append(text); yield return text; }
             }
 
-            if (!string.IsNullOrEmpty(text)) yield return text;
+            if (callParts.Count == 0 || tools == null || round >= tools.MaxRounds) yield break;
+
+            var modelParts = new JsonArray();
+            if (said.ToString().Trim().Length > 0) modelParts.Add(new JsonObject { ["text"] = said.ToString().Trim() });
+            var responseParts = new JsonArray();
+            foreach (var part in callParts)
+            {
+                var fc = (part["functionCall"] ?? part["function_call"]) as JsonObject;
+                var name = fc?["name"]?.GetValue<string>() ?? "";
+                var args = fc?["args"]?.ToJsonString() ?? "{}";
+                var id = fc?["id"]?.GetValue<string>();
+                modelParts.Add(part.DeepClone());
+
+                if (tools.ShowCalls)
+                    yield return (said.Length > 0 && !said.ToString().EndsWith("\n\n") ? "\n\n" : "") + tools.CallLine(name, args);
+                yield return ProviderStatus.Prefix + "🔧 " + (tools.Find(name)?.Label ?? name) + "...";
+                said.Append("\n\n");
+
+                var result = await tools.ExecuteAsync(name, args, ct);
+                var fr = new JsonObject { ["name"] = name, ["response"] = new JsonObject { ["result"] = result } };
+                if (!string.IsNullOrEmpty(id)) fr["id"] = id;
+                responseParts.Add(new JsonObject { ["functionResponse"] = fr });
+            }
+            contents.Add(new JsonObject { ["role"] = "model", ["parts"] = modelParts });
+            contents.Add(new JsonObject { ["role"] = "user", ["parts"] = responseParts });
         }
     }
 

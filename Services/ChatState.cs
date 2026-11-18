@@ -690,9 +690,10 @@ public class ChatState
 
     public void ResetToolOpts() { ToolOpts = new(); SaveToolOpts(); }
 
-    /// <summary>Tools are offered only to chat APIs that speak the OpenAI format (and have them allowed).</summary>
+    /// <summary>Tools are offered to OpenAI-compatible APIs, Claude and Gemini (when allowed for that API).</summary>
     bool ToolsApply(ProviderConfig p) =>
-        ToolOpts.Enabled && p.UseTools && p.Type == ProviderType.OpenAiCompatible && !p.IsGenerator;
+        ToolOpts.Enabled && p.UseTools && !p.IsGenerator &&
+        p.Type is ProviderType.OpenAiCompatible or ProviderType.Anthropic or ProviderType.Gemini;
 
     /// <summary>Call after changing a field of <see cref="SearchOpts"/>.</summary>
     public void SaveSearchOpts() =>
