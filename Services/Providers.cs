@@ -558,7 +558,7 @@ public class OpenAiCompatibleProvider : IChatProvider
 
         for (var round = 0; ; round++)
         {
-            var body = new JsonObject { ["model"] = model, ["stream"] = !cfg.NoStream, ["messages"] = messages };
+            var body = new JsonObject { ["model"] = model, ["stream"] = !cfg.NoStream, ["messages"] = messages.DeepClone() };
             ProviderHttp.ApplyGen(body, cfg);
             // after the last allowed round the tools are left out, so the model has to answer
             if (useTools && tools != null && round < tools.MaxRounds) body["tools"] = tools.ToOpenAi();
@@ -790,7 +790,7 @@ public class AnthropicProvider : IChatProvider
                 ["model"] = model,
                 ["max_tokens"] = cfg.MaxTokens ?? 8192,
                 ["stream"] = true,
-                ["messages"] = messages
+                ["messages"] = messages.DeepClone()
             };
             if (cfg.Temperature != null) body["temperature"] = cfg.Temperature;
             if (cfg.TopP != null) body["top_p"] = cfg.TopP;
