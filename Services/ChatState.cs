@@ -1489,6 +1489,7 @@ public class ChatState
             return true;
         }
         if (PdfPrompt != null) { ChoosePdfMode("text"); return true; }
+        if (PromptsOpen) { ClosePrompts(); return true; }
         if (Picker != null) { ClosePicker(); return true; }
         if (Viewer != null) { CloseViewer(); return true; }
         if (ShowLogs) { CloseLogs(); return true; }
@@ -1576,6 +1577,23 @@ public class ChatState
         Notify();
         return null;
     }
+
+    /// <summary>Replaces the whole library with this list (names must be unique and without spaces).</summary>
+    public string? SaveShortcutList(IEnumerable<Shortcut> list) => SetShortcutsJson(ShortcutHelper.ToJson(list));
+
+    public bool PromptsOpen { get; private set; }
+    public void OpenPrompts() { PromptsOpen = true; if (IsNarrow) SidebarOpen = false; Notify(); }
+    public void ClosePrompts() { PromptsOpen = false; Notify(); }
+
+    /// <summary>Text the chat screen should put into the message box (consumed once by ChatApp).</summary>
+    public string? PendingComposerText { get; private set; }
+    public void UsePrompt(Shortcut sc)
+    {
+        PendingComposerText = "/" + sc.Name + " ";
+        PromptsOpen = false;
+        Notify();
+    }
+    public string? TakeComposerText() { var t = PendingComposerText; PendingComposerText = null; return t; }
 
     public void SetSystemPrompt(string text)
     {

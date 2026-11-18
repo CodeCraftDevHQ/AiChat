@@ -1,0 +1,170 @@
+@inherits StateComponent
+
+@if (_editing)
+{
+    <div class="persona-edit">
+        <label class="lbl first">@L["نام دستور (بدون فاصله؛ با /نام صدا زده می‌شود)"]</label>
+        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" value="@_name" @onchange="OnName" />
+        <label class="lbl">@L["توضیح کوتاه"]</label>
+        <input class="inp" dir="auto" value="@_desc" @onchange="OnDesc" />
+        <label class="lbl">@L["متن پرامپت"]</label>
+        <textarea class="inp" rows="8" dir="auto" value="@_prompt" @onchange="OnPrompt"></textarea>
+        <p class="muted small">@L["{{text}} جای متن بعد از دستور را می‌گیرد. اگر نباشد، متن شما بعد از پرامپت اضافه می‌شود."]</p>
+        <div class="row">
+            <button class="primary" type="button" disabled="@(_name.Trim().Length == 0 || _prompt.Trim().Length == 0)" @onclick="Save">@L["ذخیره"]</button>
+            <button class="btn" type="button" @onclick="Cancel">@L["انصراف"]</button>
+        </div>
+        @if (_status != null)
+        {
+            <p class="status" dir="auto">@_status</p>
+        }
+    </div>
+}
+else
+{
+    <p class="muted small">@L["پرامپت‌های آماده. با نوشتن / در کادر پیام یا دکمه‌ی 📚 کنار آن استفاده می‌شوند."]</p>
+    <input class="inp" dir="auto" placeholder="@L["جستجو…"]" value="@_query" @oninput="OnQuery" />
+
+    @{
+        var shown = Filtered();
+    }
+    @if (State.Shortcuts.Count == 0)
+    {
+        <p class="muted">@L["هنوز پرامپتی ساخته نشده است."]</p>
+    }
+    @foreach (var sc in shown)
+    {
+        var item = sc;
+        <div class="persona-row">
+            <span class="persona-ico" dir="ltr">/</span>
+            <div class="persona-info">
+                <strong dir="ltr">@item.Name</strong>
+                <small class="muted" dir="auto">@(item.Description.Length > 0 ? item.Description + " · " : "")@Short(item.Prompt)</small>
+            </div>
+            <button class="btn sm" @onclick="() => Edit(item)">@L["ویرایش"]</button>
+            <button class="btn sm" @onclick="() => Duplicate(item)">@L["کپی"]</button>
+            <button class="btn sm" @onclick="() => Delete(item)">@L["حذف"]</button>
+        </div>
+    }
+
+    <div class="row">
+        <button class="primary" @onclick="New">+ @L["پرامپت جدید"]</button>
+        <button class="btn" @onclick="AddSamples">@L["درج نمونه‌ها"]</button>
+        <button class="btn" @onclick="Import">@L["وارد کردن فایل JSON"]</button>
+        <button class="btn" disabled="@(State.Shortcuts.Count == 0)" @onclick="Export">@L["ذخیره به‌صورت فایل"]</button>
+    </div>
+    @if (_status != null)
+    {
+        <p class="status" dir="auto">@_status</p>
+    }
+
+    <details class="adv" style="margin-top:14px">
+        <summary>@L["ویرایش پیشرفته (JSON)"]</summary>
+        <textarea class="inp code" rows="10" dir="ltr" autocapitalize="off" spellcheck="false"
+                  value="@JsonText" @oninput="OnJson"></textarea>
+        <div class="row">
+            <button class="primary" type="button" @onclick="SaveJson">@L["ذخیره"]</button>
+        </div>
+    </details>
+}
+
+@code {
+    bool _editing;
+    string _orig = "";
+    string _name = "", _desc = "", _prompt = "";
+    string _query = "";
+    string? _status;
+    string? _json;
+
+    string JsonText => _json ??= State.ShortcutsJson;
+
+    static string Short(string s)
+    {
+        s = s.Replace('\n', ' ');
+        return s.Length > 80 ? s[..80] + "…" : s;
+    }
+
+    List<Shortcut> Filtered()
+    {
+        var q = _query.Trim();
+        if (q.Length == 0) return State.Shortcuts;
+        return State.Shortcuts.Where(x => x.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || x.Description.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || x.Prompt.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    void OnQuery(ChangeEventArgs e) => _query = e.Value?.ToString() ?? string.Empty;
+    void OnName(ChangeEventArgs e) => _name = (e.Value?.ToString() ?? string.Empty).Trim().TrimStart('/');
+    void OnDesc(ChangeEventArgs e) => _desc = e.Value?.ToString() ?? string.Empty;
+    void OnPrompt(ChangeEventArgs e) => _prompt = e.Value?.ToString() ?? string.Empty;
+    void OnJson(ChangeEventArgs e) { _json = e.Value?.ToString() ?? string.Empty; _status = null; }
+
+    void New() { _editing = true; _orig = ""; _name = ""; _desc = ""; _prompt = ""; _status = null; }
+
+    void Edit(Shortcut s) { _editing = true; _orig = s.Name; _name = s.Name; _desc = s.Description; _prompt = s.Prompt; _status = null; }
+
+    void Cancel() { _editing = false; _status = null; }
+
+    void Commit(List<Shortcut> list)
+    {
+        var err = State.SaveShortcutList(list);
+        _json = null;
+        _status = err == null ? L["ذخیره شد ✓"] : L["خطا: "] + err;
+    }
+
+    void Save()
+    {
+        _name = _name.Trim();
+        if (_name.Any(char.IsWhiteSpace)) { _status = L["نام دستور نباید فاصله داشته باشد."]; return; }
+        if (State.Shortcuts.Any(x => x.Name.Equals(_name, StringComparison.OrdinalIgnoreCase)
+                                     && !x.Name.Equals(_orig, StringComparison.OrdinalIgnoreCase)))
+        { _status = L["این نام قبلاً وجود دارد."]; return; }
+        var list = State.Shortcuts.Where(x => !x.Name.Equals(_orig, StringComparison.OrdinalIgnoreCase)).ToList();
+        var item = new Shortcut(_name, _prompt, _desc.Trim());
+        var idx = State.Shortcuts.FindIndex(x => x.Name.Equals(_orig, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0 && idx <= list.Count) list.Insert(idx, item); else list.Add(item);
+        Commit(list);
+        _editing = false;
+    }
+
+    void Delete(Shortcut s) => Commit(State.Shortcuts.Where(x => x != s).ToList());
+
+    void Duplicate(Shortcut s)
+    {
+        var name = s.Name + "-2";
+        while (State.Shortcuts.Any(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) name += "2";
+        Commit(State.Shortcuts.Append(new Shortcut(name, s.Prompt, s.Description)).ToList());
+    }
+
+    void AddSamples()
+    {
+        var list = State.Shortcuts.ToList();
+        foreach (var s in ShortcutHelper.Parse(ShortcutHelper.Sample, out _).Concat(ShortcutHelper.MoreSamples()))
+            if (!list.Any(x => x.Name.Equals(s.Name, StringComparison.OrdinalIgnoreCase))) list.Add(s);
+        Commit(list);
+    }
+
+    void SaveJson()
+    {
+        var err = State.SetShortcutsJson(JsonText);
+        _status = err == null ? L["ذخیره شد ✓"] : L["خطا: "] + err;
+    }
+
+    async Task Import()
+    {
+        try
+        {
+            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = L["انتخاب فایل JSON میانبرها"] });
+            if (file == null) return;
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            var text = await reader.ReadToEndAsync();
+            var err = State.SetShortcutsJson(text);
+            _json = null;
+            _status = err == null ? L["ذخیره شد ✓"] : L["خطا: "] + err;
+        }
+        catch (Exception ex) { _status = L["خطا: "] + ex.Message; }
+    }
+
+    Task Export() => State.SaveTextAsync("prompts.json", State.ShortcutsJson);
+}

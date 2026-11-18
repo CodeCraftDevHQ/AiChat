@@ -17,6 +17,25 @@ public static class ShortcutHelper
 ]
 """;
 
+    public static string ToJson(IEnumerable<Shortcut> list)
+    {
+        var arr = new JsonArray();
+        foreach (var s in list)
+            arr.Add(new JsonObject { ["name"] = s.Name, ["description"] = s.Description, ["prompt"] = s.Prompt });
+        return arr.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+    }
+
+    /// <summary>Extra ready-made prompts the library can add (names that already exist are skipped by the caller).</summary>
+    public static List<Shortcut> MoreSamples() => new()
+    {
+        new("explain", "Explain simply", "Explain the following in simple terms with a short example:\n\n{{text}}"),
+        new("code-review", "Review code", "Review this code. List bugs, risks and improvements, then show a corrected version:\n\n{{text}}"),
+        new("email", "Polish an email", "Rewrite this as a clear, polite, professional email. Keep it short:\n\n{{text}}"),
+        new("proscons", "Pros and cons", "List the pros and cons of the following, then give a one-line recommendation:\n\n{{text}}"),
+        new("eli5", "ساده توضیح بده", "این موضوع را طوری توضیح بده که یک نوجوان بفهمد:\n\n{{text}}"),
+        new("title", "Suggest titles", "Suggest 10 short, catchy titles for the following:\n\n{{text}}"),
+    };
+
     public static List<Shortcut> Parse(string? json, out string? error)
     {
         error = null;

@@ -1,0 +1,71 @@
+@inherits StateComponent
+
+@if (State.PromptsOpen)
+{
+    <div class="modal-backdrop" @onclick="State.ClosePrompts">
+        <div class="modal wide gallery" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>@L["کتابخانه‌ی پرامپت"]</h2>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.ClosePrompts">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            </div>
+            <div class="gal-filters">
+                <input class="inp" dir="auto" placeholder="@L["جستجو…"]" value="@_query" @oninput="OnQuery" />
+            </div>
+            <div class="p-body">
+                @{
+                    var items = Items();
+                }
+                @if (State.Shortcuts.Count == 0)
+                {
+                    <p class="muted">@L["هنوز پرامپتی ساخته نشده است."]</p>
+                    <button class="btn" @onclick="OpenManager">@L["افزودن در تنظیمات"]</button>
+                }
+                else if (items.Count == 0)
+                {
+                    <p class="muted">@L["چیزی پیدا نشد."]</p>
+                }
+                @foreach (var sc in items)
+                {
+                    var item = sc;
+                    <button class="prompt-item" @onclick="() => State.UsePrompt(item)">
+                        <b dir="ltr">/@item.Name</b>
+                        <span class="muted small" dir="auto">@item.Description</span>
+                        <span class="prompt-text muted small" dir="auto">@Short(item.Prompt)</span>
+                    </button>
+                }
+            </div>
+            <div class="row" style="padding:10px 14px">
+                <button class="btn" @onclick="OpenManager">⚙ @L["مدیریت"]</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    string _query = "";
+
+    void OnQuery(ChangeEventArgs e) => _query = e.Value?.ToString() ?? string.Empty;
+
+    static string Short(string s)
+    {
+        s = s.Replace('\n', ' ');
+        return s.Length > 120 ? s[..120] + "…" : s;
+    }
+
+    List<Shortcut> Items()
+    {
+        var q = _query.Trim();
+        if (q.Length == 0) return State.Shortcuts;
+        return State.Shortcuts.Where(x => x.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || x.Description.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || x.Prompt.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    void OpenManager()
+    {
+        State.ClosePrompts();
+        State.OpenSettingsAt("prompts");
+    }
+}

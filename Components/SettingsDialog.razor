@@ -284,21 +284,8 @@
                             <label class="chk"><input type="checkbox" checked="@State.ShrinkImages" @onchange="e => State.SetLimits(shrink: (bool)(e.Value ?? false))" /> @L["کوچک‌کردن خودکار عکس‌های بزرگ (بیش از ۳ مگابایت)"]</label>
                             <p class="muted small">@L["بعضی سرویس‌ها (مثل Claude) عکس بزرگ‌تر از ۵ مگابایت را نمی‌پذیرند؛ کوچک‌کردن خودکار آن را به حدود ۲۰۴۸ پیکسل (JPEG) می‌رساند."]</p>
 
-                            <label class="lbl">@L["میانبرها (دستورهای /)"]</label>
-                            <p class="muted small">@L["با نوشتن / در ابتدای پیام، میانبرها پیشنهاد می‌شوند. {{text}} جای متن بعد از دستور را می‌گیرد."]</p>
-                            <textarea class="inp code" rows="10" dir="ltr" autocapitalize="off" spellcheck="false"
-                                      value="@ScText" @oninput="e => { _scText = e.Value?.ToString() ?? string.Empty; _scStatus = null; }"></textarea>
-                            <div class="row">
-                                <button class="primary" type="button" @onclick="SaveShortcuts">@L["ذخیره"]</button>
-                                <button class="btn" type="button" @onclick="InsertShortcutSample">@L["درج نمونه"]</button>
-                                <button class="btn" type="button" @onclick="ImportShortcuts">@L["وارد کردن فایل JSON"]</button>
-                                <button class="btn" type="button" @onclick="ExportShortcuts">@L["ذخیره به‌صورت فایل"]</button>
-                                <button class="btn" type="button" @onclick="ClearShortcuts">@L["پاک کردن"]</button>
-                            </div>
-                            @if (_scStatus != null)
-                            {
-                                <p class="status" dir="auto">@_scStatus</p>
-                            }
+                            <p class="muted small" style="margin-top:12px">@L["میانبرهای / و پرامپت‌های آماده در «کتابخانه‌ی پرامپت» مدیریت می‌شوند."]</p>
+                            <button class="btn" type="button" @onclick='() => State.SetSettingsSection("prompts")'>@L["کتابخانه‌ی پرامپت"]</button>
                             break;
 
                         case "answer":
@@ -400,6 +387,10 @@
                             {
                                 <p class="status" dir="auto">@_searchStatus</p>
                             }
+                            break;
+
+                        case "prompts":
+                            <PromptManager />
                             break;
 
                         case "personas":
@@ -795,6 +786,7 @@ else if (_dlg == 2)
         new SectionItem("answer", L["پاسخ مدل"]),
         new SectionItem("search", L["جستجو در وب"]),
         new SectionItem("personas", L["شخصیت‌ها"]),
+        new SectionItem("prompts", L["کتابخانه‌ی پرامپت"]),
         new SectionItem("tools", L["ابزارها"]),
         new SectionItem("cost", L["توکن و هزینه"]),
         new SectionItem("security", L["امنیت و حریم خصوصی"]),
@@ -1058,38 +1050,6 @@ else if (_dlg == 2)
             _editing.ExtraBody = "{ \"temperature\": \"{{input.temperature}}\", \"max_tokens\": \"{{input.max_tokens}}\" }";
         _advOpen = true;
     }
-
-    // ---- slash shortcuts (chat section)
-    string? _scText;
-    string? _scStatus;
-
-    string ScText => _scText ??= State.ShortcutsJson;
-
-    void SaveShortcuts()
-    {
-        var err = State.SetShortcutsJson(ScText);
-        _scStatus = err == null ? L["ذخیره شد ✓"] : L["خطا: "] + err;
-    }
-
-    void ClearShortcuts() { _scText = string.Empty; _scStatus = null; }
-
-    void InsertShortcutSample() { _scText = ShortcutHelper.Sample; _scStatus = null; }
-
-    async Task ImportShortcuts()
-    {
-        try
-        {
-            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = L["انتخاب فایل JSON میانبرها"] });
-            if (file == null) return;
-            await using var stream = await file.OpenReadAsync();
-            using var reader = new StreamReader(stream);
-            _scText = await reader.ReadToEndAsync();
-            SaveShortcuts();
-        }
-        catch (Exception ex) { _scStatus = L["خطا: "] + ex.Message; }
-    }
-
-    Task ExportShortcuts() => State.SaveTextAsync("shortcuts.json", ScText);
 
     string InputOf(string id, string def) => _editing != null && _editing.ConnectorInputs.TryGetValue(id, out var v) ? v : def;
 

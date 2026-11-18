@@ -216,6 +216,9 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" /></svg>
                     </button>
                 }
+                <button class="icon-btn attach" title="@L["کتابخانه‌ی پرامپت"]" @onclick="State.OpenPrompts">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5" /><path d="M9 8h6" /></svg>
+                </button>
                 @if (State.ToolsAvailable)
                 {
                     <button class="icon-btn attach @(State.ToolOpts.Enabled ? "on" : "")" title="@(State.ToolOpts.Enabled ? L["ابزارها روشن است"] : L["ابزارها (مدل خودش جستجو می‌کند و ...)"])" @onclick="() => State.SetToolsEnabled(!State.ToolOpts.Enabled)">
@@ -289,6 +292,7 @@
     <ConvSettingsDialog />
     <Gallery />
     <ToolAskDialog />
+<PromptLibrary />
 
     @if (State.ShowLogs)
     {
@@ -462,6 +466,9 @@
             var narrow = await JS.InvokeAsync<bool>("chat.isNarrow");
             State.SetNarrow(narrow);
         }
+
+        if (State.TakeComposerText() is { } composerText)
+            await JS.InvokeVoidAsync("chat.setValue", _input, composerText);
 
         await SyncSearchBarAsync();
 
