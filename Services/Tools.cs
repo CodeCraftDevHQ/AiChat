@@ -135,6 +135,8 @@ public class ToolOptions
     public int ResultChars { get; set; } = 6000;
     /// <summary>Show a "🔧" line for every call inside the answer.</summary>
     public bool ShowCalls { get; set; } = true;
+    /// <summary>Ask the user before a tool runs: 0 = never, 1 = only tools that send something to the internet (search, read page), 2 = every tool.</summary>
+    public int AskMode { get; set; }
     /// <summary>Extra instruction added to the system prompt when tools are on (empty = none).</summary>
     public string ExtraPrompt { get; set; } = "";
 }

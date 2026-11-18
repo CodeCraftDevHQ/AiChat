@@ -452,5 +452,18 @@ public static class Translations
         ["دستور اضافه برای مدل هنگام فعال بودن ابزارها (اختیاری)"] = "Extra instruction for the model while tools are on (optional)",
         ["مثلاً: برای اخبار و قیمت‌ها حتماً جستجو کن."] = "e.g. Always search for news and prices.",
         ["اجازه‌ی استفاده از ابزارها برای این API"] = "Allow tools for this API",
+        ["ابزارها روشن شد"] = "Tools on",
+        ["ابزارها خاموش شد"] = "Tools off",
+        ["اجازه‌ی استفاده از ابزار"] = "Allow tool use",
+        ["مدل می‌خواهد از «{0}» استفاده کند:"] = "The model wants to use “{0}”:",
+        ["رد کن"] = "Refuse",
+        ["اجازه برای همه‌ی این پاسخ"] = "Allow all in this answer",
+        ["اجازه"] = "Allow",
+        ["ابزارها روشن است"] = "Tools are on",
+        ["ابزارها (مدل خودش جستجو می‌کند و ...)"] = "Tools (the model can search, calculate...)",
+        ["پرسیدن قبل از اجرای ابزار"] = "Ask before a tool runs",
+        ["هرگز (خودکار اجرا شود)"] = "Never (run automatically)",
+        ["فقط ابزارهای اینترنتی (جستجو و خواندن صفحه)"] = "Only internet tools (search and read page)",
+        ["همه‌ی ابزارها"] = "All tools",
     };
 }

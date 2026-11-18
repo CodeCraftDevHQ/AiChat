@@ -420,6 +420,10 @@
                             <label class="lbl">@L["حداکثر طول نتیجه‌ی هر ابزار (نویسه)"]</label>
                             <input class="inp" type="number" min="500" max="50000" step="500" value="@to.ResultChars" @onchange="e => ToolOpt(o => o.ResultChars = Math.Clamp(ToInt(e), 500, 50000))" />
 
+                            <label class="lbl">@L["پرسیدن قبل از اجرای ابزار"]</label>
+                            <AppSelect Title="@L["پرسیدن قبل از اجرای ابزار"]" Value="@to.AskMode.ToString()" ValueChanged="v => ToolOpt(o => o.AskMode = int.TryParse(v, out var n) ? n : 0)"
+                                       Options="@(new AppSelect.SelectOption[] { new("0", L["هرگز (خودکار اجرا شود)"]), new("1", L["فقط ابزارهای اینترنتی (جستجو و خواندن صفحه)"]), new("2", L["همه‌ی ابزارها"]) })" />
+
                             <label class="chk"><input type="checkbox" checked="@to.ShowCalls" @onchange="e => ToolOpt(o => o.ShowCalls = e.Value is true)" /> @L["هر استفاده از ابزار را داخل پاسخ نشان بده (🔧)"]</label>
 
                             <label class="lbl">@L["دستور اضافه برای مدل هنگام فعال بودن ابزارها (اختیاری)"]</label>

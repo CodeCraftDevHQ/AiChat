@@ -688,6 +688,52 @@ public class ChatState
     /// <summary>Call after changing a field of <see cref="ToolOpts"/>.</summary>
     public void SaveToolOpts() { Preferences.Default.Set("tool_opts", System.Text.Json.JsonSerializer.Serialize(ToolOpts)); Notify(); }
 
+    /// <summary>True when the selected API can use tools (shows the 🔧 button in the composer).</summary>
+    public bool ToolsAvailable => CurrentProvider is { } p && p.UseTools && !p.IsGenerator &&
+        p.Type is ProviderType.OpenAiCompatible or ProviderType.Anthropic or ProviderType.Gemini;
+
+    public void SetToolsEnabled(bool on)
+    {
+        ToolOpts.Enabled = on;
+        SaveToolOpts();
+        ShowToast(on ? L["ابزارها روشن شد"] : L["ابزارها خاموش شد"]);
+    }
+
+    // ---- asking before a tool runs
+    public record ToolAskInfo(string Label, string Detail, string Name);
+    public ToolAskInfo? ToolAsk { get; private set; }
+    TaskCompletionSource<bool>? _toolAskTcs;
+    bool _toolAllowAll;
+
+    /// <summary>Answer of the dialog: 0 = refuse, 1 = allow, 2 = allow every call of this answer.</summary>
+    public void AnswerToolAsk(int choice)
+    {
+        if (choice == 2) _toolAllowAll = true;
+        var t = _toolAskTcs;
+        ToolAsk = null;
+        _toolAskTcs = null;
+        t?.TrySetResult(choice != 0);
+        Notify();
+    }
+
+    async Task<bool> ApproveToolAsync(ToolDef tool, System.Text.Json.Nodes.JsonObject args, CancellationToken ct)
+    {
+        var mode = ToolOpts.AskMode;
+        if (mode == 0 || _toolAllowAll) return true;
+        if (mode == 1 && tool.Name is not ("web_search" or "read_page")) return true;
+
+        var detail = string.Join("\n", args.Select(kv => kv.Key + ": " + (kv.Value is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : kv.Value?.ToJsonString())));
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _toolAskTcs = tcs;
+        ToolAsk = new ToolAskInfo(tool.Label.Length > 0 ? tool.Label : tool.Name, detail, tool.Name);
+        GenStatus = null;
+        Notify();
+        using var reg = ct.Register(() => tcs.TrySetResult(false));
+        var ok = await tcs.Task;
+        if (ToolAsk != null && ReferenceEquals(_toolAskTcs, tcs)) { ToolAsk = null; _toolAskTcs = null; Notify(); }
+        return ok;
+    }
+
     public void ResetToolOpts() { ToolOpts = new(); SaveToolOpts(); }
 
     /// <summary>Tools are offered to OpenAI-compatible APIs, Claude and Gemini (when allowed for that API).</summary>
@@ -1823,7 +1869,9 @@ public class ChatState
         provider = WithGen(provider, conv);
         if (ToolsApply(provider))
         {
+            _toolAllowAll = false;
             provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts);
+            provider.Tools.Approve = (tool, args) => ApproveToolAsync(tool, args, ct);
             if (provider.Tools.Tools.Count == 0) provider.Tools = null;
             else if (!string.IsNullOrWhiteSpace(ToolOpts.ExtraPrompt))
                 system = string.Join("\n\n", new[] { system, ToolOpts.ExtraPrompt }.Where(x => !string.IsNullOrWhiteSpace(x)));

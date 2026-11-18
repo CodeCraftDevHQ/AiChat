@@ -1,0 +1,19 @@
+@inherits StateComponent
+
+@if (State.ToolAsk is { } ask)
+{
+    <div class="modal-backdrop">
+        <div class="modal tool-ask" @onclick:stopPropagation="true">
+            <div class="modal-head"><h2>🔧 @L["اجازه‌ی استفاده از ابزار"]</h2></div>
+            <div class="p-body">
+                <p>@L.F("مدل می‌خواهد از «{0}» استفاده کند:", ask.Label)</p>
+                <pre class="tool-ask-detail" dir="auto">@ask.Detail</pre>
+            </div>
+            <div class="modal-foot">
+                <button class="btn" @onclick="() => State.AnswerToolAsk(0)">@L["رد کن"]</button>
+                <button class="btn" @onclick="() => State.AnswerToolAsk(2)">@L["اجازه برای همه‌ی این پاسخ"]</button>
+                <button class="btn primary" @onclick="() => State.AnswerToolAsk(1)">@L["اجازه"]</button>
+            </div>
+        </div>
+    </div>
+}
