@@ -465,5 +465,11 @@ public static class Translations
         ["هرگز (خودکار اجرا شود)"] = "Never (run automatically)",
         ["فقط ابزارهای اینترنتی (جستجو و خواندن صفحه)"] = "Only internet tools (search and read page)",
         ["همه‌ی ابزارها"] = "All tools",
+        ["رفتن به تنظیمات جستجوی وب"] = "Open web search settings",
+        ["مدل خودش تعیین کند: تعداد نتایج، خواندن صفحه‌ها و بازه‌ی زمانی"] = "Let the model choose: number of results, pages to read and time range",
+        ["حداکثر نتایج هر جستجو که مدل می‌تواند بخواهد"] = "Max results per search the model may ask for",
+        ["حداکثر صفحه‌هایی که مدل می‌تواند در هر جستجو بخواند (۰ = هیچ)"] = "Max pages the model may read per search (0 = none)",
+        ["حداکثر تعداد جستجو در یک پاسخ (۰ = بدون محدودیت)"] = "Max searches in one answer (0 = no limit)",
+        ["موتور جستجو، منطقه، SafeSearch، فهرست سیاه سایت‌ها و ... از تنظیمات «جستجو در وب» می‌آید. اگر مدل چیزی تعیین نکند، همان مقدارها اعمال می‌شود."] = "Search engine, region, SafeSearch, blocked sites etc. come from the “Web search” settings. If the model chooses nothing, those values apply.",
     };
 }

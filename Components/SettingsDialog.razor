@@ -410,6 +410,23 @@
 
                             <label class="lbl">@L["ابزارهای در دسترس"]</label>
                             <label class="chk"><input type="checkbox" checked="@to.WebSearch" @onchange="e => ToolOpt(o => o.WebSearch = e.Value is true)" /> 🔎 @L["جستجوی وب (از تنظیمات «جستجو در وب» استفاده می‌کند)"]</label>
+                            @if (to.WebSearch)
+                            {
+                                <div class="web-opts">
+                                    <button class="btn sm" @onclick='() => State.SetSettingsSection("search")'>⚙ @L["رفتن به تنظیمات جستجوی وب"]</button>
+                                    <label class="chk"><input type="checkbox" checked="@to.SearchModelControls" @onchange="e => ToolOpt(o => o.SearchModelControls = e.Value is true)" /> @L["مدل خودش تعیین کند: تعداد نتایج، خواندن صفحه‌ها و بازه‌ی زمانی"]</label>
+                                    @if (to.SearchModelControls)
+                                    {
+                                        <label class="lbl">@L["حداکثر نتایج هر جستجو که مدل می‌تواند بخواهد"]: @to.SearchMaxResults</label>
+                                        <input type="range" class="range" min="1" max="10" step="1" value="@to.SearchMaxResults" @oninput="e => ToolOpt(o => o.SearchMaxResults = ToInt(e))" />
+                                        <label class="lbl">@L["حداکثر صفحه‌هایی که مدل می‌تواند در هر جستجو بخواند (۰ = هیچ)"]: @to.SearchMaxPages</label>
+                                        <input type="range" class="range" min="0" max="10" step="1" value="@to.SearchMaxPages" @oninput="e => ToolOpt(o => o.SearchMaxPages = ToInt(e))" />
+                                    }
+                                    <label class="lbl">@L["حداکثر تعداد جستجو در یک پاسخ (۰ = بدون محدودیت)"]</label>
+                                    <input class="inp" type="number" min="0" max="50" value="@to.MaxSearchCalls" @onchange="e => ToolOpt(o => o.MaxSearchCalls = Math.Clamp(ToInt(e), 0, 50))" />
+                                    <p class="muted small">@L["موتور جستجو، منطقه، SafeSearch، فهرست سیاه سایت‌ها و ... از تنظیمات «جستجو در وب» می‌آید. اگر مدل چیزی تعیین نکند، همان مقدارها اعمال می‌شود."]</p>
+                                </div>
+                            }
                             <label class="chk"><input type="checkbox" checked="@to.ReadPage" @onchange="e => ToolOpt(o => o.ReadPage = e.Value is true)" /> 📄 @L["خواندن صفحه‌ی وب با آدرس"]</label>
                             <label class="chk"><input type="checkbox" checked="@to.DateTime" @onchange="e => ToolOpt(o => o.DateTime = e.Value is true)" /> 🕒 @L["تاریخ و ساعت"]</label>
                             <label class="chk"><input type="checkbox" checked="@to.Calculator" @onchange="e => ToolOpt(o => o.Calculator = e.Value is true)" /> 🧮 @L["ماشین‌حساب"]</label>

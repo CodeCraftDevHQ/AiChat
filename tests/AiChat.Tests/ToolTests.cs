@@ -197,4 +197,32 @@ public class ToolTests
         var decl = set.ToGemini()[0]!["functionDeclarations"]![0]!;
         Assert.Null(decl["parameters"]);
     }
+
+    [Fact]
+    public async Task Web_search_tool_lets_the_model_set_limits_within_the_caps()
+    {
+        var h = new FakeHandler(_ => FakeHandler.Text("<html></html>"));
+        var search = new WebSearchService(new HttpClient(h));
+        var opts = new ToolOptions { SearchMaxResults = 3, SearchMaxPages = 0, MaxSearchCalls = 2, DateTime = false, Calculator = false, ReadPage = false };
+        var set = BuiltInTools.Build(opts, search, WebSearchService.Ddg, "", "", new SearchOptions { Count = 8 });
+
+        var tool = set.Find("web_search")!;
+        Assert.Contains("max_results", tool.Parameters["properties"]!.ToJsonString());
+        Assert.DoesNotContain("read_pages", tool.Parameters["properties"]!.ToJsonString());   // cap 0 = pages cannot be read
+
+        await set.ExecuteAsync("web_search", "{\"query\":\"a\",\"time_range\":\"week\"}", default);
+        await set.ExecuteAsync("web_search", "{\"query\":\"b\"}", default);
+        var third = await set.ExecuteAsync("web_search", "{\"query\":\"c\"}", default);
+        Assert.Contains("Search limit reached", third);
+        Assert.Contains("df=w", h.Requests[0].Url);
+    }
+
+    [Fact]
+    public void Web_search_without_model_controls_has_only_the_query()
+    {
+        var set = BuiltInTools.Build(new ToolOptions { SearchModelControls = false }, new WebSearchService(new HttpClient()),
+            WebSearchService.Ddg, "", "", new SearchOptions());
+        var props = set.Find("web_search")!.Parameters["properties"]!.AsObject();
+        Assert.Single(props);
+    }
 }

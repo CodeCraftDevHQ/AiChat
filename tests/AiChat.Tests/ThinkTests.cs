@@ -62,4 +62,34 @@ public class ThinkTests
         }
         finally { MarkdownRenderer.SetThinkOptions("auto", 320); }
     }
+
+    [Fact]
+    public void Thinking_of_every_round_is_merged_into_one_box()
+    {
+        var html = MarkdownRenderer.ToHtml("<think>first</think>\n\n> 🔧 Web search: cats\n\n<think>second</think>\n\nAnswer");
+        Assert.Equal(1, html.Split("<details class=\"think\"").Length - 1);
+        Assert.Contains("first", html);
+        Assert.Contains("second", html);
+        Assert.Contains("Answer", html);
+    }
+
+    [Fact]
+    public void Tool_calls_become_compact_chips()
+    {
+        var html = MarkdownRenderer.ToHtml("> 🔧 Date & time\n\n> 🔧 Web search: <b>x</b>\n\nDone");
+        Assert.Contains("class=\"toolcalls toolchips\"", html);
+        Assert.Equal(2, html.Split("class=\"toolcall\"").Length - 1);
+        Assert.DoesNotContain("<b>x</b>", html);          // escaped
+        Assert.DoesNotContain("<blockquote", html);
+        Assert.Contains("Done", html);
+    }
+
+    [Fact]
+    public void Many_tool_calls_collapse_into_a_details_box()
+    {
+        var text = string.Concat(Enumerable.Range(1, 5).Select(i => $"> 🔧 Web search: q{i}\n\n")) + "Done";
+        var html = MarkdownRenderer.ToHtml(text);
+        Assert.Contains("<details class=\"toolcalls\"><summary>🔧 5</summary>", html);
+        Assert.Contains("q5", html);
+    }
 }

@@ -137,6 +137,16 @@ public class ToolOptions
     public bool ShowCalls { get; set; } = true;
     /// <summary>Ask the user before a tool runs: 0 = never, 1 = only tools that send something to the internet (search, read page), 2 = every tool.</summary>
     public int AskMode { get; set; }
+
+    // web search tool
+    /// <summary>The model may choose, per search, how many results, how many pages to read and the time range (within the limits below).</summary>
+    public bool SearchModelControls { get; set; } = true;
+    /// <summary>Upper limit of results the model may ask for (1-10).</summary>
+    public int SearchMaxResults { get; set; } = 10;
+    /// <summary>Upper limit of pages the model may ask to be read per search (0 = it may not read pages).</summary>
+    public int SearchMaxPages { get; set; } = 5;
+    /// <summary>Searches allowed in one answer (0 = no limit besides the rounds above).</summary>
+    public int MaxSearchCalls { get; set; }
     /// <summary>Extra instruction added to the system prompt when tools are on (empty = none).</summary>
     public string ExtraPrompt { get; set; } = "";
 }
@@ -199,20 +209,47 @@ public static class BuiltInTools
             });
 
         if (o.WebSearch)
+        {
+            var maxResults = Math.Clamp(o.SearchMaxResults, 1, 10);
+            var maxPages = Math.Clamp(o.SearchMaxPages, 0, 10);
+            var searches = 0;
+            var props = new List<(string, string, string, bool)> { ("query", "string", "The search query", true) };
+            if (o.SearchModelControls)
+            {
+                props.Add(("max_results", "integer", $"How many results you need (1-{maxResults}). Use few for simple facts, more for broad research.", false));
+                if (maxPages > 0)
+                    props.Add(("read_pages", "integer", $"How many of the top results to open and read in full (0-{maxPages}). Use it when snippets are not enough.", false));
+                props.Add(("time_range", "string", "Only results from this period: day, week, month or year. Leave empty for any time.", false));
+            }
             set.Tools.Add(new ToolDef
             {
                 Name = "web_search",
                 Label = "Web search",
                 Description = "Searches the web and returns the top results (title, address, snippet). " +
-                              "Use it for current events or facts you are unsure about.",
-                Parameters = Schema(("query", "string", "The search query", true)),
+                              "Use it for current events or facts you are unsure about. You may search several times with different queries.",
+                Parameters = Schema(props.ToArray()),
                 Run = async (a, ct) =>
                 {
                     var q = Str(a, "query").Trim();
                     if (q.Length == 0) return "Error: empty query.";
-                    var found = await search.SearchAsync(engine, q, key, baseUrl, sopt, ct);
+                    if (o.MaxSearchCalls > 0 && ++searches > o.MaxSearchCalls)
+                        return $"Search limit reached ({o.MaxSearchCalls} per answer). Answer with what you already have.";
+
+                    var so = sopt;
+                    if (o.SearchModelControls)
+                    {
+                        so = System.Text.Json.JsonSerializer.Deserialize<SearchOptions>(System.Text.Json.JsonSerializer.Serialize(sopt)) ?? sopt;
+                        if (int.TryParse(Str(a, "max_results"), out var n)) so.Count = Math.Clamp(n, 1, maxResults);
+                        else so.Count = Math.Min(so.Count, maxResults);
+                        if (int.TryParse(Str(a, "read_pages"), out var rp)) so.PageCount = Math.Clamp(rp, 0, maxPages);
+                        else so.PageCount = Math.Min(so.PageCount, maxPages);
+                        var tr = Str(a, "time_range").Trim().ToLowerInvariant();
+                        if (tr is "day" or "week" or "month" or "year") so.TimeRange = tr;
+                    }
+
+                    var found = await search.SearchAsync(engine, q, key, baseUrl, so, ct);
                     if (found.Count == 0) return "No results.";
-                    if (sopt.PageCount > 0) found = await search.ReadPagesAsync(found, sopt, ct);
+                    if (so.PageCount > 0) found = await search.ReadPagesAsync(found, so, ct);
                     var sb = new StringBuilder();
                     for (var i = 0; i < found.Count; i++)
                     {
@@ -224,6 +261,7 @@ public static class BuiltInTools
                     return sb.ToString().Trim();
                 }
             });
+        }
 
         if (o.ReadPage)
             set.Tools.Add(new ToolDef

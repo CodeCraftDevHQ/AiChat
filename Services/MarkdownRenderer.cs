@@ -63,24 +63,53 @@ public static class MarkdownRenderer
     public static string StripThink(string text) =>
         text.Contains("<think>", StringComparison.Ordinal) ? Think.Replace(text, "").TrimStart() : text;
 
+    // <think> blocks and groups of "> 🔧 ..." tool-call lines
+    static readonly Regex Segments = new(@"<think>(?<t>.*?)(?:(?<c></think>)|\z)|(?<tool>(?:^> 🔧 [^\n]*(?:\n|\z)\s*)+)",
+        RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.Compiled);
+
     public static string ToHtml(string? markdown)
     {
         if (string.IsNullOrEmpty(markdown)) return "";
-        if (!markdown.Contains("<think>", StringComparison.Ordinal)) return Render(markdown);
+        var hasThink = markdown.Contains("<think>", StringComparison.Ordinal);
+        var hasTools = markdown.Contains("> 🔧", StringComparison.Ordinal);
+        if (!hasThink && !hasTools) return Render(markdown);
 
-        // thinking goes into a collapsible box (open while the model is still thinking)
+        var all = Segments.Matches(markdown).ToList();
+        var thinks = all.Where(x => x.Groups["t"].Success).ToList();
+
+        // all thinking of one answer (it comes back after every tool call) goes into ONE collapsible box
+        var merged = string.Join("\n\n---\n\n", thinks.Select(x => x.Groups["t"].Value.Trim()).Where(x => x.Length > 0));
+        var lastClosed = thinks.Count > 0 && thinks[^1].Groups["c"].Success;
+
         var sb = new System.Text.StringBuilder();
         var pos = 0;
-        foreach (Match m in Think.Matches(markdown))
+        var boxDone = false;
+        foreach (var m in all)
         {
             sb.Append(Render(markdown[pos..m.Index]));
-            var closed = m.Value.EndsWith("</think>", StringComparison.Ordinal);
-            var inner = m.Groups[1].Value.Trim();
-            var open = _thinkMode switch { "open" => true, "closed" => false, _ => !closed };
-            if (inner.Length > 0 && _thinkMode != "hidden")
-                sb.Append("<details class=\"think\"").Append(open ? " open" : "").Append("><summary>").Append(_think)
-                  .Append("</summary><div class=\"think-body\" style=\"max-height:").Append(_thinkHeight).Append("px\">").Append(Render(inner)).Append("</div></details>");
             pos = m.Index + m.Length;
+
+            if (m.Groups["t"].Success)
+            {
+                if (boxDone) continue;
+                boxDone = true;
+                var open = _thinkMode switch { "open" => true, "closed" => false, _ => !lastClosed };
+                if (merged.Length > 0 && _thinkMode != "hidden")
+                    sb.Append("<details class=\"think\"").Append(open ? " open" : "").Append("><summary>").Append(_think)
+                      .Append("</summary><div class=\"think-body\" style=\"max-height:").Append(_thinkHeight).Append("px\">").Append(Render(merged)).Append("</div></details>");
+            }
+            else
+            {
+                var calls = m.Groups["tool"].Value.Split('\n')
+                    .Select(l => l.Trim()).Where(l => l.StartsWith("> ", StringComparison.Ordinal))
+                    .Select(l => System.Net.WebUtility.HtmlEncode(l[2..].Trim())).ToList();
+                if (calls.Count == 0) continue;
+                var chips = string.Concat(calls.Select(c => "<span class=\"toolcall\" dir=\"auto\">" + c + "</span>"));
+                if (calls.Count > 3)
+                    sb.Append("<details class=\"toolcalls\"><summary>🔧 ").Append(calls.Count).Append("</summary><div class=\"toolchips\">").Append(chips).Append("</div></details>");
+                else
+                    sb.Append("<div class=\"toolcalls toolchips\">").Append(chips).Append("</div>");
+            }
         }
         sb.Append(Render(markdown[pos..]));
         return sb.ToString();
