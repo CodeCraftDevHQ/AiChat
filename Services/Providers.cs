@@ -67,7 +67,7 @@ static class HistoryHelper
         foreach (var m in history)
         {
             // the model's own "thinking" is shown to the user but not sent back
-            var text = m.Role == "assistant" ? MarkdownRenderer.StripThink(m.Content ?? "") : m.Content ?? "";
+            var text = m.Role == "assistant" ? ToolMarks.Strip(MarkdownRenderer.StripThink(m.Content ?? "")) : m.Content ?? "";
             var images = new List<(string, string)>();
             var pdfs = new List<string>();
 
@@ -343,6 +343,14 @@ static class ProviderHttp
     /// Is this error a "too many requests" one? Looks at the HTTP status, the Retry-After style headers, wait hints inside
     /// the message (retryDelay, "try again in 20s", X-RateLimit-Reset) and well-known wording, plus the user's own keywords.
     /// </summary>
+    /// <summary>The API refused the request because of the "tools" field (model without tool support).</summary>
+    public static bool LooksLikeToolRejection(string message)
+    {
+        var t = (message ?? "").ToLowerInvariant();
+        if (t.Contains("429") || t.Contains("rate limit") || t.Contains("401") || t.Contains("403")) return false;
+        return t.Contains("tool") || t.Contains("function call") || t.Contains("function_call");
+    }
+
     public static RateDetection RateInfo(Exception ex, IReadOnlyList<string>? extraWords = null)
     {
         var limited = false;
@@ -478,6 +486,38 @@ static class ProviderHttp
 /// Works with OpenAI and every service that copies its /chat/completions API:
 /// OpenRouter, DeepSeek, Groq, Mistral, xAI, Together, Ollama, LM Studio, ...
 /// </summary>
+/// <summary>A tool call being assembled from streamed pieces.</summary>
+sealed class ToolCallAcc
+{
+    public string Id = "", Name = "";
+    public StringBuilder Args = new();
+
+    /// <summary>Adds the "tool_calls" array of a delta (or of a whole message) to the collection.</summary>
+    public static void Collect(SortedDictionary<int, ToolCallAcc> calls, JsonElement tcs)
+    {
+        if (tcs.ValueKind != JsonValueKind.Array) return;
+        foreach (var tc in tcs.EnumerateArray())
+        {
+            var hasId = tc.TryGetProperty("id", out var idp) && idp.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(idp.GetString());
+            int idx;
+            if (tc.TryGetProperty("index", out var ix) && ix.ValueKind == JsonValueKind.Number) idx = ix.GetInt32();
+            else idx = hasId || calls.Count == 0 ? calls.Count : calls.Keys.Max();
+            if (!calls.TryGetValue(idx, out var acc)) calls[idx] = acc = new ToolCallAcc();
+            if (hasId) acc.Id = idp.GetString()!;
+            if (tc.TryGetProperty("function", out var fn) && fn.ValueKind == JsonValueKind.Object)
+            {
+                if (fn.TryGetProperty("name", out var np) && np.ValueKind == JsonValueKind.String && acc.Name.Length == 0)
+                    acc.Name = np.GetString() ?? "";
+                if (fn.TryGetProperty("arguments", out var ap))
+                {
+                    if (ap.ValueKind == JsonValueKind.String) acc.Args.Append(ap.GetString());
+                    else if (ap.ValueKind == JsonValueKind.Object) acc.Args.Append(ap.GetRawText());
+                }
+            }
+        }
+    }
+}
+
 public class OpenAiCompatibleProvider : IChatProvider
 {
     readonly HttpClient _http;
@@ -512,115 +552,179 @@ public class OpenAiCompatibleProvider : IChatProvider
             messages.Add(new JsonObject { ["role"] = t.Role, ["content"] = content });
         }
 
-        var body = new JsonObject { ["model"] = model, ["stream"] = !cfg.NoStream, ["messages"] = messages };
-        ProviderHttp.ApplyGen(body, cfg);
+        // Tools: the model may ask for functions; we run them and send the results back (up to MaxRounds times).
+        var tools = cfg.Tools is { Tools.Count: > 0 } ? cfg.Tools : null;
+        var useTools = tools != null;
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "chat/completions")))
+        for (var round = 0; ; round++)
         {
-            Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg))
-        };
-        if (!string.IsNullOrWhiteSpace(cfg.ApiKey))
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.ApiKey.Trim());
+            var body = new JsonObject { ["model"] = model, ["stream"] = !cfg.NoStream, ["messages"] = messages };
+            ProviderHttp.ApplyGen(body, cfg);
+            // after the last allowed round the tools are left out, so the model has to answer
+            if (useTools && tools != null && round < tools.MaxRounds) body["tools"] = tools.ToOpenAi();
 
-        var resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
-        using var _respGuard = new SafeDispose(resp);
-        await ProviderHttp.EnsureSuccessAsync(resp, ct);
-
-        if (cfg.NoStream)
-        {
-            var whole = await resp.Content.ReadAsStringAsync(ct);
-            string? full = null;
-            var imageUrls = new List<string>();
-            using (var doc = JsonDocument.Parse(whole))
-            {
-                var root = doc.RootElement;
-                if (root.TryGetProperty("error", out _))
-                    throw new HttpRequestException(ProviderHttp.ExtractError(whole));
-                if (root.TryGetProperty("choices", out var choices) &&
-                    choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
-                    choices[0].TryGetProperty("message", out var msg))
-                {
-                    if (msg.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
-                        full = c.GetString();
-                    if (msg.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
-                        foreach (var im in imgs.EnumerateArray())
-                            if (im.TryGetProperty("image_url", out var iu) &&
-                                iu.TryGetProperty("url", out var u) && u.GetString() is { Length: > 0 } url)
-                                imageUrls.Add(url);
-                }
-            }
-            if (!string.IsNullOrEmpty(full)) yield return full;
-            foreach (var url in imageUrls)
-            {
-                var md = await ImageHelper.HandleUrlAsync(url, onImage);
-                if (md != null) yield return md;
-            }
-            yield break;
-        }
-
-        var inReason = false;
-        await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
-        {
-            if (data == "[DONE]")
-            {
-                if (inReason) yield return "</think>";
-                yield break;
-            }
-
-            string? text = null, reason = null;
+            HttpResponseMessage? resp = null;
             try
             {
-                using var doc = JsonDocument.Parse(data);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("error", out var err))
-                    throw new HttpRequestException(ProviderHttp.ExtractError(data));
-
-                if (root.TryGetProperty("choices", out var choices) &&
-                    choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
-                    choices[0].TryGetProperty("delta", out var delta))
+                using var req = new HttpRequestMessage(HttpMethod.Post, ProviderHttp.Url(cfg, ProviderHttp.ChatPath(cfg, "chat/completions")))
                 {
-                    if (delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
-                        text = c.GetString();
+                    Content = ProviderHttp.JsonBody(ProviderHttp.MergeBody(body, cfg))
+                };
+                if (!string.IsNullOrWhiteSpace(cfg.ApiKey))
+                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.ApiKey.Trim());
 
-                    // thinking models (LM Studio, DeepSeek, ...) stream their reasoning separately
-                    if (delta.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String)
-                        reason = rc.GetString();
-                    else if (delta.TryGetProperty("reasoning", out var rs) && rs.ValueKind == JsonValueKind.String)
-                        reason = rs.GetString();
+                resp = await _http.SendAsync(ProviderHttp.Customize(req, cfg), HttpCompletionOption.ResponseHeadersRead, ct);
+                try { await ProviderHttp.EnsureSuccessAsync(resp, ct); }
+                catch { resp.Dispose(); resp = null; throw; }
+            }
+            catch (HttpRequestException ex) when (useTools && round == 0 && ProviderHttp.LooksLikeToolRejection(ex.Message))
+            {
+                resp = null;   // this model/API does not accept tools: answer without them
+            }
+            if (resp == null)
+            {
+                useTools = false;
+                tools = null;
+                yield return ProviderStatus.Prefix + "⚠ tools are not supported by this model; answering without them";
+                continue;
+            }
+            using var _respGuard = new SafeDispose(resp);
 
-                    // Image output (e.g. OpenRouter image models): delta.images[].image_url.url
-                    if (delta.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
+            var said = new StringBuilder();
+            var calls = new SortedDictionary<int, ToolCallAcc>();
+
+            if (cfg.NoStream)
+            {
+                var whole = await resp.Content.ReadAsStringAsync(ct);
+                string? full = null;
+                var imageUrls = new List<string>();
+                using (var doc = JsonDocument.Parse(whole))
+                {
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("error", out _))
+                        throw new HttpRequestException(ProviderHttp.ExtractError(whole));
+                    if (root.TryGetProperty("choices", out var choices) &&
+                        choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
+                        choices[0].TryGetProperty("message", out var msg))
                     {
-                        foreach (var im in imgs.EnumerateArray())
+                        if (msg.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+                            full = c.GetString();
+                        if (msg.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
+                            foreach (var im in imgs.EnumerateArray())
+                                if (im.TryGetProperty("image_url", out var iu) &&
+                                    iu.TryGetProperty("url", out var u) && u.GetString() is { Length: > 0 } url)
+                                    imageUrls.Add(url);
+                        if (msg.TryGetProperty("tool_calls", out var tcs))
+                            ToolCallAcc.Collect(calls, tcs);
+                    }
+                }
+                if (!string.IsNullOrEmpty(full)) { said.Append(full); yield return full; }
+                foreach (var url in imageUrls)
+                {
+                    var md = await ImageHelper.HandleUrlAsync(url, onImage);
+                    if (md != null) yield return md;
+                }
+            }
+            else
+            {
+                var inReason = false;
+                await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
+                {
+                    if (data == "[DONE]") break;
+
+                    string? text = null, reason = null;
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(data);
+                        var root = doc.RootElement;
+
+                        if (root.TryGetProperty("error", out var err))
+                            throw new HttpRequestException(ProviderHttp.ExtractError(data));
+
+                        if (root.TryGetProperty("choices", out var choices) &&
+                            choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
+                            choices[0].TryGetProperty("delta", out var delta))
                         {
-                            if (im.TryGetProperty("image_url", out var iu) &&
-                                iu.TryGetProperty("url", out var u) && u.GetString() is { Length: > 0 } url)
+                            if (delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+                                text = c.GetString();
+
+                            // thinking models (LM Studio, DeepSeek, ...) stream their reasoning separately
+                            if (delta.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String)
+                                reason = rc.GetString();
+                            else if (delta.TryGetProperty("reasoning", out var rs) && rs.ValueKind == JsonValueKind.String)
+                                reason = rs.GetString();
+
+                            if (delta.TryGetProperty("tool_calls", out var tcs))
+                                ToolCallAcc.Collect(calls, tcs);
+
+                            // Image output (e.g. OpenRouter image models): delta.images[].image_url.url
+                            if (delta.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
                             {
-                                var md = await ImageHelper.HandleUrlAsync(url, onImage);
-                                if (md != null) text = (text ?? "") + md;
+                                foreach (var im in imgs.EnumerateArray())
+                                {
+                                    if (im.TryGetProperty("image_url", out var iu) &&
+                                        iu.TryGetProperty("url", out var u) && u.GetString() is { Length: > 0 } url)
+                                    {
+                                        var md = await ImageHelper.HandleUrlAsync(url, onImage);
+                                        if (md != null) text = (text ?? "") + md;
+                                    }
+                                }
                             }
                         }
                     }
+                    catch (JsonException)
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrEmpty(reason))
+                    {
+                        if (!inReason) { yield return "<think>"; inReason = true; }
+                        yield return reason;
+                    }
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        if (inReason) { yield return "</think>\n\n"; inReason = false; }
+                        said.Append(text);
+                        yield return text;
+                    }
                 }
-            }
-            catch (JsonException)
-            {
-                continue;
+                if (inReason) yield return "</think>";
             }
 
-            if (!string.IsNullOrEmpty(reason))
+            if (calls.Count == 0 || tools == null || !useTools || round >= tools.MaxRounds) yield break;
+
+            // run the requested tools and ask again
+            var callArr = new JsonArray();
+            var toolMsgs = new List<JsonObject>();
+            foreach (var (idx, acc) in calls)
             {
-                if (!inReason) { yield return "<think>"; inReason = true; }
-                yield return reason;
+                if (string.IsNullOrEmpty(acc.Id)) acc.Id = "call_" + round + "_" + idx;
+                if (string.IsNullOrEmpty(acc.Name)) continue;
+                var args = acc.Args.Length > 0 ? acc.Args.ToString() : "{}";
+                callArr.Add(new JsonObject
+                {
+                    ["id"] = acc.Id,
+                    ["type"] = "function",
+                    ["function"] = new JsonObject { ["name"] = acc.Name, ["arguments"] = args }
+                });
+
+                if (tools.ShowCalls)
+                    yield return (said.Length > 0 && !said.ToString().EndsWith("\n\n") ? "\n\n" : "") + tools.CallLine(acc.Name, args);
+                yield return ProviderStatus.Prefix + "🔧 " + (tools.Find(acc.Name)?.Label ?? acc.Name) + "...";
+                said.Append("\n\n");
+
+                var result = await tools.ExecuteAsync(acc.Name, args, ct);
+                toolMsgs.Add(new JsonObject { ["role"] = "tool", ["tool_call_id"] = acc.Id, ["content"] = result });
             }
-            if (!string.IsNullOrEmpty(text))
-            {
-                if (inReason) { yield return "</think>\n\n"; inReason = false; }
-                yield return text;
-            }
+            if (callArr.Count == 0) yield break;
+
+            var asst = new JsonObject { ["role"] = "assistant", ["tool_calls"] = callArr };
+            var sayText = said.ToString().Trim();
+            asst["content"] = sayText.Length > 0 ? sayText : null;
+            messages.Add(asst);
+            foreach (var m in toolMsgs) messages.Add(m);
         }
-        if (inReason) yield return "</think>";
     }
 
     public async Task<List<string>> ListModelsAsync(ProviderConfig cfg, CancellationToken ct)

@@ -197,6 +197,7 @@
                                         @if (_editing.Type == ProviderType.OpenAiCompatible)
                                         {
                                             <label class="chk"><input type="checkbox" @bind="_editing.NoStream" /> @L["پاسخ یکجا (بدون استریم)"]</label>
+                                            <label class="chk"><input type="checkbox" @bind="_editing.UseTools" /> @L["اجازه‌ی استفاده از ابزارها برای این API"]</label>
                                         }
                                     </details>
                                 }
@@ -399,6 +400,32 @@
                             {
                                 <p class="status" dir="auto">@_searchStatus</p>
                             }
+                            break;
+
+                        case "tools":
+                            var to = State.ToolOpts;
+                            <label class="chk first"><input type="checkbox" checked="@to.Enabled" @onchange="e => ToolOpt(o => o.Enabled = e.Value is true)" /> @L["ابزارها برای مدل فعال باشند"]</label>
+                            <p class="muted small">@L["مدل خودش تصمیم می‌گیرد چه موقع از ابزار استفاده کند (مثلاً جستجو کند، صفحه بخواند یا محاسبه کند)، نتیجه را می‌گیرد و جوابش را ادامه می‌دهد. فقط برای APIهای سازگار با OpenAI و مدل‌هایی که ابزار را پشتیبانی می‌کنند؛ اگر مدلی پشتیبانی نکند، خودکار بدون ابزار جواب می‌دهد."]</p>
+                            <p class="muted small">@L["اگر ابزار جستجو روشن است، دکمه‌ی 🌐 کنار کادر پیام را خاموش نگه دارید تا جستجو دو بار انجام نشود."]</p>
+
+                            <label class="lbl">@L["ابزارهای در دسترس"]</label>
+                            <label class="chk"><input type="checkbox" checked="@to.WebSearch" @onchange="e => ToolOpt(o => o.WebSearch = e.Value is true)" /> 🔎 @L["جستجوی وب (از تنظیمات «جستجو در وب» استفاده می‌کند)"]</label>
+                            <label class="chk"><input type="checkbox" checked="@to.ReadPage" @onchange="e => ToolOpt(o => o.ReadPage = e.Value is true)" /> 📄 @L["خواندن صفحه‌ی وب با آدرس"]</label>
+                            <label class="chk"><input type="checkbox" checked="@to.DateTime" @onchange="e => ToolOpt(o => o.DateTime = e.Value is true)" /> 🕒 @L["تاریخ و ساعت"]</label>
+                            <label class="chk"><input type="checkbox" checked="@to.Calculator" @onchange="e => ToolOpt(o => o.Calculator = e.Value is true)" /> 🧮 @L["ماشین‌حساب"]</label>
+
+                            <label class="lbl">@L["حداکثر دفعات استفاده از ابزار در یک پاسخ"]: @to.MaxRounds</label>
+                            <input type="range" class="range" min="1" max="15" step="1" value="@to.MaxRounds" @oninput="e => ToolOpt(o => o.MaxRounds = ToInt(e))" />
+
+                            <label class="lbl">@L["حداکثر طول نتیجه‌ی هر ابزار (نویسه)"]</label>
+                            <input class="inp" type="number" min="500" max="50000" step="500" value="@to.ResultChars" @onchange="e => ToolOpt(o => o.ResultChars = Math.Clamp(ToInt(e), 500, 50000))" />
+
+                            <label class="chk"><input type="checkbox" checked="@to.ShowCalls" @onchange="e => ToolOpt(o => o.ShowCalls = e.Value is true)" /> @L["هر استفاده از ابزار را داخل پاسخ نشان بده (🔧)"]</label>
+
+                            <label class="lbl">@L["دستور اضافه برای مدل هنگام فعال بودن ابزارها (اختیاری)"]</label>
+                            <textarea class="inp" rows="3" dir="auto" placeholder="@L["مثلاً: برای اخبار و قیمت‌ها حتماً جستجو کن."]" value="@to.ExtraPrompt" @onchange="e => ToolOpt(o => o.ExtraPrompt = e.Value?.ToString() ?? string.Empty)"></textarea>
+
+                            <button class="btn sm" style="margin-top:10px" @onclick="State.ResetToolOpts">@L["بازنشانی"]</button>
                             break;
 
                         case "cost":
@@ -742,6 +769,7 @@ else if (_dlg == 2)
         new SectionItem("chat", L["گفتگو"]),
         new SectionItem("answer", L["پاسخ مدل"]),
         new SectionItem("search", L["جستجو در وب"]),
+        new SectionItem("tools", L["ابزارها"]),
         new SectionItem("cost", L["توکن و هزینه"]),
         new SectionItem("security", L["امنیت و حریم خصوصی"]),
         new SectionItem("data", L["داده‌ها و لاگ"]),
@@ -778,6 +806,12 @@ else if (_dlg == 2)
 
     static double ToDouble(ChangeEventArgs e, double fallback) =>
         double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : fallback;
+
+    void ToolOpt(Action<ToolOptions> set)
+    {
+        set(State.ToolOpts);
+        State.SaveToolOpts();
+    }
 
     void Opt(Action<SearchOptions> set)
     {

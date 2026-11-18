@@ -33,6 +33,7 @@
 		<Compile Include="..\..\Services\PinHelper.cs" Link="App\PinHelper.cs" />
 		<Compile Include="..\..\Services\WebSearch.cs" Link="App\WebSearch.cs" />
 		<Compile Include="..\..\Services\TokenCost.cs" Link="App\TokenCost.cs" />
+		<Compile Include="..\..\Services\Tools.cs" Link="App\Tools.cs" />
 		<Compile Include="..\..\Services\ConnectorRepo.cs" Link="App\ConnectorRepo.cs" />
 	</ItemGroup>
 

@@ -72,6 +72,10 @@ public class ProviderConfig
     [JsonIgnore] public double? Temperature { get; set; }
     [JsonIgnore] public double? TopP { get; set; }
     [JsonIgnore] public int? MaxTokens { get; set; }
+    /// <summary>Tools offered to the model for this request (filled by the app; never saved).</summary>
+    [JsonIgnore] public AiChat.Services.ToolSet? Tools { get; set; }
+    /// <summary>OpenAI-compatible: allow tools (function calling) for this API when they are switched on in Settings.</summary>
+    public bool UseTools { get; set; } = true;
 
     public ProviderConfig Clone() => new()
     {
@@ -79,6 +83,8 @@ public class ProviderConfig
         Temperature = Temperature,
         TopP = TopP,
         MaxTokens = MaxTokens,
+        Tools = Tools,
+        UseTools = UseTools,
         Id = Id,
         Name = Name,
         Type = Type,

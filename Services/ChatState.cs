@@ -538,6 +538,8 @@ public class ChatState
         MarkdownRenderer.SetThinkOptions(ThinkMode, ThinkMaxHeight);
         try { SearchOpts = System.Text.Json.JsonSerializer.Deserialize<SearchOptions>(Preferences.Default.Get("search_opts", "")) ?? new(); }
         catch { SearchOpts = new(); }
+        try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
+        catch { ToolOpts = new(); }
         SearchEngine = Preferences.Default.Get("search_engine", WebSearchService.Ddg);
         SearchBaseUrl = Preferences.Default.Get("search_url", "");
         SearchKey = await _storage.LoadSearchKeyAsync();
@@ -679,6 +681,18 @@ public class ChatState
     WebSearchService Search => _search ??= new WebSearchService(_http);
 
     public SearchOptions SearchOpts { get; private set; } = new();
+
+    // ---- tools (function calling)
+    public ToolOptions ToolOpts { get; private set; } = new();
+
+    /// <summary>Call after changing a field of <see cref="ToolOpts"/>.</summary>
+    public void SaveToolOpts() { Preferences.Default.Set("tool_opts", System.Text.Json.JsonSerializer.Serialize(ToolOpts)); Notify(); }
+
+    public void ResetToolOpts() { ToolOpts = new(); SaveToolOpts(); }
+
+    /// <summary>Tools are offered only to chat APIs that speak the OpenAI format (and have them allowed).</summary>
+    bool ToolsApply(ProviderConfig p) =>
+        ToolOpts.Enabled && p.UseTools && p.Type == ProviderType.OpenAiCompatible && !p.IsGenerator;
 
     /// <summary>Call after changing a field of <see cref="SearchOpts"/>.</summary>
     public void SaveSearchOpts() =>
@@ -1806,6 +1820,13 @@ public class ChatState
                   (project != null ? $", project '{project.Name}'" : ""));
         var system = BuildSystem(provider, project, conv);
         provider = WithGen(provider, conv);
+        if (ToolsApply(provider))
+        {
+            provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts);
+            if (provider.Tools.Tools.Count == 0) provider.Tools = null;
+            else if (!string.IsNullOrWhiteSpace(ToolOpts.ExtraPrompt))
+                system = string.Join("\n\n", new[] { system, ToolOpts.ExtraPrompt }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        }
         if (project is { Files.Count: > 0 })
             history.Insert(0, new ChatMessage
             {
