@@ -555,6 +555,8 @@ public class ChatState
             L.SetLanguage(deviceFa ? "fa" : "en");
             IsRtl = deviceFa;
         }
+        try { Personas = System.Text.Json.JsonSerializer.Deserialize<List<Persona>>(Preferences.Default.Get("personas_json", "")) ?? new(); }
+        catch { Personas = new(); }
         ShortcutsJson = Preferences.Default.Get("shortcuts_json", "");
         Shortcuts = ShortcutHelper.Parse(ShortcutsJson, out _);
 
@@ -603,7 +605,7 @@ public class ChatState
     /// <summary>The provider copy used for one request, with the effective numbers filled in.</summary>
     ProviderConfig WithGen(ProviderConfig provider, Conversation? conv)
     {
-        var eff = GenSettings.Resolve(GenDefaults, provider.Gen, conv?.Gen);
+        var eff = GenSettings.Resolve(GenDefaults, provider.Gen, PersonaOf(conv)?.Gen, conv?.Gen);
         var copy = provider.Clone();
         copy.Temperature = eff.Temperature;
         copy.TopP = eff.TopP;
@@ -613,8 +615,90 @@ public class ChatState
 
     /// <summary>All system instructions in order: global, API, project, this chat.</summary>
     string BuildSystem(ProviderConfig provider, Project? project, Conversation? conv) =>
-        string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt }
+        string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, PersonaOf(conv)?.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    // ---- personas
+    public List<Persona> Personas { get; private set; } = new();
+    public string? DraftPersonaId { get; private set; }
+
+    public Persona? PersonaOf(Conversation? c) =>
+        c == null ? Personas.FirstOrDefault(p => p.Id == DraftPersonaId) : Personas.FirstOrDefault(p => p.Id == c.PersonaId);
+
+    /// <summary>The persona of the open chat (or of the chat that is about to start).</summary>
+    public Persona? CurrentPersona => PersonaOf(Active);
+
+    void SavePersonas() => Preferences.Default.Set("personas_json", System.Text.Json.JsonSerializer.Serialize(Personas));
+
+    public void SavePersona(Persona p)
+    {
+        var i = Personas.FindIndex(x => x.Id == p.Id);
+        if (i >= 0) Personas[i] = p; else Personas.Add(p);
+        SavePersonas();
+        Notify();
+    }
+
+    public void DeletePersona(string id)
+    {
+        Personas.RemoveAll(p => p.Id == id);
+        foreach (var c in Conversations.Where(c => c.PersonaId == id)) c.PersonaId = null;
+        if (DraftPersonaId == id) DraftPersonaId = null;
+        SavePersonas();
+        _ = _storage.SaveConversationsAsync(Conversations);
+        Notify();
+    }
+
+    public void AddSamplePersonas()
+    {
+        foreach (var s in Persona.Samples())
+            if (!Personas.Any(p => p.Name == s.Name)) Personas.Add(s);
+        SavePersonas();
+        Notify();
+    }
+
+    public string ExportPersonasJson() => System.Text.Json.JsonSerializer.Serialize(Personas, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+    /// <summary>Adds the personas of a JSON file (new ids, so nothing is overwritten). Returns an error text or null.</summary>
+    public string? ImportPersonasJson(string json)
+    {
+        try
+        {
+            var list = System.Text.Json.JsonSerializer.Deserialize<List<Persona>>(json);
+            if (list == null || list.Count == 0) return L["فایل خالی است."];
+            foreach (var p in list.Where(p => !string.IsNullOrWhiteSpace(p.Name)))
+            {
+                var copy = p.Copy();
+                copy.ProviderId = Providers.Any(x => x.Id == p.ProviderId) ? p.ProviderId : null;
+                Personas.Add(copy);
+            }
+            SavePersonas();
+            Notify();
+            return null;
+        }
+        catch (Exception ex) { return ex.Message; }
+    }
+
+    /// <summary>Chooses a persona for the open chat; on an empty/new chat it also switches to the persona's API and model.</summary>
+    public async Task UsePersonaAsync(Persona? p)
+    {
+        if (Active == null) DraftPersonaId = p?.Id;
+        else
+        {
+            Active.PersonaId = p?.Id;
+            await _storage.SaveConversationsAsync(Conversations);
+        }
+        if (p != null && (Active == null || Active.Messages.Count == 0))
+        {
+            var prov = Providers.FirstOrDefault(x => x.Id == p.ProviderId);
+            if (prov != null)
+            {
+                CurrentProviderId = prov.Id;
+                CurrentModel = !string.IsNullOrWhiteSpace(p.Model) ? p.Model : PickModel(prov);
+                PersistSelection();
+            }
+        }
+        Notify();
+    }
 
     public Conversation? ConvSettingsTarget { get; private set; }
 
@@ -737,8 +821,8 @@ public class ChatState
     public void ResetToolOpts() { ToolOpts = new(); SaveToolOpts(); }
 
     /// <summary>Tools are offered to OpenAI-compatible APIs, Claude and Gemini (when allowed for that API).</summary>
-    bool ToolsApply(ProviderConfig p) =>
-        ToolOpts.Enabled && p.UseTools && !p.IsGenerator &&
+    bool ToolsApply(ProviderConfig p, Persona? persona = null) =>
+        (persona?.Tools ?? ToolOpts.Enabled) && p.UseTools && !p.IsGenerator &&
         p.Type is ProviderType.OpenAiCompatible or ProviderType.Anthropic or ProviderType.Gemini;
 
     /// <summary>Call after changing a field of <see cref="SearchOpts"/>.</summary>
@@ -1600,6 +1684,7 @@ public class ChatState
         SearchOpen = false;
         Active = null;
         DraftProjectId = null;
+        DraftPersonaId = null;
         if (IsNarrow) SidebarOpen = false;
         Notify();
     }
@@ -1780,9 +1865,11 @@ public class ChatState
             Active = new Conversation
             {
                 Title = MakeTitle(text.Length > 0 ? text : attachments[0].Name),
-                ProjectId = DraftProjectId
+                ProjectId = DraftProjectId,
+                PersonaId = DraftPersonaId
             };
             DraftProjectId = null;
+            DraftPersonaId = null;
             Conversations.Insert(0, Active);
         }
 
@@ -1867,7 +1954,7 @@ public class ChatState
                   (project != null ? $", project '{project.Name}'" : ""));
         var system = BuildSystem(provider, project, conv);
         provider = WithGen(provider, conv);
-        if (ToolsApply(provider))
+        if (ToolsApply(provider, PersonaOf(conv)))
         {
             _toolAllowAll = false;
             provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts);

@@ -101,6 +101,17 @@
                     {
                         <p class="project-tag" dir="auto">📁 @(L["پروژه"]): @State.CurrentProject.Name</p>
                     }
+                    @if (State.Personas.Count > 0)
+                    {
+                        <div class="persona-chips">
+                            @foreach (var p in State.Personas)
+                            {
+                                var persona = p;
+                                <button class="persona-chip @(State.CurrentPersona?.Id == persona.Id ? "on" : "")" title="@persona.Gen.SystemPrompt"
+                                        @onclick="() => State.UsePersonaAsync(State.CurrentPersona?.Id == persona.Id ? null : persona)">@persona.Icon @persona.Name</button>
+                            }
+                        </div>
+                    }
                     @if (State.Providers.Count == 0)
                     {
                         <p class="muted">@L["برای شروع، کلید API سرویس مورد نظرتان را اضافه کنید."]</p>

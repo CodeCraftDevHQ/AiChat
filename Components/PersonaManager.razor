@@ -1,0 +1,145 @@
+@inherits StateComponent
+
+@if (_edit != null)
+{
+    <div class="persona-edit">
+        <div class="row">
+            <input class="inp persona-icon" maxlength="4" value="@_edit.Icon" @onchange="e => _edit.Icon = e.Value?.ToString() ?? string.Empty" />
+            <input class="inp" dir="auto" placeholder="@L["نام شخصیت"]" value="@_edit.Name" @onchange="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
+        </div>
+
+        <GenFields Value="_edit.Gen" Hint="@L["دستور سیستمی همان توضیح شخصیت است. عددهای تیک‌خورده، مقدار API و تنظیمات عمومی را برای این شخصیت لغو می‌کنند."]" />
+
+        <label class="lbl">@L["API و مدل (اختیاری؛ با انتخاب شخصیت، خودکار عوض می‌شود)"]</label>
+        <AppSelect Title="API" Value="@ProviderValue()" ValueChanged="OnProvider" Options="ProviderOptions()" />
+        @if (!string.IsNullOrEmpty(_edit.ProviderId))
+        {
+            <input class="inp" dir="ltr" list="persona-models" placeholder="@L["مدل (خالی = مدل پیش‌فرض API)"]" value="@_edit.Model" @onchange="e => _edit.Model = e.Value?.ToString() ?? string.Empty" />
+            <datalist id="persona-models">
+                @foreach (var m in State.Providers.FirstOrDefault(x => x.Id == _edit.ProviderId)?.Models ?? new List<string>())
+                {
+                    <option value="@m"></option>
+                }
+            </datalist>
+        }
+
+        <label class="lbl">@L["ابزارها"]</label>
+        <AppSelect Title="@L["ابزارها"]" Value="@ToolsValue()" ValueChanged="OnTools" Options="ToolsOptions()" />
+
+        <div class="row">
+            <button class="primary" @onclick="Save" disabled="@string.IsNullOrWhiteSpace(_edit.Name)">@L["ذخیره"]</button>
+            <button class="btn" @onclick="() => _edit = null">@L["انصراف"]</button>
+        </div>
+    </div>
+}
+else
+{
+    <p class="muted small">@L["شخصیت = یک شیوه‌ی آماده‌ی گفتگو (دستور سیستمی، تنظیمات پاسخ، API و ابزارها). در صفحه‌ی خوش‌آمد یا تنظیمات هر گفتگو انتخابش کنید."]</p>
+
+    @if (State.Personas.Count == 0)
+    {
+        <p class="muted">@L["هنوز شخصیتی ساخته نشده است."]</p>
+    }
+    @foreach (var p in State.Personas)
+    {
+        var persona = p;
+        <div class="persona-row">
+            <span class="persona-ico">@persona.Icon</span>
+            <div class="persona-info">
+                <strong dir="auto">@persona.Name</strong>
+                <small class="muted" dir="auto">@Summary(persona)</small>
+            </div>
+            <button class="btn sm" @onclick="() => _edit = persona.Copy().WithId(persona.Id)">@L["ویرایش"]</button>
+            <button class="btn sm" @onclick="() => Duplicate(persona)">@L["کپی"]</button>
+            <button class="btn sm" @onclick="() => State.DeletePersona(persona.Id)">@L["حذف"]</button>
+        </div>
+    }
+
+    <div class="row">
+        <button class="primary" @onclick="() => _edit = new Persona { Gen = new GenSettings() }">+ @L["شخصیت جدید"]</button>
+        <button class="btn" @onclick="State.AddSamplePersonas">@L["درج نمونه‌ها"]</button>
+        <button class="btn" @onclick="Import">@L["وارد کردن فایل JSON"]</button>
+        <button class="btn" disabled="@(State.Personas.Count == 0)" @onclick="Export">@L["ذخیره به‌صورت فایل"]</button>
+    </div>
+    @if (_status != null)
+    {
+        <p class="status" dir="auto">@_status</p>
+    }
+}
+
+@code {
+    Persona? _edit;
+    string? _status;
+
+    string Summary(Persona p)
+    {
+        var parts = new List<string>();
+        var prov = State.Providers.FirstOrDefault(x => x.Id == p.ProviderId);
+        if (prov != null) parts.Add(prov.Name + (string.IsNullOrEmpty(p.Model) ? "" : " · " + p.Model));
+        if (p.Gen.Temperature != null) parts.Add("T " + p.Gen.Temperature.Value.ToString("0.0#", System.Globalization.CultureInfo.InvariantCulture));
+        if (p.Tools != null) parts.Add(p.Tools.Value ? "🔧 on" : "🔧 off");
+        var s = p.Gen.SystemPrompt.Replace('\n', ' ');
+        parts.Add(s.Length > 70 ? s[..70] + "…" : s);
+        return string.Join(" · ", parts.Where(x => x.Length > 0));
+    }
+
+    AppSelect.SelectOption[] ProviderOptions() =>
+        new[] { new AppSelect.SelectOption("", L["— بدون تغییر API —"]) }
+            .Concat(State.Providers.Where(p => !p.IsGenerator).Select(p => new AppSelect.SelectOption(p.Id, p.Name))).ToArray();
+
+    string ProviderValue() => _edit?.ProviderId ?? string.Empty;
+
+    string ToolsValue() => _edit?.Tools == null ? string.Empty : (_edit.Tools.Value ? "1" : "0");
+
+    void OnTools(string v)
+    {
+        if (_edit == null) return;
+        _edit.Tools = string.IsNullOrEmpty(v) ? null : v == "1";
+    }
+
+    AppSelect.SelectOption[] ToolsOptions() => new AppSelect.SelectOption[]
+    {
+        new(string.Empty, L["طبق تنظیمات عمومی"]),
+        new("1", L["همیشه روشن"]),
+        new("0", L["همیشه خاموش"]),
+    };
+
+    void OnProvider(string id)
+    {
+        if (_edit == null) return;
+        _edit.ProviderId = id.Length == 0 ? null : id;
+        _edit.Model = "";
+    }
+
+    void Save()
+    {
+        if (_edit == null) return;
+        _edit.Name = _edit.Name.Trim();
+        if (string.IsNullOrWhiteSpace(_edit.Icon)) _edit.Icon = "🧑";
+        State.SavePersona(_edit);
+        _edit = null;
+    }
+
+    void Duplicate(Persona p)
+    {
+        var c = p.Copy();
+        c.Name += " (2)";
+        State.SavePersona(c);
+    }
+
+    async Task Import()
+    {
+        try
+        {
+            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = L["انتخاب فایل JSON شخصیت‌ها"] });
+            if (file == null) return;
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            var err = State.ImportPersonasJson(await reader.ReadToEndAsync());
+            _status = err == null ? L["وارد شد ✓"] : L["خطا: "] + err;
+        }
+        catch (Exception ex) { _status = L["خطا: "] + ex.Message; }
+    }
+
+    Task Export() => State.SaveTextAsync("personas.json", State.ExportPersonasJson());
+}

@@ -402,6 +402,10 @@
                             }
                             break;
 
+                        case "personas":
+                            <PersonaManager />
+                            break;
+
                         case "tools":
                             var to = State.ToolOpts;
                             <label class="chk first"><input type="checkbox" checked="@to.Enabled" @onchange="e => ToolOpt(o => o.Enabled = e.Value is true)" /> @L["ابزارها برای مدل فعال باشند"]</label>
@@ -790,6 +794,7 @@ else if (_dlg == 2)
         new SectionItem("chat", L["گفتگو"]),
         new SectionItem("answer", L["پاسخ مدل"]),
         new SectionItem("search", L["جستجو در وب"]),
+        new SectionItem("personas", L["شخصیت‌ها"]),
         new SectionItem("tools", L["ابزارها"]),
         new SectionItem("cost", L["توکن و هزینه"]),
         new SectionItem("security", L["امنیت و حریم خصوصی"]),

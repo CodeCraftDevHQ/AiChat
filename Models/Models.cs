@@ -213,8 +213,42 @@ public class GenSettings
     }
 }
 
+/// <summary>A ready-made way to chat: system prompt + optional API/model + generation numbers + tools on/off.</summary>
+public class Persona
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "";
+    public string Icon { get; set; } = "🧑";
+    /// <summary>Its SystemPrompt is the persona's instruction; the numbers override the API / global values.</summary>
+    public GenSettings Gen { get; set; } = new();
+    /// <summary>Optional: switch to this API (by id) when the persona is chosen.</summary>
+    public string? ProviderId { get; set; }
+    public string Model { get; set; } = "";
+    /// <summary>null = follow the global setting, true / false = force tools on / off.</summary>
+    public bool? Tools { get; set; }
+
+    public Persona Copy() => new()
+    {
+        Name = Name, Icon = Icon, Gen = Gen.Copy(), ProviderId = ProviderId, Model = Model, Tools = Tools
+    };
+
+    public Persona WithId(string id) { Id = id; return this; }
+
+    public static List<Persona> Samples() => new()
+    {
+        new() { Name = "Programmer", Icon = "💻", Gen = new() { Temperature = 0.2, SystemPrompt = "You are a senior software engineer. Give correct, minimal, well-explained code. Ask a short question if the request is ambiguous. Prefer the user's language and frameworks." } },
+        new() { Name = "مترجم", Icon = "🌍", Gen = new() { Temperature = 0.3, SystemPrompt = "تو یک مترجم حرفه‌ای هستی. هر متنی که می‌گیری را به زبان مقابل (فارسی ⇄ انگلیسی) ترجمه کن؛ فقط ترجمه را بنویس و لحن را حفظ کن." }, Tools = false },
+        new() { Name = "Writer", Icon = "✍️", Gen = new() { Temperature = 1.0, SystemPrompt = "You are a creative writing partner. Write vivid, natural prose, offer alternatives, and keep the author's voice." }, Tools = false },
+        new() { Name = "Researcher", Icon = "🔎", Gen = new() { Temperature = 0.3, SystemPrompt = "You are a careful researcher. For anything that may have changed recently, search the web first, compare several sources, and mention the sources and any uncertainty." }, Tools = true },
+        new() { Name = "معلم", Icon = "🎓", Gen = new() { Temperature = 0.6, SystemPrompt = "تو یک معلم صبور هستی. مطلب را ساده و گام‌به‌گام با مثال توضیح بده و در پایان یک سؤال کوتاه برای سنجش بپرس." } },
+    };
+}
+
 public class Conversation
 {
+    /// <summary>The persona used in this chat (null = none).</summary>
+    public string? PersonaId { get; set; }
+
     /// <summary>Settings of this chat only (null = none).</summary>
     public GenSettings? Gen { get; set; }
 

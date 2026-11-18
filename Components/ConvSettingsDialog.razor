@@ -12,6 +12,12 @@
             </div>
             <div class="p-body">
                 <p class="muted small" dir="auto">@conv.Title</p>
+                @if (State.Personas.Count > 0)
+                {
+                    <label class="lbl">@L["شخصیت"]</label>
+                    <AppSelect Title="@L["شخصیت"]" Value="@(conv.PersonaId ?? "")" ValueChanged="v => State.UsePersonaAsync(State.Personas.FirstOrDefault(x => x.Id == v))"
+                               Options="@(new[] { new AppSelect.SelectOption("", L["بدون شخصیت"]) }.Concat(State.Personas.Select(x => new AppSelect.SelectOption(x.Id, x.Icon + " " + x.Name))).ToArray())" />
+                }
                 @if (_draft != null)
                 {
                     <GenFields Value="_draft" Hint="@L["فقط برای همین گفتگو؛ مقدارهای API و تنظیمات عمومی را لغو می‌کند."]" />
