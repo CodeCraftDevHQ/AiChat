@@ -87,6 +87,12 @@ public class StorageService
 
     // ---- conversations ----
 
+    public async Task<List<MemoryItem>> LoadMemoryAsync() =>
+        await ReadAsync<List<MemoryItem>>("memory.json") ?? new();
+
+    public Task SaveMemoryAsync(List<MemoryItem> list) =>
+        WriteAsync("memory.json", JsonSerializer.Serialize(list, Json));
+
     public Task<List<Conversation>?> LoadConversationsAsync() => ReadAsync<List<Conversation>>("conversations.json");
 
     // Not async on purpose: the list is serialized right now (on the caller's thread),
@@ -176,7 +182,7 @@ public class StorageService
     // ---- backup / restore ----
 
     static readonly string[] BackupFiles =
-        { "providers.json", "conversations.json", "projects.json", "user_presets.json", "model_tests.json" };
+        { "providers.json", "conversations.json", "projects.json", "user_presets.json", "model_tests.json", "memory.json" };
 
     /// <summary>A zip with all data (providers, chats, projects, templates, attachments). API keys only when asked.</summary>
     public async Task<byte[]> CreateBackupAsync(bool includeKeys)

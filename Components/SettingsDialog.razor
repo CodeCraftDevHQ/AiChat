@@ -393,6 +393,10 @@
                             <PromptManager />
                             break;
 
+                        case "memory":
+                            <MemorySettings />
+                            break;
+
                         case "mcp":
                             <McpSettings />
                             break;
@@ -801,6 +805,7 @@ else if (_dlg == 2)
         new SectionItem("chat", L["گفتگو"]),
         new SectionItem("answer", L["پاسخ مدل"]),
         new SectionItem("search", L["جستجو در وب"]),
+        new SectionItem("memory", L["حافظه"]),
         new SectionItem("personas", L["شخصیت‌ها"]),
         new SectionItem("prompts", L["کتابخانه‌ی پرامپت"]),
         new SectionItem("tools", L["ابزارها"]),

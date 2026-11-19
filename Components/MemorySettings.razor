@@ -1,0 +1,134 @@
+@inherits StateComponent
+
+<p class="muted small">@L["حافظه‌ی بلندمدت: چیزهایی که از شما می‌داند (نام، شغل، ترجیحات …) در همه‌ی گفتگوها به مدل داده می‌شود. همه‌چیز فقط روی همین دستگاه ذخیره می‌شود و فقط وقتی روشن باشد به API انتخاب‌شده فرستاده می‌شود."]</p>
+
+<label class="chk"><input type="checkbox" checked="@State.MemoryOpts.Enabled" @onchange="OnEnabled" /> @L["استفاده از حافظه در گفتگوها"]</label>
+
+<details class="adv-search">
+    <summary>@L["تنظیمات حافظه"]</summary>
+    <label class="lbl first">@L["حداکثر حجم حافظه ارسالی (کاراکتر)"]</label>
+    <input class="inp" type="number" min="200" max="20000" step="100" value="@State.MemoryOpts.MaxChars" @onchange="OnMax" />
+    <p class="muted small">@L["مصرف فعلی"]: @MemoryHelper.UsedChars(State.Memory) / @State.MemoryOpts.MaxChars</p>
+
+    <label class="chk"><input type="checkbox" checked="@State.MemoryOpts.ModelCanSave" @onchange="OnModelCanSave" /> @L["مدل بتواند خودش حافظه را ذخیره و حذف کند (نیاز به روشن بودن ابزارها)"]</label>
+    <label class="chk"><input type="checkbox" checked="@State.MemoryOpts.AskBeforeSave" @onchange="OnAsk" /> @L["قبل از ذخیره یا حذف توسط مدل از من بپرس"]</label>
+
+    <label class="lbl">@L["جمله‌ی ابتدای حافظه (خالی = پیش‌فرض)"]</label>
+    <textarea class="inp" rows="3" dir="auto" placeholder="@MemoryHelper.DefaultHeader" value="@State.MemoryOpts.Header" @oninput="OnHeader"></textarea>
+</details>
+
+<label class="lbl">@L["موارد ذخیره‌شده"] (@State.Memory.Count)</label>
+<div class="row">
+    <input class="inp" dir="auto" placeholder="@L["مثلاً: من برنامه‌نویس C# هستم و فارسی صحبت می‌کنم"]" value="@_new" @oninput="OnNew" @onkeydown="OnKey" />
+    <button class="primary" @onclick="Add">+ @L["افزودن"]</button>
+</div>
+
+@if (State.Memory.Count == 0)
+{
+    <p class="muted">@L["حافظه خالی است."]</p>
+}
+@foreach (var m in State.Memory.OrderByDescending(x => x.Created))
+{
+    var item = m;
+    <div class="persona-row mem-row @(item.Enabled ? "" : "off")">
+        <input type="checkbox" checked="@item.Enabled" @onchange="e => OnItemEnabled(item, e)" title="@L["فعال"]" />
+        @if (_editId == item.Id)
+        {
+            <input class="inp" dir="auto" value="@_editText" @oninput="OnEditText" @onkeydown="e => OnEditKey(item, e)" />
+            <button class="btn sm" @onclick="() => SaveEdit(item)">@L["ذخیره"]</button>
+            <button class="btn sm" @onclick="CancelEdit">@L["انصراف"]</button>
+        }
+        else
+        {
+            <div class="persona-info">
+                <span dir="auto">@item.Text</span>
+                <small class="muted">@SourceIcon(item.Source) @item.Created.ToLocalTime().ToString("yyyy-MM-dd")</small>
+            </div>
+            <button class="btn sm" @onclick="() => StartEdit(item)">@L["ویرایش"]</button>
+            <button class="btn sm" @onclick="() => Delete(item)">@L["حذف"]</button>
+        }
+    </div>
+}
+
+<div class="row">
+    <button class="btn" @onclick="Import">@L["وارد کردن فایل JSON"]</button>
+    <button class="btn" disabled="@(State.Memory.Count == 0)" @onclick="Export">@L["ذخیره به‌صورت فایل"]</button>
+    @if (_confirmClear)
+    {
+        <button class="btn danger" @onclick="Clear">@L["پاک کردن همه؟"]</button>
+    }
+    else
+    {
+        <button class="btn danger" disabled="@(State.Memory.Count == 0)" @onclick="AskClear">@L["پاک کردن همه"]</button>
+    }
+</div>
+@if (_status != null)
+{
+    <p class="status" dir="auto">@_status</p>
+}
+<p class="muted small">@L["برای ساخت حافظه از یک گفتگو: در منوی ⋯ گفتگو «پیشنهاد حافظه از این گفتگو» را بزنید."]</p>
+
+@code {
+    string _new = "";
+    string? _editId;
+    string _editText = "";
+    string? _status;
+    bool _confirmClear;
+
+    static string SourceIcon(string s) => s switch { "model" => "🤖", "chat" => "💬", _ => "👤" };
+
+    void OnEnabled(ChangeEventArgs e) { State.MemoryOpts.Enabled = e.Value is true; State.SaveMemoryOpts(); }
+    void OnModelCanSave(ChangeEventArgs e) { State.MemoryOpts.ModelCanSave = e.Value is true; State.SaveMemoryOpts(); }
+    void OnAsk(ChangeEventArgs e) { State.MemoryOpts.AskBeforeSave = e.Value is true; State.SaveMemoryOpts(); }
+    void OnMax(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var n)) { State.MemoryOpts.MaxChars = Math.Clamp(n, 200, 20000); State.SaveMemoryOpts(); }
+    }
+    void OnHeader(ChangeEventArgs e) { State.MemoryOpts.Header = e.Value?.ToString() ?? string.Empty; State.SaveMemoryOpts(); }
+
+    void OnNew(ChangeEventArgs e) => _new = e.Value?.ToString() ?? string.Empty;
+    async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Add(); }
+    async Task Add()
+    {
+        if (_new.Trim().Length == 0) return;
+        await State.AddMemoryAsync(_new, "user");
+        _new = "";
+    }
+
+    Task OnItemEnabled(MemoryItem item, ChangeEventArgs e) => State.SetMemoryEnabledAsync(item, e.Value is true);
+
+    void StartEdit(MemoryItem item) { _editId = item.Id; _editText = item.Text; }
+    void CancelEdit() => _editId = null;
+    void OnEditText(ChangeEventArgs e) => _editText = e.Value?.ToString() ?? string.Empty;
+    async Task OnEditKey(MemoryItem item, KeyboardEventArgs e) { if (e.Key == "Enter") await SaveEdit(item); }
+    async Task SaveEdit(MemoryItem item)
+    {
+        await State.UpdateMemoryAsync(item, _editText);
+        _editId = null;
+    }
+
+    Task Delete(MemoryItem item) => State.DeleteMemoryAsync(item);
+
+    void AskClear() => _confirmClear = true;
+    async Task Clear()
+    {
+        _confirmClear = false;
+        await State.ClearMemoryAsync();
+    }
+
+    async Task Import()
+    {
+        try
+        {
+            var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = L["انتخاب فایل JSON حافظه"] });
+            if (file == null) return;
+            await using var stream = await file.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            var err = await State.ImportMemoryJsonAsync(await reader.ReadToEndAsync());
+            _status = err == null ? L["ذخیره شد ✓"] : L["خطا: "] + err;
+        }
+        catch (Exception ex) { _status = L["خطا: "] + ex.Message; }
+    }
+
+    Task Export() => State.SaveTextAsync("memory.json", State.ExportMemoryJson());
+}

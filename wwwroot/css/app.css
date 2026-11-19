@@ -786,3 +786,9 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .sb-selbar .sel-move { max-height: 180px; overflow-y: auto; }
 .sel-check { margin-inline-end: 8px; flex: none; pointer-events: none; }
 .conv.picked { background: color-mix(in srgb, var(--text) 10%, transparent); }
+
+/* memory */
+.mem-row { align-items: center; gap: 8px; }
+.mem-row.off .persona-info { opacity: .5; }
+.mem-row input[type=checkbox] { flex: none; }
+.mem-sugg { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }

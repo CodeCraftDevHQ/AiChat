@@ -18,6 +18,8 @@
                     <AppSelect Title="@L["شخصیت"]" Value="@(conv.PersonaId ?? "")" ValueChanged="v => State.UsePersonaAsync(State.Personas.FirstOrDefault(x => x.Id == v))"
                                Options="@(new[] { new AppSelect.SelectOption("", L["بدون شخصیت"]) }.Concat(State.Personas.Select(x => new AppSelect.SelectOption(x.Id, x.Icon + " " + x.Name))).ToArray())" />
                 }
+                <label class="lbl">@L["حافظه‌ی بلندمدت"]</label>
+                <AppSelect Title="@L["حافظه‌ی بلندمدت"]" Value="@MemoryValue(conv)" ValueChanged="v => OnMemory(conv, v)" Options="MemoryOptionsList()" />
                 @if (_draft != null)
                 {
                     <GenFields Value="_draft" Hint="@L["فقط برای همین گفتگو؛ مقدارهای API و تنظیمات عمومی را لغو می‌کند."]" />
@@ -43,6 +45,17 @@
         if (c == null) { _draft = null; _forId = null; return; }
         if (_forId != c.Id) { _draft = c.Gen?.Copy() ?? new GenSettings(); _forId = c.Id; }
     }
+
+    static string MemoryValue(Conversation c) => c.Memory == null ? string.Empty : (c.Memory.Value ? "1" : "0");
+
+    Task OnMemory(Conversation c, string v) => State.SetConvMemoryAsync(c, string.IsNullOrEmpty(v) ? null : v == "1");
+
+    AppSelect.SelectOption[] MemoryOptionsList() => new AppSelect.SelectOption[]
+    {
+        new(string.Empty, L["طبق شخصیت / تنظیمات عمومی"]),
+        new("1", L["روشن"]),
+        new("0", L["خاموش"]),
+    };
 
     void Reset() => _draft = new GenSettings();
 

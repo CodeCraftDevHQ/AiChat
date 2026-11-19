@@ -157,6 +157,14 @@ public class ToolOptions
     public string ExtraPrompt { get; set; } = "";
 }
 
+/// <summary>What the memory tools of the model do (the app supplies the code).</summary>
+public class MemoryHooks
+{
+    public Func<string, string> Remember = _ => "";
+    public Func<string, string> Forget = _ => "";
+    public bool Ask = true;
+}
+
 public static class BuiltInTools
 {
     static JsonObject Schema(params (string Name, string Type, string Desc, bool Required)[] props)
@@ -175,7 +183,7 @@ public static class BuiltInTools
         a[key] is JsonValue v && v.TryGetValue<string>(out var s) ? s : a[key]?.ToString() ?? "";
 
     public static ToolSet Build(ToolOptions o, WebSearchService search, string engine, string key, string baseUrl,
-                                SearchOptions sopt, Func<DateTime>? now = null)
+                                SearchOptions sopt, Func<DateTime>? now = null, MemoryHooks? memory = null)
     {
         now ??= () => DateTime.Now;
         var set = new ToolSet
@@ -184,6 +192,30 @@ public static class BuiltInTools
             ResultMaxChars = Math.Clamp(o.ResultChars, 500, 50000),
             ShowCalls = o.ShowCalls
         };
+
+        if (memory != null)
+        {
+            set.Tools.Add(new ToolDef
+            {
+                Name = "remember",
+                Label = "Memory: save",
+                Description = "Saves ONE short, durable fact about the user to long-term memory (a name, job, preference, language, ongoing project). " +
+                              "Use it when the user asks you to remember something or states a lasting preference. " +
+                              "Never save secrets, passwords, ID or card numbers, or temporary details.",
+                Parameters = Schema(("text", "string", "The fact, as one short sentence in the user's language", true)),
+                Ask = memory.Ask,
+                Run = (a, _) => Task.FromResult(memory.Remember(Str(a, "text")))
+            });
+            set.Tools.Add(new ToolDef
+            {
+                Name = "forget",
+                Label = "Memory: delete",
+                Description = "Deletes a saved memory. Use it when the user asks you to forget something. Pass a distinctive part of the memory text.",
+                Parameters = Schema(("text", "string", "A distinctive part of the memory to delete", true)),
+                Ask = memory.Ask,
+                Run = (a, _) => Task.FromResult(memory.Forget(Str(a, "text")))
+            });
+        }
 
         if (o.DateTime)
             set.Tools.Add(new ToolDef

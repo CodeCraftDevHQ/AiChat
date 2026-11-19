@@ -26,6 +26,9 @@
         <label class="lbl">@L["ابزارها"]</label>
         <AppSelect Title="@L["ابزارها"]" Value="@ToolsValue()" ValueChanged="OnTools" Options="ToolsOptions()" />
 
+        <label class="lbl">@L["حافظه‌ی بلندمدت"]</label>
+        <AppSelect Title="@L["حافظه‌ی بلندمدت"]" Value="@MemoryValue()" ValueChanged="OnMemory" Options="MemoryOptionsList()" />
+
         <div class="row">
             <button class="primary" @onclick="Save">@L["ذخیره"]</button>
             <button class="btn" @onclick="() => _edit = null">@L["انصراف"]</button>
@@ -102,6 +105,21 @@ else
         new(string.Empty, L["طبق تنظیمات عمومی"]),
         new("1", L["همیشه روشن"]),
         new("0", L["همیشه خاموش"]),
+    };
+
+    string MemoryValue() => _edit?.Memory == null ? string.Empty : (_edit.Memory.Value ? "1" : "0");
+
+    void OnMemory(string v)
+    {
+        if (_edit == null) return;
+        _edit.Memory = string.IsNullOrEmpty(v) ? null : v == "1";
+    }
+
+    AppSelect.SelectOption[] MemoryOptionsList() => new AppSelect.SelectOption[]
+    {
+        new(string.Empty, L["طبق تنظیمات عمومی"]),
+        new("1", L["روشن"]),
+        new("0", L["خاموش"]),
     };
 
     void OnProvider(string id)

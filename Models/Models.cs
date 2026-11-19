@@ -226,10 +226,12 @@ public class Persona
     public string Model { get; set; } = "";
     /// <summary>null = follow the global setting, true / false = force tools on / off.</summary>
     public bool? Tools { get; set; }
+    /// <summary>null = follow the global memory setting, true / false = force the long-term memory on / off.</summary>
+    public bool? Memory { get; set; }
 
     public Persona Copy() => new()
     {
-        Name = Name, Icon = Icon, Gen = Gen.Copy(), ProviderId = ProviderId, Model = Model, Tools = Tools
+        Name = Name, Icon = Icon, Gen = Gen.Copy(), ProviderId = ProviderId, Model = Model, Tools = Tools, Memory = Memory
     };
 
     public Persona WithId(string id) { Id = id; return this; }
@@ -248,6 +250,9 @@ public class Conversation
 {
     /// <summary>The persona used in this chat (null = none).</summary>
     public string? PersonaId { get; set; }
+
+    /// <summary>null = follow persona / global setting, true / false = long-term memory on / off in this chat.</summary>
+    public bool? Memory { get; set; }
 
     /// <summary>Settings of this chat only (null = none).</summary>
     public GenSettings? Gen { get; set; }

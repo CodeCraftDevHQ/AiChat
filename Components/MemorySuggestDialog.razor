@@ -1,0 +1,44 @@
+@inherits StateComponent
+
+@if (State.MemorySuggest is { } st)
+{
+    <div class="modal-backdrop" @onclick="State.CloseMemorySuggest">
+        <div class="modal wide" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>@L["پیشنهاد حافظه از این گفتگو"]</h2>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseMemorySuggest">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            </div>
+            <div class="p-body">
+                @if (st.Busy)
+                {
+                    <p class="muted">@L["در حال بررسی گفتگو…"]</p>
+                }
+                else if (st.Error != null)
+                {
+                    <p class="status" dir="auto">@st.Error</p>
+                }
+                else
+                {
+                    <p class="muted small">@L["مواردی که می‌خواهید ذخیره شوند را نگه دارید."]</p>
+                    @for (var i = 0; i < st.Items.Count; i++)
+                    {
+                        var idx = i;
+                        <label class="chk mem-sugg">
+                            <input type="checkbox" checked="@st.Items[idx].On" @onchange="() => State.ToggleMemorySuggestion(idx)" />
+                            <span dir="auto">@st.Items[idx].Text</span>
+                        </label>
+                    }
+                }
+            </div>
+            <div class="row" style="padding:10px 14px">
+                @if (!st.Busy && st.Error == null && st.Items.Count > 0)
+                {
+                    <button class="primary" disabled="@(!st.Items.Any(x => x.On))" @onclick="State.AcceptMemorySuggestionsAsync">@L["ذخیره در حافظه"]</button>
+                }
+                <button class="btn" @onclick="State.CloseMemorySuggest">@L["بستن"]</button>
+            </div>
+        </div>
+    </div>
+}

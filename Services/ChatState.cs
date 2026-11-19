@@ -530,6 +530,7 @@ public class ChatState
 
         Providers = await _storage.LoadProvidersAsync();
         Projects = await _storage.LoadProjectsAsync();
+        Memory = await _storage.LoadMemoryAsync();
         Conversations = (await _storage.LoadConversationsAsync() ?? new())
             .OrderByDescending(c => c.Updated).ToList();
 
@@ -560,6 +561,7 @@ public class ChatState
         MarkdownRenderer.SetThinkOptions(ThinkMode, ThinkMaxHeight);
         try { SearchOpts = System.Text.Json.JsonSerializer.Deserialize<SearchOptions>(Preferences.Default.Get("search_opts", "")) ?? new(); }
         catch { SearchOpts = new(); }
+        LoadMemoryOpts();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
         McpServers = await _storage.LoadMcpServersAsync();
@@ -638,8 +640,196 @@ public class ChatState
 
     /// <summary>All system instructions in order: global, API, project, this chat.</summary>
     string BuildSystem(ProviderConfig provider, Project? project, Conversation? conv) =>
-        string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, PersonaOf(conv)?.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt }
+        string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, PersonaOf(conv)?.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt, MemoryPrompt(conv) }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    // ---- long-term memory
+    public List<MemoryItem> Memory { get; private set; } = new();
+    public MemoryOptions MemoryOpts { get; private set; } = new();
+
+    void LoadMemoryOpts()
+    {
+        try { MemoryOpts = System.Text.Json.JsonSerializer.Deserialize<MemoryOptions>(Preferences.Default.Get("memory_opts", "")) ?? new(); }
+        catch { MemoryOpts = new(); }
+    }
+
+    public void SaveMemoryOpts() { Preferences.Default.Set("memory_opts", System.Text.Json.JsonSerializer.Serialize(MemoryOpts)); Notify(); }
+
+    /// <summary>Does the memory apply here? Chat setting, then persona, then the global switch.</summary>
+    public bool MemoryApplies(Conversation? conv) => conv?.Memory ?? PersonaOf(conv)?.Memory ?? MemoryOpts.Enabled;
+
+    string MemoryPrompt(Conversation? conv) =>
+        MemoryApplies(conv) ? MemoryHelper.BuildPrompt(Memory, MemoryOpts) : "";
+
+    public async Task SetConvMemoryAsync(Conversation conv, bool? on)
+    {
+        conv.Memory = on;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
+    Task SaveMemoryAsync() => _storage.SaveMemoryAsync(Memory);
+
+    public async Task AddMemoryAsync(string text, string source = "user")
+    {
+        var t = MemoryHelper.Normalize(text);
+        if (t.Length == 0 || MemoryHelper.IsDuplicate(Memory, t)) return;
+        Memory.Add(new MemoryItem { Text = t, Source = source });
+        Notify();
+        await SaveMemoryAsync();
+    }
+
+    public async Task UpdateMemoryAsync(MemoryItem item, string text)
+    {
+        var t = MemoryHelper.Normalize(text);
+        if (t.Length == 0) return;
+        item.Text = t;
+        Notify();
+        await SaveMemoryAsync();
+    }
+
+    public async Task SetMemoryEnabledAsync(MemoryItem item, bool on)
+    {
+        item.Enabled = on;
+        Notify();
+        await SaveMemoryAsync();
+    }
+
+    public async Task DeleteMemoryAsync(MemoryItem item)
+    {
+        Memory.Remove(item);
+        Notify();
+        await SaveMemoryAsync();
+    }
+
+    public async Task ClearMemoryAsync()
+    {
+        Memory.Clear();
+        Notify();
+        await SaveMemoryAsync();
+    }
+
+    public async Task<string?> ImportMemoryJsonAsync(string json)
+    {
+        try
+        {
+            var items = MemoryHelper.FromJson(json, Memory);
+            Memory.AddRange(items);
+            Notify();
+            await SaveMemoryAsync();
+            return null;
+        }
+        catch (Exception ex) { return ex.Message; }
+    }
+
+    public string ExportMemoryJson() => MemoryHelper.ToJson(Memory);
+
+    MemoryHooks? MemoryTools(Conversation conv)
+    {
+        if (!MemoryOpts.ModelCanSave || !MemoryApplies(conv)) return null;
+        return new MemoryHooks
+        {
+            Ask = MemoryOpts.AskBeforeSave,
+            Remember = text =>
+            {
+                var t = MemoryHelper.Normalize(text);
+                if (t.Length == 0) return "Nothing to save.";
+                if (MemoryHelper.IsDuplicate(Memory, t)) return "Already saved.";
+                Memory.Add(new MemoryItem { Text = t, Source = "model" });
+                Notify();
+                _ = SaveMemoryAsync();
+                return "Saved.";
+            },
+            Forget = text =>
+            {
+                var gone = MemoryHelper.Forget(Memory, text);
+                if (gone.Count == 0) return "No single matching memory was found (be more specific).";
+                Notify();
+                _ = SaveMemoryAsync();
+                return "Deleted: " + string.Join("; ", gone.Select(x => x.Text));
+            }
+        };
+    }
+
+    // suggestions from a chat (the user reviews them before anything is saved)
+    public class MemorySuggestState
+    {
+        public Conversation? Conv;
+        public bool Busy;
+        public string? Error;
+        public List<(string Text, bool On)> Items = new();
+    }
+
+    public MemorySuggestState? MemorySuggest { get; private set; }
+    CancellationTokenSource? _suggestCts;
+
+    public async Task StartMemorySuggestAsync(Conversation conv)
+    {
+        _suggestCts?.Cancel();
+        _suggestCts = new CancellationTokenSource();
+        var ct = _suggestCts.Token;
+        var st = MemorySuggest = new MemorySuggestState { Conv = conv, Busy = true };
+        if (IsNarrow) SidebarOpen = false;
+        Notify();
+        try
+        {
+            var provider = Providers.FirstOrDefault(p => p.Id == conv.ProviderId) ?? CurrentProvider
+                           ?? throw new InvalidOperationException(L["ابتدا یک API اضافه کنید."]);
+            var model = conv.Model.Length > 0 ? conv.Model : CurrentModel;
+            var text = MemoryHelper.ConversationText(conv.Messages.Select(m => (m.Role, ToolMarks.Strip(MarkdownRenderer.StripThink(m.Content)))));
+            if (text.Length == 0) { st.Error = L["این گفتگو هنوز پیامی ندارد."]; return; }
+            var reply = await CompleteOnceAsync(provider, model, "You extract long-term memories. Follow the output format exactly.",
+                MemoryHelper.ExtractionPrompt(text, Memory), ct);
+            var found = MemoryHelper.ParseSuggestions(reply).Where(x => !MemoryHelper.IsDuplicate(Memory, x)).ToList();
+            st.Items = found.Select(x => (x, true)).ToList();
+            if (found.Count == 0) st.Error = L["چیز تازه‌ای برای ذخیره پیدا نشد."];
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { st.Error = ex.Message; }
+        finally { st.Busy = false; Notify(); }
+    }
+
+    public void ToggleMemorySuggestion(int i)
+    {
+        if (MemorySuggest == null || i < 0 || i >= MemorySuggest.Items.Count) return;
+        var it = MemorySuggest.Items[i];
+        MemorySuggest.Items[i] = (it.Text, !it.On);
+        Notify();
+    }
+
+    public void CloseMemorySuggest()
+    {
+        _suggestCts?.Cancel();
+        MemorySuggest = null;
+        Notify();
+    }
+
+    public async Task AcceptMemorySuggestionsAsync()
+    {
+        var items = MemorySuggest?.Items.Where(x => x.On).Select(x => x.Text).ToList() ?? new();
+        MemorySuggest = null;
+        foreach (var t in items)
+            if (!MemoryHelper.IsDuplicate(Memory, t)) Memory.Add(new MemoryItem { Text = t, Source = "chat" });
+        Notify();
+        if (items.Count > 0) await SaveMemoryAsync();
+        ShowToast(L.F("{0} مورد در حافظه ذخیره شد.", items.Count));
+    }
+
+    /// <summary>One request without tools; the whole answer as text (thinking removed).</summary>
+    async Task<string> CompleteOnceAsync(ProviderConfig provider, string model, string system, string user, CancellationToken ct)
+    {
+        var impl = _factory.Create(provider.Type);
+        var cfg = provider.Clone();
+        cfg.Tools = null;
+        var msgs = new List<ChatMessage> { new() { Role = "user", Content = user } };
+        var sb = new System.Text.StringBuilder();
+        await foreach (var chunk in impl.StreamAsync(cfg, model, msgs, system, null, ct))
+        {
+            if (chunk.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) continue;
+            sb.Append(chunk);
+        }
+        return MarkdownRenderer.StripThink(sb.ToString()).Trim();
+    }
 
     // ---- personas
     public List<Persona> Personas { get; private set; } = new();
@@ -1165,6 +1355,7 @@ public class ChatState
         Pending.Clear();
         Providers = await _storage.LoadProvidersAsync();
         Projects = await _storage.LoadProjectsAsync();
+        Memory = await _storage.LoadMemoryAsync();
         Conversations = (await _storage.LoadConversationsAsync() ?? new()).OrderByDescending(c => c.Updated).ToList();
         UserPresets = await _storage.LoadUserPresetsAsync();
         ModelTests = new(await _storage.LoadModelTestsAsync() ?? new());
@@ -1602,6 +1793,7 @@ public class ChatState
             return true;
         }
         if (PdfPrompt != null) { ChoosePdfMode("text"); return true; }
+        if (MemorySuggest != null) { CloseMemorySuggest(); return true; }
         if (PromptsOpen) { ClosePrompts(); return true; }
         if (Picker != null) { ClosePicker(); return true; }
         if (Viewer != null) { CloseViewer(); return true; }
@@ -2088,7 +2280,7 @@ public class ChatState
         if (ToolsApply(provider, PersonaOf(conv)))
         {
             _toolAllowAll = false;
-            provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts);
+            provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts, null, MemoryTools(conv));
             provider.Tools.Approve = (tool, args) => ApproveToolAsync(tool, args, ct);
             if (ToolOpts.McpEnabled && McpServers.Count > 0)
                 provider.Tools.Tools.AddRange(await BuildMcpToolsAsync(ct));
