@@ -54,17 +54,29 @@ public class StorageService
         List<McpServerConfig> list;
         try { list = JsonSerializer.Deserialize<List<McpServerConfig>>(Preferences.Default.Get("mcp_servers", "")) ?? new(); }
         catch { list = new(); }
-        foreach (var m in list) m.Headers = await GetSecretAsync("mcp-" + m.Id);
+        foreach (var m in list)
+        {
+            m.Headers = await GetSecretAsync("mcp-" + m.Id);
+            m.Env = await GetSecretAsync("mcp-env-" + m.Id);
+        }
         return list;
     }
 
     public async Task SaveMcpServersAsync(List<McpServerConfig> list)
     {
-        foreach (var m in list) await SetSecretAsync("mcp-" + m.Id, m.Headers);
+        foreach (var m in list)
+        {
+            await SetSecretAsync("mcp-" + m.Id, m.Headers);
+            await SetSecretAsync("mcp-env-" + m.Id, m.Env);
+        }
         Preferences.Default.Set("mcp_servers", JsonSerializer.Serialize(list));
     }
 
-    public Task DeleteMcpSecretAsync(string id) => SetSecretAsync("mcp-" + id, "");
+    public async Task DeleteMcpSecretAsync(string id)
+    {
+        await SetSecretAsync("mcp-" + id, "");
+        await SetSecretAsync("mcp-env-" + id, "");
+    }
 
     public void DeleteSecret(string providerId)
     {

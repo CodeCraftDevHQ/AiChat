@@ -150,7 +150,7 @@ public class McpTests
     public void ImportJson_ReadsMcpServersFormat_SkipsStdio()
     {
         var json = "{ \"mcpServers\": { \"web\": { \"url\": \"https://x.test/mcp\", \"headers\": { \"Authorization\": \"Bearer t\" } }, \"local\": { \"command\": \"npx\", \"args\": [\"-y\", \"pkg\"] } } }";
-        var list = McpToolBuilder.ImportJson(json, out var skipped);
+        var list = McpToolBuilder.ImportJson(json, out var skipped, false);
         Assert.Single(list);
         Assert.Equal("web", list[0].Name);
         Assert.Equal("Authorization: Bearer t", list[0].Headers);
@@ -164,5 +164,138 @@ public class McpTests
         var json = System.Text.Json.JsonSerializer.Serialize(c);
         Assert.DoesNotContain("tok", json);
         Assert.Contains("mcp.test", json);
+    }
+}
+
+public class McpStdioTests
+{
+    /// <summary>A fake local program: reads JSON lines from "stdin", answers on "stdout".</summary>
+    static McpStdioTransport.Running FakeProgram(Func<string, string?> handler, bool noise = false)
+    {
+        var c2s = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
+        var serverIn = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, c2s.ClientSafePipeHandle);
+        var s2c = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.In);
+        var serverOut = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.Out, s2c.ClientSafePipeHandle);
+        c2s.DisposeLocalCopyOfClientHandle();
+        s2c.DisposeLocalCopyOfClientHandle();
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                using var reader = new StreamReader(serverIn);
+                using var writer = new StreamWriter(serverOut) { AutoFlush = true, NewLine = "\n" };
+                if (noise) writer.WriteLine("Server v1 starting...");
+                string? line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var reply = handler(line);
+                    if (reply == "<exit>") return;
+                    if (reply != null) writer.WriteLine(reply);
+                }
+            }
+            catch { }
+        });
+
+        return new McpStdioTransport.Running(c2s, s2c, () => "boom: missing module", () =>
+        {
+            try { serverIn.Dispose(); } catch { }
+            try { serverOut.Dispose(); } catch { }
+        });
+    }
+
+    static string? Echo(string line)
+    {
+        var req = JsonNode.Parse(line)!;
+        var method = req["method"]!.ToString();
+        var id = req["id"];
+        string Wrap(string r) => $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{r}}}";
+        return method switch
+        {
+            "initialize" => Wrap("{\"protocolVersion\":\"2025-06-18\",\"serverInfo\":{\"name\":\"Local\"}}"),
+            "tools/list" => Wrap("{\"tools\":[{\"name\":\"echo\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}}}}]}"),
+            "tools/call" => Wrap("{\"content\":[{\"type\":\"text\",\"text\":\"local: " + req["params"]!["arguments"]!["text"] + "\"}]}"),
+            _ => null
+        };
+    }
+
+    [Fact]
+    public async Task Stdio_ListAndCall_IgnoresNoiseLines()
+    {
+        var cfg = new McpServerConfig { Name = "Local", Transport = "stdio", Command = "x", TimeoutSec = 10 };
+        using var transport = new McpStdioTransport(() => FakeProgram(Echo, noise: true));
+        var client = new McpClient(transport, cfg);
+
+        var tools = await client.ListToolsAsync(default);
+        Assert.Equal("echo", Assert.Single(tools).Name);
+        Assert.Equal("Local", client.ServerName);
+
+        var text = await client.CallToolAsync("echo", new JsonObject { ["text"] = "hi" }, default);
+        Assert.Equal("local: hi", text);
+    }
+
+    [Fact]
+    public async Task Stdio_ProgramExit_FailsWithStderr()
+    {
+        var cfg = new McpServerConfig { Name = "Local", Transport = "stdio", Command = "x", TimeoutSec = 10 };
+        using var transport = new McpStdioTransport(() => FakeProgram(_ => "<exit>"));
+        var client = new McpClient(transport, cfg);
+        var ex = await Assert.ThrowsAsync<McpException>(() => client.ListToolsAsync(default));
+        Assert.Contains("stopped", ex.Message);
+        Assert.Contains("boom", ex.Message);
+    }
+
+    [Fact]
+    public async Task Stdio_Timeout_WhenProgramNeverAnswers()
+    {
+        var cfg = new McpServerConfig { Name = "Local", Transport = "stdio", Command = "x", TimeoutSec = 3 };
+        using var transport = new McpStdioTransport(() => FakeProgram(_ => null));
+        var client = new McpClient(transport, cfg);
+        var ex = await Assert.ThrowsAsync<McpException>(() => client.ListToolsAsync(default));
+        Assert.Contains("Timed out", ex.Message);
+    }
+
+    [Fact]
+    public void CommandLine_QuotesArguments()
+    {
+        Assert.Equal("npx -y @modelcontextprotocol/server-filesystem \"C:\\My Docs\"",
+            McpProcess.BuildCommandLine("npx", new[] { "-y", "@modelcontextprotocol/server-filesystem", "C:\\My Docs" }));
+        Assert.Equal("\"\"", McpProcess.BuildCommandLine("", Array.Empty<string>()));
+        Assert.Contains("\"a&b\"", McpProcess.BuildCommandLine("x", new[] { "a&b" }));
+    }
+
+    [Fact]
+    public void Env_IsParsed()
+    {
+        var env = McpProcess.ParseEnv("A=1\r\nbad\nKEY = va=lue \n");
+        Assert.Equal(new[] { ("A", "1"), ("KEY", "va=lue") }, env.ToArray());
+    }
+
+    [Fact]
+    public void Import_ProgramEntries_AreAddedSwitchedOff()
+    {
+        var json = "{ \"mcpServers\": { \"fs\": { \"command\": \"npx\", \"args\": [\"-y\", \"pkg\", \"C:/x\"], \"env\": { \"K\": \"v\" } } } }";
+        var list = McpToolBuilder.ImportJson(json, out var skipped, true);
+        var s = Assert.Single(list);
+        Assert.True(s.IsStdio);
+        Assert.False(s.Enabled);
+        Assert.Equal(new[] { "-y", "pkg", "C:/x" }, s.Args);
+        Assert.Equal("K=v", s.Env);
+        Assert.Empty(skipped);
+
+        McpToolBuilder.ImportJson(json, out var skipped2, false);
+        Assert.Equal(new[] { "fs" }, skipped2);
+    }
+
+    [Fact]
+    public void Config_Serialization_KeepsStdioFields_ButNotEnv()
+    {
+        var c = new McpServerConfig { Name = "n", Transport = "stdio", Command = "npx", Args = { "a b" }, Env = "SECRET=1" };
+        var json = System.Text.Json.JsonSerializer.Serialize(c);
+        Assert.DoesNotContain("SECRET", json);
+        var back = System.Text.Json.JsonSerializer.Deserialize<McpServerConfig>(json)!;
+        Assert.True(back.IsStdio);
+        Assert.Equal(new[] { "a b" }, back.Args);
+        Assert.False(new McpServerConfig().IsStdio);
     }
 }

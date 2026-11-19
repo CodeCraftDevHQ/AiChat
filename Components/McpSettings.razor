@@ -6,12 +6,38 @@
         <label class="lbl first">@L["نام سرور"]</label>
         <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="my-server" value="@_edit.Name" @oninput="OnName" />
 
-        <label class="lbl">@L["آدرس سرور MCP (HTTP)"]</label>
-        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="https://example.com/mcp" value="@_edit.Url" @oninput="OnUrl" />
+        @if (McpProcess.Supported)
+        {
+            <label class="lbl">@L["نوع اتصال"]</label>
+            <AppSelect Title="@L["نوع اتصال"]" Value="@_edit.Transport" ValueChanged="OnTransport" Options="TransportOptions()" />
+        }
 
-        <label class="lbl">@L["هدرها (اختیاری؛ هر خط یک هدر)"]</label>
-        <textarea class="inp code" rows="3" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="Authorization: Bearer YOUR_TOKEN" value="@_edit.Headers" @oninput="OnHeaders"></textarea>
-        <p class="muted small">@L["هدرها (مثل توکن) در حافظه‌ی امن دستگاه ذخیره می‌شوند."]</p>
+        @if (_edit.IsStdio)
+        {
+            <p class="muted small warn">⚠ @L["این گزینه یک برنامه را روی این کامپیوتر با دسترسی‌های شما اجرا می‌کند. فقط برنامه‌هایی را اضافه کنید که به آن‌ها اعتماد دارید."]</p>
+
+            <label class="lbl">@L["برنامه"]</label>
+            <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="npx" value="@_edit.Command" @oninput="OnCommand" />
+
+            <label class="lbl">@L["آرگومان‌ها (هر خط یکی)"]</label>
+            <textarea class="inp code" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="-y&#10;@@modelcontextprotocol/server-filesystem&#10;C:\Users\me\Documents" value="@ArgsText()" @oninput="OnArgs"></textarea>
+
+            <label class="lbl">@L["متغیرهای محیطی (اختیاری؛ هر خط KEY=value)"]</label>
+            <textarea class="inp code" rows="2" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="API_KEY=your-key" value="@_edit.Env" @oninput="OnEnv"></textarea>
+            <p class="muted small">@L["متغیرها (مثل کلید API) در حافظه‌ی امن دستگاه ذخیره می‌شوند."]</p>
+
+            <label class="lbl">@L["پوشه‌ی کاری (اختیاری)"]</label>
+            <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="C:\Users\me\Documents" value="@_edit.WorkDir" @oninput="OnWorkDir" />
+        }
+        else
+        {
+            <label class="lbl">@L["آدرس سرور MCP (HTTP)"]</label>
+            <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="https://example.com/mcp" value="@_edit.Url" @oninput="OnUrl" />
+
+            <label class="lbl">@L["هدرها (اختیاری؛ هر خط یک هدر)"]</label>
+            <textarea class="inp code" rows="3" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="Authorization: Bearer YOUR_TOKEN" value="@_edit.Headers" @oninput="OnHeaders"></textarea>
+            <p class="muted small">@L["هدرها (مثل توکن) در حافظه‌ی امن دستگاه ذخیره می‌شوند."]</p>
+        }
 
         <label class="chk"><input type="checkbox" checked="@_edit.Enabled" @onchange="OnEnabled" /> @L["فعال"]</label>
         <label class="chk"><input type="checkbox" checked="@_edit.Ask" @onchange="OnAsk" /> @L["قبل از اجرای هر ابزار این سرور از من بپرس"]</label>
@@ -45,7 +71,7 @@
 }
 else
 {
-    <p class="muted small">@L["MCP یک استاندارد باز است: سرورهای MCP ابزار (مثل GitHub، پایگاه داده، فایل، تقویم و …) به مدل می‌دهند. ابزارها باید روشن باشند و API شما از ابزار پشتیبانی کند. فعلاً فقط سرورهای راه‌دور (HTTP) پشتیبانی می‌شوند."]</p>
+    <p class="muted small">@L["MCP یک استاندارد باز است: سرورهای MCP ابزار (مثل GitHub، پایگاه داده، فایل، تقویم و …) به مدل می‌دهند. ابزارها باید روشن باشند و API شما از ابزار پشتیبانی کند. سرورهای راه‌دور (HTTP) در همه‌جا و برنامه‌های محلی (stdio، مثل npx) فقط در ویندوز پشتیبانی می‌شوند."]</p>
     <label class="chk"><input type="checkbox" checked="@State.ToolOpts.McpEnabled" @onchange="OnMaster" /> @L["استفاده از ابزارهای سرورهای MCP"]</label>
 
     @if (State.McpServers.Count == 0)
@@ -59,7 +85,7 @@ else
             <span class="persona-ico">🔌</span>
             <div class="persona-info">
                 <strong dir="auto">@srv.Name @(srv.Enabled ? "" : "(off)")</strong>
-                <small class="muted" dir="ltr">@srv.Url</small>
+                <small class="muted" dir="ltr">@(srv.IsStdio ? "▶ " + McpProcess.BuildCommandLine(srv.Command, srv.Args) : srv.Url)</small>
                 @if (State.McpStatus.TryGetValue(srv.Id, out var st))
                 {
                     <small class="muted" dir="auto">@st</small>
@@ -103,6 +129,21 @@ else
     }
 
     void OnName(ChangeEventArgs e) { if (_edit != null) _edit.Name = e.Value?.ToString() ?? string.Empty; }
+    void OnCommand(ChangeEventArgs e) { if (_edit != null) _edit.Command = e.Value?.ToString() ?? string.Empty; }
+    void OnArgs(ChangeEventArgs e)
+    {
+        if (_edit != null)
+            _edit.Args = (e.Value?.ToString() ?? string.Empty).Replace("\r", "").Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+    }
+    void OnEnv(ChangeEventArgs e) { if (_edit != null) _edit.Env = e.Value?.ToString() ?? string.Empty; }
+    void OnWorkDir(ChangeEventArgs e) { if (_edit != null) _edit.WorkDir = e.Value?.ToString() ?? string.Empty; }
+    void OnTransport(string v) { if (_edit != null) { _edit.Transport = v; State.ForgetMcp(_edit.Id); _status = null; } }
+    string ArgsText() => _edit == null ? string.Empty : string.Join("\n", _edit.Args);
+    AppSelect.SelectOption[] TransportOptions() => new AppSelect.SelectOption[]
+    {
+        new("http", L["سرور راه‌دور (HTTP)"]),
+        new("stdio", L["برنامه روی این کامپیوتر (stdio)"]),
+    };
     void OnUrl(ChangeEventArgs e) { if (_edit != null) _edit.Url = e.Value?.ToString() ?? string.Empty; }
     void OnHeaders(ChangeEventArgs e) { if (_edit != null) _edit.Headers = e.Value?.ToString() ?? string.Empty; }
     void OnEnabled(ChangeEventArgs e) { if (_edit != null) _edit.Enabled = e.Value is true; }
@@ -149,6 +190,13 @@ else
         _edit.Name = _edit.Name.Trim();
         _edit.Url = _edit.Url.Trim();
         if (_edit.Name.Length == 0) { _status = L["نام سرور را وارد کنید."]; return false; }
+        if (_edit.IsStdio)
+        {
+            if (!McpProcess.Supported) { _status = L["اجرای برنامه‌ی محلی فقط در ویندوز ممکن است."]; return false; }
+            _edit.Command = _edit.Command.Trim();
+            if (_edit.Command.Length == 0) { _status = L["نام برنامه را وارد کنید."]; return false; }
+            return true;
+        }
         if (!Uri.TryCreate(_edit.Url, UriKind.Absolute, out var u) || (u.Scheme != "http" && u.Scheme != "https"))
         { _status = L["آدرس باید با http:// یا https:// شروع شود."]; return false; }
         return true;
@@ -178,7 +226,7 @@ else
     {
         try
         {
-            var list = McpToolBuilder.ImportJson(_json, out var skipped);
+            var list = McpToolBuilder.ImportJson(_json, out var skipped, McpProcess.Supported);
             var added = 0;
             foreach (var m in list)
             {
@@ -186,7 +234,8 @@ else
                 await State.SaveMcpServerAsync(m);
                 added++;
             }
-            _status = L.F("{0} سرور اضافه شد.", added) + (skipped.Count > 0 ? " " + L["بدون آدرس (فقط سرورهای HTTP پشتیبانی می‌شوند): "] + string.Join(", ", skipped) : "");
+            var offs = list.Count(x => x.IsStdio && !x.Enabled);
+            _status = L.F("{0} سرور اضافه شد.", added) + (offs > 0 ? " " + L["سرورهای برنامه‌ای غیرفعال اضافه شدند؛ بعد از بررسی فعال کنید."] : "") + (skipped.Count > 0 ? " " + L["بدون آدرس (فقط سرورهای HTTP پشتیبانی می‌شوند): "] + string.Join(", ", skipped) : "");
             if (added > 0) _json = "";
         }
         catch (Exception ex) { _status = L["خطا: "] + ex.Message; }

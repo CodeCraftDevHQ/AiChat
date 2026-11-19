@@ -855,15 +855,23 @@ public class ChatState
     McpClient McpClientOf(McpServerConfig cfg)
     {
         if (!_mcpClients.TryGetValue(cfg.Id, out var c))
-            _mcpClients[cfg.Id] = c = new McpClient(_http, cfg);
+            _mcpClients[cfg.Id] = c = cfg.IsStdio
+                ? new McpClient(new McpStdioTransport(() => McpProcess.Start(cfg)), cfg)
+                : new McpClient(_http, cfg);
         return c;
+    }
+
+    /// <summary>Forgets a client and stops its program (stdio).</summary>
+    void DropMcpClient(string id)
+    {
+        if (_mcpClients.Remove(id, out var c)) c.Close();
     }
 
     public async Task SaveMcpServerAsync(McpServerConfig cfg)
     {
         var i = McpServers.FindIndex(x => x.Id == cfg.Id);
         if (i >= 0) McpServers[i] = cfg; else McpServers.Add(cfg);
-        _mcpClients.Remove(cfg.Id);
+        DropMcpClient(cfg.Id);
         McpTools.Remove(cfg.Id);
         McpStatus.Remove(cfg.Id);
         await _storage.SaveMcpServersAsync(McpServers);
@@ -873,7 +881,7 @@ public class ChatState
     public async Task DeleteMcpServerAsync(string id)
     {
         McpServers.RemoveAll(x => x.Id == id);
-        _mcpClients.Remove(id);
+        DropMcpClient(id);
         McpTools.Remove(id);
         McpStatus.Remove(id);
         await _storage.DeleteMcpSecretAsync(id);
@@ -882,7 +890,7 @@ public class ChatState
     }
 
     /// <summary>Drops what was learned about a server (after an unsaved test).</summary>
-    public void ForgetMcp(string id) { _mcpClients.Remove(id); McpTools.Remove(id); McpStatus.Remove(id); Notify(); }
+    public void ForgetMcp(string id) { DropMcpClient(id); McpTools.Remove(id); McpStatus.Remove(id); Notify(); }
 
     public void SetMcpEnabled(bool on) { ToolOpts.McpEnabled = on; SaveToolOpts(); }
 
@@ -915,7 +923,7 @@ public class ChatState
     {
         var res = new List<ToolDef>();
         var used = new HashSet<string>();
-        foreach (var cfg in McpServers.Where(x => x.Enabled && x.Url.Length > 0))
+        foreach (var cfg in McpServers.Where(x => x.Enabled && (x.IsStdio ? McpProcess.Supported && x.Command.Length > 0 : x.Url.Length > 0)))
         {
             if (!McpTools.ContainsKey(cfg.Id) && await RefreshMcpAsync(cfg, ct) != null) continue;
             res.AddRange(McpToolBuilder.Build(cfg, McpTools[cfg.Id], McpClientOf(cfg), used));
