@@ -1,0 +1,194 @@
+@inherits StateComponent
+
+@if (_edit != null)
+{
+    <div class="persona-edit">
+        <label class="lbl first">@L["نام سرور"]</label>
+        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="my-server" value="@_edit.Name" @oninput="OnName" />
+
+        <label class="lbl">@L["آدرس سرور MCP (HTTP)"]</label>
+        <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="https://example.com/mcp" value="@_edit.Url" @oninput="OnUrl" />
+
+        <label class="lbl">@L["هدرها (اختیاری؛ هر خط یک هدر)"]</label>
+        <textarea class="inp code" rows="3" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="Authorization: Bearer YOUR_TOKEN" value="@_edit.Headers" @oninput="OnHeaders"></textarea>
+        <p class="muted small">@L["هدرها (مثل توکن) در حافظه‌ی امن دستگاه ذخیره می‌شوند."]</p>
+
+        <label class="chk"><input type="checkbox" checked="@_edit.Enabled" @onchange="OnEnabled" /> @L["فعال"]</label>
+        <label class="chk"><input type="checkbox" checked="@_edit.Ask" @onchange="OnAsk" /> @L["قبل از اجرای هر ابزار این سرور از من بپرس"]</label>
+
+        <label class="lbl">@L["مهلت هر درخواست (ثانیه)"]</label>
+        <input class="inp" type="number" min="3" max="300" value="@_edit.TimeoutSec" @onchange="OnTimeout" />
+
+        <div class="row">
+            <button class="btn" type="button" disabled="@_busy" @onclick="Test">@(_busy ? L["در حال اتصال…"] : L["تست اتصال"])</button>
+            <button class="primary" type="button" @onclick="Save">@L["ذخیره"]</button>
+            <button class="btn" type="button" @onclick="Cancel">@L["انصراف"]</button>
+        </div>
+        @if (_status != null)
+        {
+            <p class="status" dir="auto">@_status</p>
+        }
+
+        @if (State.McpTools.TryGetValue(_edit.Id, out var tools))
+        {
+            <label class="lbl">@L["ابزارهای این سرور (تیک = فعال)"]</label>
+            @foreach (var t in tools)
+            {
+                var tool = t;
+                <label class="chk mcp-tool">
+                    <input type="checkbox" checked="@IsOn(tool.Name)" @onchange="() => Toggle(tool.Name)" />
+                    <span><b dir="ltr">@tool.Name</b><small class="muted" dir="auto"> @Short(tool.Description)</small></span>
+                </label>
+            }
+        }
+    </div>
+}
+else
+{
+    <p class="muted small">@L["MCP یک استاندارد باز است: سرورهای MCP ابزار (مثل GitHub، پایگاه داده، فایل، تقویم و …) به مدل می‌دهند. ابزارها باید روشن باشند و API شما از ابزار پشتیبانی کند. فعلاً فقط سرورهای راه‌دور (HTTP) پشتیبانی می‌شوند."]</p>
+    <label class="chk"><input type="checkbox" checked="@State.ToolOpts.McpEnabled" @onchange="OnMaster" /> @L["استفاده از ابزارهای سرورهای MCP"]</label>
+
+    @if (State.McpServers.Count == 0)
+    {
+        <p class="muted">@L["هنوز سروری اضافه نشده است."]</p>
+    }
+    @foreach (var s in State.McpServers)
+    {
+        var srv = s;
+        <div class="persona-row">
+            <span class="persona-ico">🔌</span>
+            <div class="persona-info">
+                <strong dir="auto">@srv.Name @(srv.Enabled ? "" : "(off)")</strong>
+                <small class="muted" dir="ltr">@srv.Url</small>
+                @if (State.McpStatus.TryGetValue(srv.Id, out var st))
+                {
+                    <small class="muted" dir="auto">@st</small>
+                }
+            </div>
+            <button class="btn sm" @onclick="() => Edit(srv)">@L["ویرایش"]</button>
+            <button class="btn sm" @onclick="() => Delete(srv)">@L["حذف"]</button>
+        </div>
+    }
+
+    <div class="row">
+        <button class="primary" @onclick="New">+ @L["سرور جدید"]</button>
+    </div>
+    @if (_status != null)
+    {
+        <p class="status" dir="auto">@_status</p>
+    }
+
+    <details class="adv" style="margin-top:14px">
+        <summary>@L["وارد کردن از JSON (قالب mcpServers)"]</summary>
+        <textarea class="inp code" rows="8" dir="ltr" autocapitalize="off" spellcheck="false"
+                  placeholder='{ "mcpServers": { "my-server": { "url": "https://example.com/mcp", "headers": { "Authorization": "Bearer YOUR_TOKEN" } } } }'
+                  value="@_json" @oninput="OnJson"></textarea>
+        <div class="row">
+            <button class="primary" type="button" @onclick="ImportJson">@L["وارد کردن"]</button>
+        </div>
+    </details>
+}
+
+@code {
+    McpServerConfig? _edit;
+    bool _isNew;
+    bool _busy;
+    string? _status;
+    string _json = "";
+
+    static string Short(string s)
+    {
+        s = s.Replace('\n', ' ');
+        return s.Length > 100 ? s[..100] + "…" : s;
+    }
+
+    void OnName(ChangeEventArgs e) { if (_edit != null) _edit.Name = e.Value?.ToString() ?? string.Empty; }
+    void OnUrl(ChangeEventArgs e) { if (_edit != null) _edit.Url = e.Value?.ToString() ?? string.Empty; }
+    void OnHeaders(ChangeEventArgs e) { if (_edit != null) _edit.Headers = e.Value?.ToString() ?? string.Empty; }
+    void OnEnabled(ChangeEventArgs e) { if (_edit != null) _edit.Enabled = e.Value is true; }
+    void OnAsk(ChangeEventArgs e) { if (_edit != null) _edit.Ask = e.Value is true; }
+    void OnTimeout(ChangeEventArgs e)
+    {
+        if (_edit != null && int.TryParse(e.Value?.ToString(), out var n)) _edit.TimeoutSec = Math.Clamp(n, 3, 300);
+    }
+    void OnMaster(ChangeEventArgs e) => State.SetMcpEnabled(e.Value is true);
+    void OnJson(ChangeEventArgs e) { _json = e.Value?.ToString() ?? string.Empty; _status = null; }
+
+    bool IsOn(string tool) => _edit != null && !_edit.DisabledTools.Contains(tool);
+
+    void Toggle(string tool)
+    {
+        if (_edit == null) return;
+        if (!_edit.DisabledTools.Remove(tool)) _edit.DisabledTools.Add(tool);
+    }
+
+    void New()
+    {
+        _edit = new McpServerConfig();
+        _isNew = true;
+        _status = null;
+    }
+
+    void Edit(McpServerConfig s)
+    {
+        _edit = s.Copy();
+        _isNew = false;
+        _status = null;
+    }
+
+    void Cancel()
+    {
+        if (_edit != null) State.ForgetMcp(_edit.Id);
+        _edit = null;
+        _status = null;
+    }
+
+    bool Valid()
+    {
+        if (_edit == null) return false;
+        _edit.Name = _edit.Name.Trim();
+        _edit.Url = _edit.Url.Trim();
+        if (_edit.Name.Length == 0) { _status = L["نام سرور را وارد کنید."]; return false; }
+        if (!Uri.TryCreate(_edit.Url, UriKind.Absolute, out var u) || (u.Scheme != "http" && u.Scheme != "https"))
+        { _status = L["آدرس باید با http:// یا https:// شروع شود."]; return false; }
+        return true;
+    }
+
+    async Task Test()
+    {
+        if (!Valid() || _edit == null) return;
+        _busy = true;
+        _status = null;
+        var err = await State.RefreshMcpAsync(_edit);
+        _busy = false;
+        _status = err == null ? L["اتصال برقرار شد ✓"] : L["خطا: "] + err;
+    }
+
+    async Task Save()
+    {
+        if (!Valid() || _edit == null) return;
+        await State.SaveMcpServerAsync(_edit);
+        _edit = null;
+        _status = null;
+    }
+
+    async Task Delete(McpServerConfig s) => await State.DeleteMcpServerAsync(s.Id);
+
+    async Task ImportJson()
+    {
+        try
+        {
+            var list = McpToolBuilder.ImportJson(_json, out var skipped);
+            var added = 0;
+            foreach (var m in list)
+            {
+                if (State.McpServers.Any(x => x.Name.Equals(m.Name, StringComparison.OrdinalIgnoreCase))) continue;
+                await State.SaveMcpServerAsync(m);
+                added++;
+            }
+            _status = L.F("{0} سرور اضافه شد.", added) + (skipped.Count > 0 ? " " + L["بدون آدرس (فقط سرورهای HTTP پشتیبانی می‌شوند): "] + string.Join(", ", skipped) : "");
+            if (added > 0) _json = "";
+        }
+        catch (Exception ex) { _status = L["خطا: "] + ex.Message; }
+    }
+}

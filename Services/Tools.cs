@@ -19,6 +19,10 @@ public class ToolDef
     /// <summary>Short name shown to the user next to a call.</summary>
     public string Label = "";
     public Func<JsonObject, CancellationToken, Task<string>> Run = (_, _) => Task.FromResult("");
+    /// <summary>Always ask the user before this tool runs.</summary>
+    public bool Ask;
+    /// <summary>"" = built in, "mcp" = from an MCP server.</summary>
+    public string Source = "";
 }
 
 /// <summary>The tools offered to the model for one request, with the limits.</summary>
@@ -67,7 +71,7 @@ public class ToolSet
         foreach (var t in Tools)
         {
             var d = new JsonObject { ["name"] = t.Name, ["description"] = t.Description };
-            if (t.Parameters["properties"] is JsonObject { Count: > 0 }) d["parameters"] = t.Parameters.DeepClone();
+            if (t.Parameters["properties"] is JsonObject { Count: > 0 }) d["parameters"] = McpSchema.ForGemini(t.Parameters);
             decls.Add(d);
         }
         return new JsonArray(new JsonObject { ["functionDeclarations"] = decls });
@@ -125,6 +129,8 @@ public static class ToolMarks
 public class ToolOptions
 {
     public bool Enabled { get; set; }
+    /// <summary>Use the tools of the MCP servers (when tools are on).</summary>
+    public bool McpEnabled { get; set; } = true;
     public bool DateTime { get; set; } = true;
     public bool Calculator { get; set; } = true;
     public bool WebSearch { get; set; } = true;

@@ -34,6 +34,7 @@
 		<Compile Include="..\..\Services\WebSearch.cs" Link="App\WebSearch.cs" />
 		<Compile Include="..\..\Services\TokenCost.cs" Link="App\TokenCost.cs" />
 		<Compile Include="..\..\Services\Tools.cs" Link="App\Tools.cs" />
+		<Compile Include="..\..\Services\Mcp.cs" Link="App\Mcp.cs" />
 		<Compile Include="..\..\Services\ConnectorRepo.cs" Link="App\ConnectorRepo.cs" />
 	</ItemGroup>
 

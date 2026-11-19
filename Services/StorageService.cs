@@ -48,6 +48,24 @@ public class StorageService
     public Task SaveSearchKeyAsync(string key) => SetSecretAsync("websearch", key);
     public Task<string> LoadSearchKeyAsync() => GetSecretAsync("websearch");
 
+    // MCP servers: the list is plain JSON in the preferences, the headers (tokens) are secrets
+    public async Task<List<McpServerConfig>> LoadMcpServersAsync()
+    {
+        List<McpServerConfig> list;
+        try { list = JsonSerializer.Deserialize<List<McpServerConfig>>(Preferences.Default.Get("mcp_servers", "")) ?? new(); }
+        catch { list = new(); }
+        foreach (var m in list) m.Headers = await GetSecretAsync("mcp-" + m.Id);
+        return list;
+    }
+
+    public async Task SaveMcpServersAsync(List<McpServerConfig> list)
+    {
+        foreach (var m in list) await SetSecretAsync("mcp-" + m.Id, m.Headers);
+        Preferences.Default.Set("mcp_servers", JsonSerializer.Serialize(list));
+    }
+
+    public Task DeleteMcpSecretAsync(string id) => SetSecretAsync("mcp-" + id, "");
+
     public void DeleteSecret(string providerId)
     {
         var key = "apikey-" + providerId;

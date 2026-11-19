@@ -540,6 +540,7 @@ public class ChatState
         catch { SearchOpts = new(); }
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
+        McpServers = await _storage.LoadMcpServersAsync();
         SearchEngine = Preferences.Default.Get("search_engine", WebSearchService.Ddg);
         SearchBaseUrl = Preferences.Default.Get("search_url", "");
         SearchKey = await _storage.LoadSearchKeyAsync();
@@ -803,8 +804,12 @@ public class ChatState
     async Task<bool> ApproveToolAsync(ToolDef tool, System.Text.Json.Nodes.JsonObject args, CancellationToken ct)
     {
         var mode = ToolOpts.AskMode;
-        if (mode == 0 || _toolAllowAll) return true;
-        if (mode == 1 && tool.Name is not ("web_search" or "read_page")) return true;
+        if (_toolAllowAll) return true;
+        if (!tool.Ask)
+        {
+            if (mode == 0) return true;
+            if (mode == 1 && tool.Name is not ("web_search" or "read_page")) return true;
+        }
 
         var detail = string.Join("\n", args.Select(kv => kv.Key + ": " + (kv.Value is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : kv.Value?.ToJsonString())));
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -816,6 +821,84 @@ public class ChatState
         var ok = await tcs.Task;
         if (ToolAsk != null && ReferenceEquals(_toolAskTcs, tcs)) { ToolAsk = null; _toolAskTcs = null; Notify(); }
         return ok;
+    }
+
+    // ---- MCP servers
+    public List<McpServerConfig> McpServers { get; private set; } = new();
+    /// <summary>Tools found on each server (by server id), filled by "Test connection" or at the first request.</summary>
+    public Dictionary<string, List<McpToolInfo>> McpTools { get; } = new();
+    public Dictionary<string, string> McpStatus { get; } = new();
+    readonly Dictionary<string, McpClient> _mcpClients = new();
+
+    McpClient McpClientOf(McpServerConfig cfg)
+    {
+        if (!_mcpClients.TryGetValue(cfg.Id, out var c))
+            _mcpClients[cfg.Id] = c = new McpClient(_http, cfg);
+        return c;
+    }
+
+    public async Task SaveMcpServerAsync(McpServerConfig cfg)
+    {
+        var i = McpServers.FindIndex(x => x.Id == cfg.Id);
+        if (i >= 0) McpServers[i] = cfg; else McpServers.Add(cfg);
+        _mcpClients.Remove(cfg.Id);
+        McpTools.Remove(cfg.Id);
+        McpStatus.Remove(cfg.Id);
+        await _storage.SaveMcpServersAsync(McpServers);
+        Notify();
+    }
+
+    public async Task DeleteMcpServerAsync(string id)
+    {
+        McpServers.RemoveAll(x => x.Id == id);
+        _mcpClients.Remove(id);
+        McpTools.Remove(id);
+        McpStatus.Remove(id);
+        await _storage.DeleteMcpSecretAsync(id);
+        await _storage.SaveMcpServersAsync(McpServers);
+        Notify();
+    }
+
+    /// <summary>Drops what was learned about a server (after an unsaved test).</summary>
+    public void ForgetMcp(string id) { _mcpClients.Remove(id); McpTools.Remove(id); McpStatus.Remove(id); Notify(); }
+
+    public void SetMcpEnabled(bool on) { ToolOpts.McpEnabled = on; SaveToolOpts(); }
+
+    /// <summary>Connects, reads the tool list and keeps it. Returns an error text or null.</summary>
+    public async Task<string?> RefreshMcpAsync(McpServerConfig cfg, CancellationToken ct = default)
+    {
+        try
+        {
+            var client = McpClientOf(cfg);
+            client.Reset();
+            var tools = await client.ListToolsAsync(ct);
+            McpTools[cfg.Id] = tools;
+            McpStatus[cfg.Id] = L.F("{0} ابزار", tools.Count);
+            _log.Info($"MCP '{cfg.Name}': {tools.Count} tools");
+            Notify();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            McpTools.Remove(cfg.Id);
+            McpStatus[cfg.Id] = L["خطا: "] + ex.Message;
+            _log.Info($"MCP '{cfg.Name}' failed: {ex.Message}");
+            Notify();
+            return ex.Message;
+        }
+    }
+
+    /// <summary>The tools of all enabled MCP servers (a server that cannot be reached is skipped).</summary>
+    async Task<List<ToolDef>> BuildMcpToolsAsync(CancellationToken ct)
+    {
+        var res = new List<ToolDef>();
+        var used = new HashSet<string>();
+        foreach (var cfg in McpServers.Where(x => x.Enabled && x.Url.Length > 0))
+        {
+            if (!McpTools.ContainsKey(cfg.Id) && await RefreshMcpAsync(cfg, ct) != null) continue;
+            res.AddRange(McpToolBuilder.Build(cfg, McpTools[cfg.Id], McpClientOf(cfg), used));
+        }
+        return res;
     }
 
     public void ResetToolOpts() { ToolOpts = new(); SaveToolOpts(); }
@@ -1977,6 +2060,8 @@ public class ChatState
             _toolAllowAll = false;
             provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts);
             provider.Tools.Approve = (tool, args) => ApproveToolAsync(tool, args, ct);
+            if (ToolOpts.McpEnabled && McpServers.Count > 0)
+                provider.Tools.Tools.AddRange(await BuildMcpToolsAsync(ct));
             if (provider.Tools.Tools.Count == 0) provider.Tools = null;
             else if (!string.IsNullOrWhiteSpace(ToolOpts.ExtraPrompt))
                 system = string.Join("\n\n", new[] { system, ToolOpts.ExtraPrompt }.Where(x => !string.IsNullOrWhiteSpace(x)));
