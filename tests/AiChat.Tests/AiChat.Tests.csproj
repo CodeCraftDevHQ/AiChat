@@ -36,6 +36,7 @@
 		<Compile Include="..\..\Services\Tools.cs" Link="App\Tools.cs" />
 		<Compile Include="..\..\Services\Mcp.cs" Link="App\Mcp.cs" />
 		<Compile Include="..\..\Services\Memory.cs" Link="App\Memory.cs" />
+		<Compile Include="..\..\Services\Summary.cs" Link="App\Summary.cs" />
 		<Compile Include="..\..\Services\ConnectorRepo.cs" Link="App\ConnectorRepo.cs" />
 	</ItemGroup>
 

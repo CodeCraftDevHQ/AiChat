@@ -1,0 +1,52 @@
+@inherits StateComponent
+
+<p class="muted small">@L["در گفتگوهای طولانی، پیام‌های قدیمی به‌جای ارسال کامل، به‌صورت یک خلاصه به مدل داده می‌شوند. پیام‌ها در برنامه سر جایشان می‌مانند و فقط چیزی که به مدل فرستاده می‌شود کوتاه‌تر است."]</p>
+
+<label class="chk"><input type="checkbox" checked="@State.SummaryOpts.Enabled" @onchange="OnEnabled" /> @L["خلاصه‌سازی خودکار گفتگوهای طولانی"]</label>
+
+<label class="lbl">@L["شروع خلاصه‌سازی بعد از (توکن تقریبی)"]</label>
+<input class="inp" type="number" min="500" max="200000" step="500" value="@State.SummaryOpts.TriggerTokens" @onchange="OnTrigger" />
+
+<label class="lbl">@L["تعداد آخرین پیام‌هایی که کامل می‌مانند"]</label>
+<input class="inp" type="number" min="2" max="100" value="@State.SummaryOpts.KeepLast" @onchange="OnKeep" />
+
+<label class="lbl">@L["حداکثر طول خلاصه (کلمه)"]</label>
+<input class="inp" type="number" min="50" max="2000" step="50" value="@State.SummaryOpts.MaxWords" @onchange="OnWords" />
+
+<details class="adv-search">
+    <summary>@L["پیشرفته"]</summary>
+    <label class="lbl first">@L["API و مدل خلاصه‌ساز (خالی = همان API و مدل گفتگو)"]</label>
+    <AppSelect Title="API" Value="@State.SummaryOpts.ProviderId" ValueChanged="OnProvider" Options="ProviderOptions()" />
+    @if (!string.IsNullOrEmpty(State.SummaryOpts.ProviderId))
+    {
+        <input class="inp" dir="ltr" list="summary-models" placeholder="@L["مدل (خالی = مدل پیش‌فرض API)"]" value="@State.SummaryOpts.Model" @onchange="OnModel" />
+        <datalist id="summary-models">
+            @foreach (var m in State.Providers.FirstOrDefault(x => x.Id == State.SummaryOpts.ProviderId)?.Models ?? new List<string>())
+            {
+                <option value="@m"></option>
+            }
+        </datalist>
+    }
+
+    <label class="lbl">@L["دستور خلاصه‌سازی (خالی = پیش‌فرض)"]</label>
+    <textarea class="inp" rows="5" dir="auto" placeholder="@SummaryHelper.DefaultInstructions" value="@State.SummaryOpts.Prompt" @oninput="OnPrompt"></textarea>
+</details>
+
+<div class="row">
+    <button class="btn" @onclick="State.ResetSummaryOpts">@L["بازنشانی"]</button>
+</div>
+<p class="muted small">@L["خلاصه‌سازی دستی: در منوی ⋯ گفتگو «خلاصه‌سازی همین حالا» را بزنید. خلاصه بالای اولین پیام باقی‌مانده دیده می‌شود و قابل ویرایش یا حذف است."]</p>
+
+@code {
+    void OnEnabled(ChangeEventArgs e) { State.SummaryOpts.Enabled = e.Value is true; State.SaveSummaryOpts(); }
+    void OnTrigger(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var n)) { State.SummaryOpts.TriggerTokens = Math.Clamp(n, 500, 200000); State.SaveSummaryOpts(); } }
+    void OnKeep(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var n)) { State.SummaryOpts.KeepLast = Math.Clamp(n, 2, 100); State.SaveSummaryOpts(); } }
+    void OnWords(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var n)) { State.SummaryOpts.MaxWords = Math.Clamp(n, 50, 2000); State.SaveSummaryOpts(); } }
+    void OnProvider(string id) { State.SummaryOpts.ProviderId = id; State.SummaryOpts.Model = ""; State.SaveSummaryOpts(); }
+    void OnModel(ChangeEventArgs e) { State.SummaryOpts.Model = e.Value?.ToString() ?? string.Empty; State.SaveSummaryOpts(); }
+    void OnPrompt(ChangeEventArgs e) { State.SummaryOpts.Prompt = e.Value?.ToString() ?? string.Empty; State.SaveSummaryOpts(); }
+
+    AppSelect.SelectOption[] ProviderOptions() =>
+        new[] { new AppSelect.SelectOption("", L["— همان API گفتگو —"]) }
+            .Concat(State.Providers.Where(p => !p.IsGenerator).Select(p => new AppSelect.SelectOption(p.Id, p.Name))).ToArray();
+}

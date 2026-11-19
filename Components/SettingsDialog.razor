@@ -393,6 +393,10 @@
                             <PromptManager />
                             break;
 
+                        case "summary":
+                            <SummarySettings />
+                            break;
+
                         case "memory":
                             <MemorySettings />
                             break;
@@ -806,6 +810,7 @@ else if (_dlg == 2)
         new SectionItem("answer", L["پاسخ مدل"]),
         new SectionItem("search", L["جستجو در وب"]),
         new SectionItem("memory", L["حافظه"]),
+        new SectionItem("summary", L["خلاصه‌سازی گفتگو"]),
         new SectionItem("personas", L["شخصیت‌ها"]),
         new SectionItem("prompts", L["کتابخانه‌ی پرامپت"]),
         new SectionItem("tools", L["ابزارها"]),

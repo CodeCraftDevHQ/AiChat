@@ -1,0 +1,47 @@
+@inherits StateComponent
+
+@if (Conv != null && !string.IsNullOrWhiteSpace(Conv.Summary))
+{
+    <details class="summary-banner">
+        <summary>📝 @L.F("{0} پیام قبلی خلاصه شده‌اند (برای مدل)", Conv.SummaryUpTo)</summary>
+        @if (_editing)
+        {
+            <textarea class="inp" rows="8" dir="auto" value="@_text" @oninput="OnText"></textarea>
+            <div class="row">
+                <button class="primary" @onclick="Save">@L["ذخیره"]</button>
+                <button class="btn" @onclick="Cancel">@L["انصراف"]</button>
+            </div>
+        }
+        else
+        {
+            <div class="summary-text" dir="auto">@Conv.Summary</div>
+            <div class="row">
+                <button class="btn sm" @onclick="Edit">@L["ویرایش"]</button>
+                <button class="btn sm" @onclick="Remove">@L["حذف خلاصه (ارسال کامل پیام‌ها)"]</button>
+            </div>
+        }
+    </details>
+}
+
+@code {
+    [Parameter] public Conversation? Conv { get; set; }
+
+    bool _editing;
+    string _text = "";
+
+    void Edit() { _text = Conv?.Summary ?? ""; _editing = true; }
+    void Cancel() => _editing = false;
+    void OnText(ChangeEventArgs e) => _text = e.Value?.ToString() ?? string.Empty;
+
+    async Task Save()
+    {
+        if (Conv != null) await State.SetSummaryTextAsync(Conv, _text);
+        _editing = false;
+    }
+
+    async Task Remove()
+    {
+        if (Conv != null) await State.ClearSummaryAsync(Conv);
+        _editing = false;
+    }
+}

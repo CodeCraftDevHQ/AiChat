@@ -254,6 +254,10 @@ public class Conversation
     /// <summary>null = follow persona / global setting, true / false = long-term memory on / off in this chat.</summary>
     public bool? Memory { get; set; }
 
+    /// <summary>Summary of the first <see cref="SummaryUpTo"/> messages (they are not sent any more; they stay visible).</summary>
+    public string? Summary { get; set; }
+    public int SummaryUpTo { get; set; }
+
     /// <summary>Settings of this chat only (null = none).</summary>
     public GenSettings? Gen { get; set; }
 

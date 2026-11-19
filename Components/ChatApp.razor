@@ -130,6 +130,10 @@
                     @for (var i = 0; i < msgs.Count; i++)
                     {
                         var last = i == msgs.Count - 1;
+                        @if (i > 0 && i == State.Active!.SummaryUpTo)
+                        {
+                            <SummaryBanner Conv="State.Active" />
+                        }
                         <MessageView @key="msgs[i]" Message="msgs[i]" Index="i" IsLast="last" Streaming="@(State.IsStreaming && last)" />
                     }
                 </div>

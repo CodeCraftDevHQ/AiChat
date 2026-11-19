@@ -562,6 +562,7 @@ public class ChatState
         try { SearchOpts = System.Text.Json.JsonSerializer.Deserialize<SearchOptions>(Preferences.Default.Get("search_opts", "")) ?? new(); }
         catch { SearchOpts = new(); }
         LoadMemoryOpts();
+        LoadSummaryOpts();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
         McpServers = await _storage.LoadMcpServersAsync();
@@ -643,6 +644,89 @@ public class ChatState
     string BuildSystem(ProviderConfig provider, Project? project, Conversation? conv) =>
         string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, PersonaOf(conv)?.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt, MemoryPrompt(conv) }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    // ---- summary of long chats
+    public SummaryOptions SummaryOpts { get; private set; } = new();
+
+    void LoadSummaryOpts()
+    {
+        try { SummaryOpts = System.Text.Json.JsonSerializer.Deserialize<SummaryOptions>(Preferences.Default.Get("summary_opts", "")) ?? new(); }
+        catch { SummaryOpts = new(); }
+    }
+
+    public void SaveSummaryOpts() { Preferences.Default.Set("summary_opts", System.Text.Json.JsonSerializer.Serialize(SummaryOpts)); Notify(); }
+
+    public void ResetSummaryOpts() { SummaryOpts = new(); SaveSummaryOpts(); }
+
+    /// <summary>The summary no longer fits when a message before its end is changed.</summary>
+    void InvalidateSummary(Conversation conv, int changedIndex)
+    {
+        if (conv.SummaryUpTo > changedIndex || conv.SummaryUpTo > conv.Messages.Count)
+        {
+            conv.Summary = null;
+            conv.SummaryUpTo = 0;
+        }
+    }
+
+    public async Task SetSummaryTextAsync(Conversation conv, string text)
+    {
+        conv.Summary = text.Trim();
+        if (conv.Summary.Length == 0) conv.SummaryUpTo = 0;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
+    public Task ClearSummaryAsync(Conversation conv) => SetSummaryTextAsync(conv, "");
+
+    /// <summary>
+    /// Summarizes the messages that are not summarized yet, except the newest ones. <paramref name="messages"/> are the
+    /// messages that would be sent. Returns true when the summary changed.
+    /// </summary>
+    async Task<bool> SummarizeAsync(Conversation conv, IReadOnlyList<ChatMessage> messages, bool force, ProviderConfig fallbackProvider, string fallbackModel, CancellationToken ct)
+    {
+        var o = SummaryOpts;
+        var upTo = Math.Min(conv.SummaryUpTo, messages.Count);
+        var cut = SummaryHelper.NextCut(messages.Select(m => m.Role).ToList(), upTo, o.KeepLast);
+        if (cut <= upTo) return false;
+
+        string TextOf(ChatMessage m) => SummaryHelper.MessageText(m.Role, ToolMarks.Strip(MarkdownRenderer.StripThink(m.Content)), m.Attachments.Select(a => a.Name));
+        if (!force &&
+            !SummaryHelper.IsTooLong(conv.Summary, messages.Skip(upTo).Select(m => m.Content), o.TriggerTokens))
+            return false;
+
+        var provider = Providers.FirstOrDefault(p => p.Id == o.ProviderId && !p.IsGenerator) ?? fallbackProvider;
+        var model = provider.Id == o.ProviderId && o.Model.Length > 0 ? o.Model
+                  : provider.Id == fallbackProvider.Id ? fallbackModel : PickModel(provider);
+        var chunk = string.Join("\n\n", messages.Skip(upTo).Take(cut - upTo).Select(TextOf));
+        var prompt = SummaryHelper.BuildPrompt(conv.Summary, chunk, o.MaxWords, o.Prompt);
+
+        _log.Info($"Summary: {cut - upTo} messages ({provider.Name} / {model})");
+        var reply = await CompleteOnceAsync(provider, model, "You write faithful, compact conversation summaries.", prompt, ct);
+        if (reply.Trim().Length == 0) throw new InvalidOperationException(L["مدل خلاصه‌ای برنگرداند."]);
+
+        conv.Summary = reply.Trim();
+        conv.SummaryUpTo = cut;
+        await _storage.SaveConversationsAsync(Conversations);
+        Notify();
+        return true;
+    }
+
+    /// <summary>"Summarize now" from the chat menu.</summary>
+    public async Task SummarizeNowAsync(Conversation conv)
+    {
+        if (IsStreaming) return;
+        var provider = Providers.FirstOrDefault(p => p.Id == conv.ProviderId && !p.IsGenerator) ?? CurrentProvider;
+        if (provider == null || provider.IsGenerator) { SetNotice(L["ابتدا یک API اضافه کنید."]); return; }
+        var model = conv.Model.Length > 0 && provider.Id == conv.ProviderId ? conv.Model : PickModel(provider);
+        ShowToast(L["در حال خلاصه‌سازی…"]);
+        try
+        {
+            if (await SummarizeAsync(conv, conv.Messages, true, provider, model, CancellationToken.None))
+                ShowToast(L.F("{0} پیام خلاصه شد.", conv.SummaryUpTo));
+            else ShowToast(L["گفتگو برای خلاصه‌سازی کوتاه است."]);
+        }
+        catch (Exception ex) { SetNotice(L["خطا: "] + ex.Message); }
+    }
 
     // ---- long-term memory
     public List<MemoryItem> Memory { get; private set; } = new();
@@ -2133,6 +2217,7 @@ public class ChatState
         var idx = conv.Messages.IndexOf(msg);
         if (idx < 0) return;
 
+        InvalidateSummary(conv, idx);
         var tail = conv.Messages.Skip(idx + 1).ToList();
         SnapshotCurrent(msg, tail);
         conv.Messages.RemoveRange(idx + 1, conv.Messages.Count - idx - 1);
@@ -2163,6 +2248,7 @@ public class ChatState
         var target = Math.Clamp(msg.VersionIndex + delta, 0, msg.Versions.Count - 1);
         if (target == msg.VersionIndex) return;
 
+        InvalidateSummary(conv, idx);
         SnapshotCurrent(msg, conv.Messages.Skip(idx + 1).ToList());
         conv.Messages.RemoveRange(idx + 1, conv.Messages.Count - idx - 1);
 
@@ -2330,6 +2416,27 @@ public class ChatState
         _log.Info($"Request: {provider.Name} ({provider.Type}) / {model}, {history.Count} messages, {fileCount} attachments" +
                   (project != null ? $", project '{project.Name}'" : ""));
         var system = BuildSystem(provider, project, conv);
+
+        // long chats: the older messages are replaced by a summary (a failure only means "send everything")
+        InvalidateSummary(conv, history.Count);
+        if (SummaryOpts.Enabled && !provider.IsGenerator)
+        {
+            try
+            {
+                GenStatus = L["📝 در حال خلاصه‌سازی گفتگو…"];
+                Notify();
+                await SummarizeAsync(conv, history, false, provider, model, ct);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { _log.Warn("Summary failed: " + ex.Message); }
+            finally { GenStatus = null; }
+        }
+        if (conv.SummaryUpTo > 0 && !string.IsNullOrWhiteSpace(conv.Summary) && conv.SummaryUpTo <= history.Count)
+        {
+            history = history.Skip(conv.SummaryUpTo).ToList();
+            system = string.Join("\n\n", new[] { system, SummaryHelper.SystemNote(conv.Summary) }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        }
+
         provider = WithGen(provider, conv);
         if (ToolsApply(provider, PersonaOf(conv)))
         {

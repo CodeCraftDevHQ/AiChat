@@ -184,6 +184,7 @@
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
         <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 260px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+            <button @onclick="SummarizeFromMenu">@L["خلاصه‌سازی همین حالا"]</button>
             <button @onclick="SuggestMemoryFromMenu">@L["پیشنهاد حافظه از این گفتگو"]</button>
             <button @onclick="StartSelectFromMenu">@L["انتخاب چند گفتگو"]</button>
             <button @onclick="PinFromMenu">@(_menuConv.Pinned ? L["برداشتن پین"] : L["پین کردن"])</button>
@@ -360,6 +361,13 @@
         _selConfirm = false;
         _sel.Clear();
         if (list.Count > 0) await State.DeleteConversationsAsync(list);
+    }
+
+    async Task SummarizeFromMenu()
+    {
+        var c = _menuConv;
+        CloseMenu();
+        if (c != null) await State.SummarizeNowAsync(c);
     }
 
     async Task SuggestMemoryFromMenu()
