@@ -440,6 +440,28 @@ public class ChatState
         await _storage.SaveConversationsAsync(Conversations);
     }
 
+    /// <summary>Moves many conversations at once (null = out of any project).</summary>
+    public async Task MoveConversationsAsync(IEnumerable<Conversation> list, string? projectId)
+    {
+        foreach (var c in list.ToList()) c.ProjectId = projectId;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
+    /// <summary>Deletes many conversations (and their attachments) with one save.</summary>
+    public async Task DeleteConversationsAsync(IEnumerable<Conversation> list)
+    {
+        var items = list.ToList();
+        if (Active != null && items.Contains(Active)) { Stop(); Active = null; }
+        foreach (var c in items)
+        {
+            Conversations.Remove(c);
+            _storage.DeleteAttachments(AllAttachments(c.Messages).ToList());
+        }
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
     public void NewChatInProject(string projectId)
     {
         NewChat();

@@ -6,7 +6,43 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
             <span>@L["گفتگوی جدید"]</span>
         </button>
+        <button class="icon-btn sel-toggle @(_select ? "on" : "")" title="@L["انتخاب چند گفتگو"]" @onclick="ToggleSelect">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="m8 12 3 3 5-6" /></svg>
+        </button>
     </div>
+
+    @if (_select)
+    {
+        <div class="sb-selbar">
+            <div class="sel-row">
+                <span class="sel-count">@_sel.Count @L["انتخاب شده"]</span>
+                <button class="btn sm" @onclick="SelectAll">@L["انتخاب همه"]</button>
+                <button class="btn sm" @onclick="ToggleSelect">@L["پایان"]</button>
+            </div>
+            <div class="sel-row">
+                <button class="btn sm" disabled="@(_sel.Count == 0)" @onclick="() => _selMoveOpen = !_selMoveOpen">📁 @L["انتقال به پروژه"]</button>
+                @if (_selConfirm)
+                {
+                    <button class="btn sm danger" @onclick="DeleteSelected">@L["حذف؟"] (@_sel.Count)</button>
+                }
+                else
+                {
+                    <button class="btn sm danger" disabled="@(_sel.Count == 0)" @onclick="() => _selConfirm = true">@L["حذف"]</button>
+                }
+            </div>
+            @if (_selMoveOpen)
+            {
+                <div class="submenu sel-move">
+                    @foreach (var p in State.Projects)
+                    {
+                        var target = p;
+                        <button dir="auto" @onclick="() => MoveSelected(target.Id)">📁 @target.Name</button>
+                    }
+                    <button @onclick="() => MoveSelected(null)">@L["بدون پروژه"]</button>
+                </div>
+            }
+        </div>
+    }
 
     <div class="sb-search">
         <div class="sb-search-box">
@@ -40,8 +76,12 @@
             foreach (var hit in hits)
             {
                 var h = hit;
-                <div class="conv hit @(h.Conv == State.Active ? "active" : "")" @onclick="() => OpenHit(h)">
+                <div class="conv hit @(h.Conv == State.Active ? "active" : "")" @onclick="() => HitClick(h)">
                     <div class="hit-main">
+                        @if (_select)
+                        {
+                            <input type="checkbox" class="sel-check" checked="@_sel.Contains(h.Conv.Id)" @onclick:preventDefault="true" />
+                        }
                         <span class="title" dir="auto">@h.Conv.Title</span>
                         @if (State.SidebarSearchInContent && h.Count > 0)
                         {
@@ -99,7 +139,11 @@
             }
 
             var conv = row.Conv!;
-            <div class="conv @(conv == State.Active ? "active" : "") @(row.Indent ? "indent" : "")" @onclick="() => State.OpenConversation(conv)">
+            <div class="conv @(conv == State.Active ? "active" : "") @(row.Indent ? "indent" : "") @(_select && _sel.Contains(conv.Id) ? "picked" : "")" @onclick="() => RowClick(conv)">
+                @if (_select)
+                {
+                    <input type="checkbox" class="sel-check" checked="@_sel.Contains(conv.Id)" @onclick:preventDefault="true" />
+                }
                 @if (_renamingId == conv.Id)
                 {
                     <input class="rename-input" dir="auto" maxlength="80" @ref="_renameInput"
@@ -140,6 +184,7 @@
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
         <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 260px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+            <button @onclick="StartSelectFromMenu">@L["انتخاب چند گفتگو"]</button>
             <button @onclick="PinFromMenu">@(_menuConv.Pinned ? L["برداشتن پین"] : L["پین کردن"])</button>
             <button @onclick="RenameFromMenu">@L["تغییر نام"]</button>
             <button @onclick="ConvSettingsFromMenu">@L["تنظیمات پاسخ این گفتگو"]</button>
@@ -251,6 +296,79 @@
     }
 
     void NewProject() => State.OpenProjectDialog(null);
+
+    // ---- selecting many conversations ----
+
+    bool _select;
+    bool _selMoveOpen;
+    bool _selConfirm;
+    readonly HashSet<string> _sel = new();
+
+    void ToggleSelect()
+    {
+        _select = !_select;
+        _sel.Clear();
+        _selMoveOpen = false;
+        _selConfirm = false;
+        CloseMenu();
+    }
+
+    void Pick(Conversation c)
+    {
+        if (!_sel.Remove(c.Id)) _sel.Add(c.Id);
+        _selConfirm = false;
+    }
+
+    void RowClick(Conversation c)
+    {
+        if (_select) Pick(c);
+        else State.OpenConversation(c);
+    }
+
+    void HitClick(ChatState.SearchHit h)
+    {
+        if (_select) Pick(h.Conv);
+        else OpenHit(h);
+    }
+
+    void SelectAll()
+    {
+        var visible = Searching
+            ? State.SearchConversations(_query, State.SidebarSearchInContent).Select(h => h.Conv).ToList()
+            : BuildRows().Where(r => r.Kind == "conv" && r.Conv != null).Select(r => r.Conv!).ToList();
+        if (visible.All(c => _sel.Contains(c.Id))) _sel.Clear();
+        else foreach (var c in visible) _sel.Add(c.Id);
+        _selConfirm = false;
+    }
+
+    List<Conversation> Selected() => State.Conversations.Where(c => _sel.Contains(c.Id)).ToList();
+
+    async Task MoveSelected(string? projectId)
+    {
+        var list = Selected();
+        _selMoveOpen = false;
+        if (list.Count == 0) return;
+        await State.MoveConversationsAsync(list, projectId);
+        if (projectId != null) _expanded.Add(projectId);
+        _sel.Clear();
+    }
+
+    async Task DeleteSelected()
+    {
+        var list = Selected();
+        _selConfirm = false;
+        _sel.Clear();
+        if (list.Count > 0) await State.DeleteConversationsAsync(list);
+    }
+
+    void StartSelectFromMenu()
+    {
+        var c = _menuConv;
+        CloseMenu();
+        _select = true;
+        _sel.Clear();
+        if (c != null) _sel.Add(c.Id);
+    }
 
     // ---- menus ----
 

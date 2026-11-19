@@ -405,13 +405,21 @@
                             var to = State.ToolOpts;
                             <label class="chk first"><input type="checkbox" checked="@to.Enabled" @onchange="e => ToolOpt(o => o.Enabled = e.Value is true)" /> @L["ابزارها برای مدل فعال باشند"]</label>
                             <p class="muted small">@L["مدل خودش تصمیم می‌گیرد چه موقع از ابزار استفاده کند (مثلاً جستجو کند، صفحه بخواند یا محاسبه کند)، نتیجه را می‌گیرد و جوابش را ادامه می‌دهد. فقط برای APIهای سازگار با OpenAI و مدل‌هایی که ابزار را پشتیبانی می‌کنند؛ اگر مدلی پشتیبانی نکند، خودکار بدون ابزار جواب می‌دهد."]</p>
-                            <p class="muted small">@L["اگر ابزار جستجو روشن است، دکمه‌ی 🌐 کنار کادر پیام را خاموش نگه دارید تا جستجو دو بار انجام نشود."]</p>
 
-                            <label class="lbl">@L["ابزارهای در دسترس"]</label>
-                            <label class="chk"><input type="checkbox" checked="@to.WebSearch" @onchange="e => ToolOpt(o => o.WebSearch = e.Value is true)" /> 🔎 @L["جستجوی وب (از تنظیمات «جستجو در وب» استفاده می‌کند)"]</label>
+
+                            <details class="adv-search" open>
+                                <summary>@L["ابزارهای در دسترس"]</summary>
+                                <label class="chk"><input type="checkbox" checked="@to.WebSearch" @onchange="e => ToolOpt(o => o.WebSearch = e.Value is true)" /> 🔎 @L["جستجوی وب (از تنظیمات «جستجو در وب» استفاده می‌کند)"]</label>
+                                <label class="chk"><input type="checkbox" checked="@to.ReadPage" @onchange="e => ToolOpt(o => o.ReadPage = e.Value is true)" /> 📄 @L["خواندن صفحه‌ی وب با آدرس"]</label>
+                            <label class="chk"><input type="checkbox" checked="@to.DateTime" @onchange="e => ToolOpt(o => o.DateTime = e.Value is true)" /> 🕒 @L["تاریخ و ساعت"]</label>
+                            <label class="chk"><input type="checkbox" checked="@to.Calculator" @onchange="e => ToolOpt(o => o.Calculator = e.Value is true)" /> 🧮 @L["ماشین‌حساب"]</label>
+                            </details>
+
                             @if (to.WebSearch)
                             {
-                                <div class="web-opts">
+                                <details class="adv-search">
+                                    <summary>🔎 @L["تنظیمات ابزار جستجوی وب"]</summary>
+                                    <p class="muted small">@L["اگر ابزار جستجو روشن است، دکمه‌ی 🌐 کنار کادر پیام را خاموش نگه دارید تا جستجو دو بار انجام نشود."]</p>
                                     <button class="btn sm" @onclick='() => State.SetSettingsSection("search")'>⚙ @L["رفتن به تنظیمات جستجوی وب"]</button>
                                     <label class="chk"><input type="checkbox" checked="@to.SearchModelControls" @onchange="e => ToolOpt(o => o.SearchModelControls = e.Value is true)" /> @L["مدل خودش تعیین کند: تعداد نتایج، خواندن صفحه‌ها و بازه‌ی زمانی"]</label>
                                     @if (to.SearchModelControls)
@@ -424,13 +432,12 @@
                                     <label class="lbl">@L["حداکثر تعداد جستجو در یک پاسخ (۰ = بدون محدودیت)"]</label>
                                     <input class="inp" type="number" min="0" max="50" value="@to.MaxSearchCalls" @onchange="e => ToolOpt(o => o.MaxSearchCalls = Math.Clamp(ToInt(e), 0, 50))" />
                                     <p class="muted small">@L["موتور جستجو، منطقه، SafeSearch، فهرست سیاه سایت‌ها و ... از تنظیمات «جستجو در وب» می‌آید. اگر مدل چیزی تعیین نکند، همان مقدارها اعمال می‌شود."]</p>
-                                </div>
+                                                                </details>
                             }
-                            <label class="chk"><input type="checkbox" checked="@to.ReadPage" @onchange="e => ToolOpt(o => o.ReadPage = e.Value is true)" /> 📄 @L["خواندن صفحه‌ی وب با آدرس"]</label>
-                            <label class="chk"><input type="checkbox" checked="@to.DateTime" @onchange="e => ToolOpt(o => o.DateTime = e.Value is true)" /> 🕒 @L["تاریخ و ساعت"]</label>
-                            <label class="chk"><input type="checkbox" checked="@to.Calculator" @onchange="e => ToolOpt(o => o.Calculator = e.Value is true)" /> 🧮 @L["ماشین‌حساب"]</label>
 
-                            <label class="lbl">@L["حداکثر دفعات استفاده از ابزار در یک پاسخ"]: @to.MaxRounds</label>
+                            <details class="adv-search">
+                                <summary>@L["اجرا و نمایش"]</summary>
+                                <label class="lbl">@L["حداکثر دفعات استفاده از ابزار در یک پاسخ"]: @to.MaxRounds</label>
                             <input type="range" class="range" min="1" max="15" step="1" value="@to.MaxRounds" @oninput="e => ToolOpt(o => o.MaxRounds = ToInt(e))" />
 
                             <label class="lbl">@L["حداکثر طول نتیجه‌ی هر ابزار (نویسه)"]</label>
@@ -439,12 +446,17 @@
                             <label class="lbl">@L["پرسیدن قبل از اجرای ابزار"]</label>
                             <AppSelect Title="@L["پرسیدن قبل از اجرای ابزار"]" Value="@to.AskMode.ToString()" ValueChanged="v => ToolOpt(o => o.AskMode = int.TryParse(v, out var n) ? n : 0)"
                                        Options="@(new AppSelect.SelectOption[] { new("0", L["هرگز (خودکار اجرا شود)"]), new("1", L["فقط ابزارهای اینترنتی (جستجو و خواندن صفحه)"]), new("2", L["همه‌ی ابزارها"]) })" />
+                                <label class="chk"><input type="checkbox" checked="@to.ShowCalls" @onchange="e => ToolOpt(o => o.ShowCalls = e.Value is true)" /> @L["هر استفاده از ابزار را داخل پاسخ نشان بده (🔧)"]</label>
+                            </details>
 
-                            <label class="chk"><input type="checkbox" checked="@to.ShowCalls" @onchange="e => ToolOpt(o => o.ShowCalls = e.Value is true)" /> @L["هر استفاده از ابزار را داخل پاسخ نشان بده (🔧)"]</label>
-
-                            <label class="lbl">@L["دستور اضافه برای مدل هنگام فعال بودن ابزارها (اختیاری)"]</label>
+                            <details class="adv-search">
+                                <summary>@L["دستور اضافه برای مدل"]</summary>
+                                <label class="lbl">@L["دستور اضافه برای مدل هنگام فعال بودن ابزارها (اختیاری)"]</label>
                             <textarea class="inp" rows="3" dir="auto" placeholder="@L["مثلاً: برای اخبار و قیمت‌ها حتماً جستجو کن."]" value="@to.ExtraPrompt" @onchange="e => ToolOpt(o => o.ExtraPrompt = e.Value?.ToString() ?? string.Empty)"></textarea>
+                            </details>
 
+                            <p class="muted small" style="margin-top:12px">@L["ابزارهای سرورهای MCP در بخش «سرورهای MCP» تنظیم می‌شوند."]</p>
+                            <button class="btn sm" @onclick='() => State.SetSettingsSection("mcp")'>⚙ @L["سرورهای MCP"]</button>
                             <button class="btn sm" style="margin-top:10px" @onclick="State.ResetToolOpts">@L["بازنشانی"]</button>
                             break;
 

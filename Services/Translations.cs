@@ -530,5 +530,14 @@ public static class Translations
         ["هنوز سروری اضافه نشده است."] = "No servers yet.",
         ["وارد کردن"] = "Import",
         ["وارد کردن از JSON (قالب mcpServers)"] = "Import from JSON (mcpServers format)",
+        ["🔧 ابزارها"] = "🔧 Tools",
+        ["تنظیمات ابزار جستجوی وب"] = "Web search tool settings",
+        ["اجرا و نمایش"] = "Running and display",
+        ["دستور اضافه برای مدل"] = "Extra instruction for the model",
+        ["ابزارهای سرورهای MCP در بخش «سرورهای MCP» تنظیم می‌شوند."] = "Tools of MCP servers are set up in the \"MCP servers\" section.",
+        ["انتخاب چند گفتگو"] = "Select conversations",
+        ["انتخاب شده"] = "selected",
+        ["پایان"] = "Done",
+        ["انتقال به پروژه"] = "Move to project",
     };
 }

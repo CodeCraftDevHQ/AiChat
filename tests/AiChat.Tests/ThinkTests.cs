@@ -74,22 +74,29 @@ public class ThinkTests
     }
 
     [Fact]
-    public void Tool_calls_become_compact_chips()
+    public void Tool_calls_go_into_one_collapsible_box_and_are_escaped()
     {
         var html = MarkdownRenderer.ToHtml("> 🔧 Date & time\n\n> 🔧 Web search: <b>x</b>\n\nDone");
-        Assert.Contains("class=\"toolcalls toolchips\"", html);
+        Assert.Equal(1, html.Split("<details class=\"think toolbox\"").Length - 1);
         Assert.Equal(2, html.Split("class=\"toolcall\"").Length - 1);
+        Assert.Contains("(2)</summary>", html);
         Assert.DoesNotContain("<b>x</b>", html);          // escaped
         Assert.DoesNotContain("<blockquote", html);
         Assert.Contains("Done", html);
+        Assert.DoesNotContain(" open", html.Split("<summary>")[0]);   // the answer has started: closed
     }
 
     [Fact]
-    public void Many_tool_calls_collapse_into_a_details_box()
+    public void Tool_calls_of_several_rounds_are_merged_and_box_is_open_until_the_answer_starts()
     {
-        var text = string.Concat(Enumerable.Range(1, 5).Select(i => $"> 🔧 Web search: q{i}\n\n")) + "Done";
-        var html = MarkdownRenderer.ToHtml(text);
-        Assert.Contains("<details class=\"toolcalls\"><summary>🔧 5</summary>", html);
-        Assert.Contains("q5", html);
+        var running = MarkdownRenderer.ToHtml("<think>a</think>\n\n> 🔧 Web search: q1\n\n<think>b</think>\n\n> 🔧 Read page: u\n\n");
+        Assert.Equal(1, running.Split("<details class=\"think toolbox\"").Length - 1);
+        Assert.Contains("<details class=\"think toolbox\" open>", running);
+        Assert.Contains("(2)</summary>", running);
+
+        var done = MarkdownRenderer.ToHtml("> 🔧 Web search: q1\n\nAnswer text\n\n> 🔧 Web search: q2\n\nMore");
+        Assert.Equal(1, done.Split("<details class=\"think toolbox\"").Length - 1);
+        Assert.Contains("q2", done);
+        Assert.DoesNotContain("<details class=\"think toolbox\" open>", done);
     }
 }

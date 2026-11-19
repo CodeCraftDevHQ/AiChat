@@ -39,6 +39,8 @@ public static class MarkdownRenderer
 
     static string _think = "💭 فکر کردن مدل";
 
+    static string _tools = "🔧 ابزارها";
+
     static string _thinkMode = "auto";
     static int _thinkHeight = 320;
 
@@ -63,6 +65,12 @@ public static class MarkdownRenderer
     public static string StripThink(string text) =>
         text.Contains("<think>", StringComparison.Ordinal) ? Think.Replace(text, "").TrimStart() : text;
 
+    public static void SetToolsLabel(string label)
+    {
+        _tools = label;
+        LabelsVersion++;
+    }
+
     // <think> blocks and groups of "> 🔧 ..." tool-call lines
     static readonly Regex Segments = new(@"<think>(?<t>.*?)(?:(?<c></think>)|\z)|(?<tool>(?:^> 🔧 [^\n]*(?:\n|\z)\s*)+)",
         RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.Compiled);
@@ -81,9 +89,23 @@ public static class MarkdownRenderer
         var merged = string.Join("\n\n---\n\n", thinks.Select(x => x.Groups["t"].Value.Trim()).Where(x => x.Length > 0));
         var lastClosed = thinks.Count > 0 && thinks[^1].Groups["c"].Success;
 
+        var toolMatches = all.Where(x => x.Groups["tool"].Success).ToList();
+        var allCalls = toolMatches.SelectMany(x => x.Groups["tool"].Value.Split('\n'))
+            .Select(l => l.Trim()).Where(l => l.StartsWith("> ", StringComparison.Ordinal))
+            .Select(l => System.Net.WebUtility.HtmlEncode(l[2..].Trim())).ToList();
+        // the box stays open while no answer text has started after the last call
+        var toolsAnswered = false;
+        if (toolMatches.Count > 0)
+        {
+            var last = toolMatches[^1];
+            var tail = Think.Replace(markdown[(last.Index + last.Length)..], "");
+            toolsAnswered = tail.Trim().Length > 0;
+        }
+
         var sb = new System.Text.StringBuilder();
         var pos = 0;
         var boxDone = false;
+        var toolsDone = false;
         foreach (var m in all)
         {
             sb.Append(Render(markdown[pos..m.Index]));
@@ -100,15 +122,15 @@ public static class MarkdownRenderer
             }
             else
             {
-                var calls = m.Groups["tool"].Value.Split('\n')
-                    .Select(l => l.Trim()).Where(l => l.StartsWith("> ", StringComparison.Ordinal))
-                    .Select(l => System.Net.WebUtility.HtmlEncode(l[2..].Trim())).ToList();
-                if (calls.Count == 0) continue;
-                var chips = string.Concat(calls.Select(c => "<span class=\"toolcall\" dir=\"auto\">" + c + "</span>"));
-                if (calls.Count > 3)
-                    sb.Append("<details class=\"toolcalls\"><summary>🔧 ").Append(calls.Count).Append("</summary><div class=\"toolchips\">").Append(chips).Append("</div></details>");
-                else
-                    sb.Append("<div class=\"toolcalls toolchips\">").Append(chips).Append("</div>");
+                // every tool call of the answer goes into ONE collapsible box (like the thinking box)
+                if (toolsDone) continue;
+                toolsDone = true;
+                if (allCalls.Count == 0) continue;
+                var open = _thinkMode switch { "open" => true, "closed" => false, _ => !toolsAnswered };
+                var lines = string.Concat(allCalls.Select(c => "<div class=\"toolcall\" dir=\"auto\">" + c + "</div>"));
+                sb.Append("<details class=\"think toolbox\"").Append(open ? " open" : "").Append("><summary>").Append(_tools)
+                  .Append(" (").Append(allCalls.Count).Append(")</summary><div class=\"think-body toollist\" style=\"max-height:")
+                  .Append(_thinkHeight).Append("px\">").Append(lines).Append("</div></details>");
             }
         }
         sb.Append(Render(markdown[pos..]));
