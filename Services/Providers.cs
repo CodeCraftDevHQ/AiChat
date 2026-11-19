@@ -555,6 +555,7 @@ public class OpenAiCompatibleProvider : IChatProvider
         // Tools: the model may ask for functions; we run them and send the results back (up to MaxRounds times).
         var tools = cfg.Tools is { Tools.Count: > 0 } ? cfg.Tools : null;
         var useTools = tools != null;
+        var nudged = false;
 
         for (var round = 0; ; round++)
         {
@@ -690,6 +691,18 @@ public class OpenAiCompatibleProvider : IChatProvider
                     }
                 }
                 if (inReason) yield return "</think>";
+            }
+
+            // some local models answer with nothing after a tool result: ask once more for the answer
+            if (calls.Count == 0 && round > 0 && !nudged && useTools && said.ToString().Trim().Length == 0)
+            {
+                nudged = true;
+                messages.Add(new JsonObject
+                {
+                    ["role"] = "user",
+                    ["content"] = "Now write your answer to my last message, using the tool results above."
+                });
+                continue;
             }
 
             if (calls.Count == 0 || tools == null || !useTools || round >= tools.MaxRounds) yield break;

@@ -116,6 +116,28 @@ public class ToolTests
     }
 
     [Fact]
+    public async Task Empty_answer_after_a_tool_result_is_asked_for_once()
+    {
+        var n = 0;
+        var h = new FakeHandler(_ => n++ switch
+        {
+            0 => FakeHandler.Text(ToolCallSse("{\"text\":\"hi\"}")),
+            1 => FakeHandler.Text("data: {\"choices\":[{\"delta\":{\"content\":\"\"}}]}\n\ndata: [DONE]\n\n"),
+            _ => FakeHandler.Text("data: {\"choices\":[{\"delta\":{\"content\":\"Finally\"}}]}\n\ndata: [DONE]\n\n")
+        });
+        var p = new OpenAiCompatibleProvider(new HttpClient(h));
+        var cfg = new ProviderConfig { Type = ProviderType.OpenAiCompatible, BaseUrl = "http://lm.local/v1", Tools = Echo() };
+
+        var sb = new System.Text.StringBuilder();
+        await foreach (var t in p.StreamAsync(cfg, "m", User("go"), null, null, CancellationToken.None))
+            if (!t.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) sb.Append(t);
+
+        Assert.EndsWith("Finally", sb.ToString());
+        Assert.Equal(3, h.Requests.Count);
+        Assert.Contains("Now write your answer", h.Requests[2].Body);
+    }
+
+    [Fact]
     public async Task After_the_last_round_no_tools_are_offered()
     {
         var h = new FakeHandler(_ => FakeHandler.Text(ToolCallSse("{\"text\":\"again\"}")));

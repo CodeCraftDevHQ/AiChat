@@ -565,6 +565,7 @@ public class ChatState
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
         McpServers = await _storage.LoadMcpServersAsync();
+        PreconnectMcp();
         SearchEngine = Preferences.Default.Get("search_engine", WebSearchService.Ddg);
         SearchBaseUrl = Preferences.Default.Get("search_url", "");
         SearchKey = await _storage.LoadSearchKeyAsync();
@@ -734,19 +735,19 @@ public class ChatState
             {
                 var t = MemoryHelper.Normalize(text);
                 if (t.Length == 0) return "Nothing to save.";
-                if (MemoryHelper.IsDuplicate(Memory, t)) return "Already saved.";
+                if (MemoryHelper.IsDuplicate(Memory, t)) return "Already saved. Now continue with the user's request.";
                 Memory.Add(new MemoryItem { Text = t, Source = "model" });
                 Notify();
                 _ = SaveMemoryAsync();
-                return "Saved.";
+                return "Saved. Now continue with the user's request and answer it.";
             },
             Forget = text =>
             {
                 var gone = MemoryHelper.Forget(Memory, text);
-                if (gone.Count == 0) return "No single matching memory was found (be more specific).";
+                if (gone.Count == 0) return "No single matching memory was found (be more specific). Now continue with the user's request.";
                 Notify();
                 _ = SaveMemoryAsync();
-                return "Deleted: " + string.Join("; ", gone.Select(x => x.Text));
+                return "Deleted: " + string.Join("; ", gone.Select(x => x.Text)) + ". Now continue with the user's request.";
             }
         };
     }
@@ -993,6 +994,7 @@ public class ChatState
     {
         ToolOpts.Enabled = on;
         SaveToolOpts();
+        PreconnectMcp();
         ShowToast(on ? L["ابزارها روشن شد"] : L["ابزارها خاموش شد"]);
     }
 
@@ -1064,8 +1066,10 @@ public class ChatState
         DropMcpClient(cfg.Id);
         McpTools.Remove(cfg.Id);
         McpStatus.Remove(cfg.Id);
+        _mcpFailedAt.Remove(cfg.Id);
         await _storage.SaveMcpServersAsync(McpServers);
         Notify();
+        PreconnectMcp();
     }
 
     public async Task DeleteMcpServerAsync(string id)
@@ -1082,7 +1086,7 @@ public class ChatState
     /// <summary>Drops what was learned about a server (after an unsaved test).</summary>
     public void ForgetMcp(string id) { DropMcpClient(id); McpTools.Remove(id); McpStatus.Remove(id); Notify(); }
 
-    public void SetMcpEnabled(bool on) { ToolOpts.McpEnabled = on; SaveToolOpts(); }
+    public void SetMcpEnabled(bool on) { ToolOpts.McpEnabled = on; SaveToolOpts(); PreconnectMcp(); }
 
     /// <summary>Connects, reads the tool list and keeps it. Returns an error text or null.</summary>
     public async Task<string?> RefreshMcpAsync(McpServerConfig cfg, CancellationToken ct = default)
@@ -1093,6 +1097,7 @@ public class ChatState
             client.Reset();
             var tools = await client.ListToolsAsync(ct);
             McpTools[cfg.Id] = tools;
+            _mcpFailedAt.Remove(cfg.Id);
             McpStatus[cfg.Id] = L.F("{0} ابزار", tools.Count);
             _log.Info($"MCP '{cfg.Name}': {tools.Count} tools");
             Notify();
@@ -1101,6 +1106,7 @@ public class ChatState
         catch (Exception ex)
         {
             McpTools.Remove(cfg.Id);
+            _mcpFailedAt[cfg.Id] = DateTime.UtcNow;
             McpStatus[cfg.Id] = L["خطا: "] + ex.Message;
             _log.Info($"MCP '{cfg.Name}' failed: {ex.Message}");
             Notify();
@@ -1108,16 +1114,64 @@ public class ChatState
         }
     }
 
-    /// <summary>The tools of all enabled MCP servers (a server that cannot be reached is skipped).</summary>
+    // servers that failed are not tried again for a while, so a dead server never slows down every message
+    readonly Dictionary<string, DateTime> _mcpFailedAt = new();
+    readonly Dictionary<string, Task<string?>> _mcpRefresh = new();
+    static readonly TimeSpan McpRetryAfter = TimeSpan.FromMinutes(5);
+    const int McpWaitSeconds = 8;
+
+    bool McpUsable(McpServerConfig x) =>
+        x.Enabled && (x.IsStdio ? McpProcess.Supported && x.Command.Length > 0 : x.Url.Length > 0);
+
+    /// <summary>One connection attempt per server at a time.</summary>
+    Task<string?> StartMcpRefresh(McpServerConfig cfg)
+    {
+        if (_mcpRefresh.TryGetValue(cfg.Id, out var running) && !running.IsCompleted) return running;
+        var task = RefreshMcpAsync(cfg);
+        _mcpRefresh[cfg.Id] = task;
+        return task;
+    }
+
+    /// <summary>Connects to the servers in the background (at start and after a change) so the first message does not wait.</summary>
+    public void PreconnectMcp()
+    {
+        if (!ToolOpts.Enabled || !ToolOpts.McpEnabled) return;
+        foreach (var cfg in McpServers.Where(x => McpUsable(x) && !McpTools.ContainsKey(x.Id)))
+            _ = StartMcpRefresh(cfg);
+    }
+
+    /// <summary>
+    /// The tools of the enabled MCP servers that are ready. A server that is still connecting is waited for a few seconds
+    /// at most; one that failed recently is skipped (it is tried again after a few minutes, or with "Test connection").
+    /// </summary>
     async Task<List<ToolDef>> BuildMcpToolsAsync(CancellationToken ct)
     {
         var res = new List<ToolDef>();
         var used = new HashSet<string>();
-        foreach (var cfg in McpServers.Where(x => x.Enabled && (x.IsStdio ? McpProcess.Supported && x.Command.Length > 0 : x.Url.Length > 0)))
+        var servers = McpServers.Where(McpUsable).ToList();
+
+        var waiting = new List<(McpServerConfig Cfg, Task<string?> Task)>();
+        foreach (var cfg in servers.Where(x => !McpTools.ContainsKey(x.Id)))
         {
-            if (!McpTools.ContainsKey(cfg.Id) && await RefreshMcpAsync(cfg, ct) != null) continue;
-            res.AddRange(McpToolBuilder.Build(cfg, McpTools[cfg.Id], McpClientOf(cfg), used));
+            if (_mcpFailedAt.TryGetValue(cfg.Id, out var at) && DateTime.UtcNow - at < McpRetryAfter)
+            {
+                _log.Info($"MCP '{cfg.Name}' skipped (it failed recently)");
+                continue;
+            }
+            waiting.Add((cfg, StartMcpRefresh(cfg)));
         }
+        if (waiting.Count > 0)
+        {
+            var all = Task.WhenAll(waiting.Select(w => w.Task));
+            try { await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(McpWaitSeconds), ct)); }
+            catch (OperationCanceledException) { }
+            foreach (var w in waiting.Where(w => !w.Task.IsCompleted))
+                _log.Info($"MCP '{w.Cfg.Name}' is still connecting; it is used from the next message");
+        }
+
+        foreach (var cfg in servers)
+            if (McpTools.TryGetValue(cfg.Id, out var infos))
+                res.AddRange(McpToolBuilder.Build(cfg, infos, McpClientOf(cfg), used));
         return res;
     }
 

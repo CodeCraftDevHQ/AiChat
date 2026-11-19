@@ -200,8 +200,9 @@ public static class BuiltInTools
                 Name = "remember",
                 Label = "Memory: save",
                 Description = "Saves ONE short, durable fact about the user to long-term memory (a name, job, preference, language, ongoing project). " +
-                              "Use it when the user asks you to remember something or states a lasting preference. " +
-                              "Never save secrets, passwords, ID or card numbers, or temporary details.",
+                              "Call it ONLY when the user explicitly asks you to remember something (e.g. \"remember that ...\"). " +
+                              "Never call it to answer a question or on your own; never save secrets, passwords, ID or card numbers, or temporary details. " +
+                              "After it returns, continue and answer the user normally.",
                 Parameters = Schema(("text", "string", "The fact, as one short sentence in the user's language", true)),
                 Ask = memory.Ask,
                 Run = (a, _) => Task.FromResult(memory.Remember(Str(a, "text")))
@@ -210,7 +211,7 @@ public static class BuiltInTools
             {
                 Name = "forget",
                 Label = "Memory: delete",
-                Description = "Deletes a saved memory. Use it when the user asks you to forget something. Pass a distinctive part of the memory text.",
+                Description = "Deletes a saved memory. Call it ONLY when the user explicitly asks you to forget something. Pass a distinctive part of the memory text. After it returns, continue and answer the user normally.",
                 Parameters = Schema(("text", "string", "A distinctive part of the memory to delete", true)),
                 Ask = memory.Ask,
                 Run = (a, _) => Task.FromResult(memory.Forget(Str(a, "text")))
