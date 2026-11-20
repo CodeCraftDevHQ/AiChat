@@ -167,17 +167,86 @@ public class McpTests
     }
 }
 
+/// <summary>A one-way in-memory byte pipe: the reader blocks until data arrives; disposing the writer ends the stream (like a closed program).</summary>
+sealed class MemPipe
+{
+    readonly System.Threading.Channels.Channel<byte[]> _ch = System.Threading.Channels.Channel.CreateUnbounded<byte[]>();
+    public Stream Reader => new R(this);
+    public Stream Writer => new W(this);
+
+    abstract class Base : Stream
+    {
+        public override bool CanSeek => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
+
+    sealed class R(MemPipe p) : Base
+    {
+        byte[]? _cur;
+        int _pos;
+        public override bool CanRead => true;
+        public override bool CanWrite => false;
+        public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        {
+            while (_cur == null || _pos >= _cur.Length)
+            {
+                if (!await p._ch.Reader.WaitToReadAsync(ct)) return 0;
+                if (p._ch.Reader.TryRead(out var next)) { _cur = next; _pos = 0; }
+            }
+            var n = Math.Min(buffer.Length, _cur.Length - _pos);
+            _cur.AsMemory(_pos, n).CopyTo(buffer);
+            _pos += n;
+            return n;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            p._ch.Writer.TryComplete();
+            base.Dispose(disposing);
+        }
+    }
+
+    sealed class W(MemPipe p) : Base
+    {
+        public override bool CanRead => false;
+        public override bool CanWrite => true;
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            if (!p._ch.Writer.TryWrite(buffer.AsSpan(offset, count).ToArray())) throw new IOException("The pipe is closed.");
+        }
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken ct)
+        { Write(buffer, offset, count); return Task.CompletedTask; }
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
+        {
+            if (!p._ch.Writer.TryWrite(buffer.ToArray())) throw new IOException("The pipe is closed.");
+            return ValueTask.CompletedTask;
+        }
+        protected override void Dispose(bool disposing)
+        {
+            p._ch.Writer.TryComplete();
+            base.Dispose(disposing);
+        }
+    }
+}
+
 public class McpStdioTests
 {
     /// <summary>A fake local program: reads JSON lines from "stdin", answers on "stdout".</summary>
     static McpStdioTransport.Running FakeProgram(Func<string, string?> handler, bool noise = false)
     {
-        var c2s = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
-        var serverIn = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, c2s.GetClientHandleAsString());
-        var s2c = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.In);
-        var serverOut = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.Out, s2c.GetClientHandleAsString());
-        c2s.DisposeLocalCopyOfClientHandle();
-        s2c.DisposeLocalCopyOfClientHandle();
+        // in-memory pipes (OS pipes behave differently on Windows and Linux when both ends live in one process)
+        var c2s = new MemPipe();
+        var s2c = new MemPipe();
+        var serverIn = c2s.Reader;
+        var serverOut = s2c.Writer;
 
         _ = Task.Run(() =>
         {
@@ -197,7 +266,7 @@ public class McpStdioTests
             catch { }
         });
 
-        return new McpStdioTransport.Running(c2s, s2c, () => "boom: missing module", () =>
+        return new McpStdioTransport.Running(c2s.Writer, s2c.Reader, () => "boom: missing module", () =>
         {
             try { serverIn.Dispose(); } catch { }
             try { serverOut.Dispose(); } catch { }
