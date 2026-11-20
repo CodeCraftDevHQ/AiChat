@@ -2443,6 +2443,7 @@ public class ChatState
             _toolAllowAll = false;
             provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts, null, MemoryTools(conv));
             provider.Tools.Approve = (tool, args) => ApproveToolAsync(tool, args, ct);
+            provider.Tools.Log = m => _log.Warn(m);
             if (ToolOpts.McpEnabled && McpServers.Count > 0)
                 provider.Tools.Tools.AddRange(await BuildMcpToolsAsync(ct));
             if (provider.Tools.Tools.Count == 0) provider.Tools = null;

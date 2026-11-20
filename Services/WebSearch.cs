@@ -60,7 +60,33 @@ public class WebSearchService
 
     public const string Custom = "custom";
 
+    /// <summary>Pause before the second attempt after a temporary failure.</summary>
+    public TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>Network hiccups, timeouts, rate limits, server errors and DuckDuckGo's "202" challenge page are worth one more try.</summary>
+    public static bool IsTransient(Exception ex) => ex switch
+    {
+        TransientSearchException => true,
+        HttpRequestException h when h.StatusCode is null => !h.Message.StartsWith("HTTP ", StringComparison.Ordinal),
+        HttpRequestException h => (int)h.StatusCode! is 202 or 408 or 429 or >= 500,
+        TaskCanceledException => true,
+        _ => false
+    };
+
+    public sealed class TransientSearchException : Exception { public TransientSearchException(string m) : base(m) { } }
+
+    /// <summary>Searches; one temporary failure is retried once after a short pause.</summary>
     public async Task<List<SearchResult>> SearchAsync(string engine, string query, string key, string baseUrl, SearchOptions opt, CancellationToken ct)
+    {
+        try { return await SearchOnceAsync(engine, query, key, baseUrl, opt, ct); }
+        catch (Exception ex) when (!ct.IsCancellationRequested && IsTransient(ex))
+        {
+            await Task.Delay(RetryDelay, ct);
+            return await SearchOnceAsync(engine, query, key, baseUrl, opt, ct);
+        }
+    }
+
+    async Task<List<SearchResult>> SearchOnceAsync(string engine, string query, string key, string baseUrl, SearchOptions opt, CancellationToken ct)
     {
         query = query.Trim();
         if (query.Length > 300) query = query[..300];
@@ -123,7 +149,8 @@ public class WebSearchService
             using var resp = await _http.SendAsync(req, ct);
             var body = await resp.Content.ReadAsStringAsync(ct);
             if (!resp.IsSuccessStatusCode)
-                throw new HttpRequestException($"HTTP {(int)resp.StatusCode}: {Clean(body, 200)}");
+                throw new HttpRequestException($"HTTP {(int)resp.StatusCode}: {Clean(body, 200)}", null, resp.StatusCode);
+            if ((int)resp.StatusCode == 202) throw new TransientSearchException("HTTP 202: the search engine asked for a pause");
             return engine switch
             {
                 Brave => ParseBrave(body, max),

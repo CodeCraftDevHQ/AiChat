@@ -34,6 +34,8 @@ public class ToolSet
     public bool ShowCalls = true;
     /// <summary>Called before a tool runs; false = the user refused. Null = always allowed.</summary>
     public Func<ToolDef, JsonObject, Task<bool>>? Approve;
+    /// <summary>Gets a line for the app log when a tool fails.</summary>
+    public Action<string>? Log;
 
     public ToolDef? Find(string name) => Tools.FirstOrDefault(t => t.Name == name);
 
@@ -95,12 +97,20 @@ public class ToolSet
             if (Approve != null && !await Approve(tool, args)) return "The user did not allow this tool call.";
             var text = await tool.Run(args, ct);
             text ??= "";
+            if (text.StartsWith("Error", StringComparison.Ordinal)) Log?.Invoke($"Tool '{name}' returned: {text[..Math.Min(text.Length, 160)]}");
             var max = Math.Clamp(ResultMaxChars, 500, 50000);
             return text.Length > max ? text[..max] + "\n[...cut]" : text;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (OperationCanceledException) { return "Error: the tool timed out."; }
-        catch (Exception ex) { return "Error: " + ex.Message; }
+        catch (OperationCanceledException) { Log?.Invoke($"Tool '{name}' timed out"); return "Error: the tool timed out. This is temporary; you may try once more."; }
+        catch (Exception ex)
+        {
+            Log?.Invoke($"Tool '{name}' failed: {ex.Message}");
+            var hint = name is "web_search" or "read_page"
+                ? " This is a temporary problem with the network or the search service, not a missing tool. Try once more with a different query; if it fails again, tell the user the search service is unreachable right now and answer from what you know."
+                : "";
+            return "Error: " + ex.Message + hint;
+        }
     }
 
     /// <summary>The line shown in the answer for a call: "> 🔧 Label: first argument".</summary>
@@ -287,7 +297,7 @@ public static class BuiltInTools
                     }
 
                     var found = await search.SearchAsync(engine, q, key, baseUrl, so, ct);
-                    if (found.Count == 0) return "No results.";
+                    if (found.Count == 0) return "No results found for this query. The search worked, there is just nothing for these words: try shorter or different keywords, or another language.";
                     if (so.PageCount > 0) found = await search.ReadPagesAsync(found, so, ct);
                     var sb = new StringBuilder();
                     for (var i = 0; i < found.Count; i++)
@@ -323,7 +333,7 @@ public static class BuiltInTools
                         BlockedDomains = sopt.BlockedDomains
                     };
                     var r = (await search.ReadPagesAsync(new List<SearchResult> { new("", url, "") }, one, ct))[0];
-                    return r.Content.Length > 0 ? r.Content : "Error: the page could not be read.";
+                    return r.Content.Length > 0 ? r.Content : "Error: the page could not be read (blocked, not a web page, or too slow). Try another result.";
                 }
             });
 

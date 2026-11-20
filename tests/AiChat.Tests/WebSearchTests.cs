@@ -217,3 +217,28 @@ public class WebSearchTests
         Assert.Single(r);
     }
 }
+
+public class WebSearchRetryTests
+{
+    [Fact]
+    public async Task Temporary_failure_is_retried_once()
+    {
+        var n = 0;
+        var h = new FakeHandler(_ => ++n == 1
+            ? FakeHandler.Json("{}", System.Net.HttpStatusCode.ServiceUnavailable)
+            : FakeHandler.Json("""{"results":[{"title":"A","url":"https://a.test","content":"x"}]}"""));
+        var s = new WebSearchService(new HttpClient(h)) { RetryDelay = TimeSpan.Zero };
+        var r = await s.SearchAsync(WebSearchService.Searx, "q", "", "https://s.test", new SearchOptions(), default);
+        Assert.Equal(2, h.Requests.Count);
+        Assert.Single(r);
+    }
+
+    [Fact]
+    public async Task Permanent_failure_is_not_retried()
+    {
+        var h = new FakeHandler(_ => FakeHandler.Json("{}", System.Net.HttpStatusCode.Forbidden));
+        var s = new WebSearchService(new HttpClient(h)) { RetryDelay = TimeSpan.Zero };
+        await Assert.ThrowsAsync<HttpRequestException>(() => s.SearchAsync(WebSearchService.Ddg, "q", "", "", new SearchOptions(), default));
+        Assert.Single(h.Requests);
+    }
+}
