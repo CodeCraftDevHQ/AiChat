@@ -421,7 +421,27 @@
                                 <label class="chk"><input type="checkbox" checked="@to.ReadPage" @onchange="e => ToolOpt(o => o.ReadPage = e.Value is true)" /> 📄 @L["خواندن صفحه‌ی وب با آدرس"]</label>
                             <label class="chk"><input type="checkbox" checked="@to.DateTime" @onchange="e => ToolOpt(o => o.DateTime = e.Value is true)" /> 🕒 @L["تاریخ و ساعت"]</label>
                             <label class="chk"><input type="checkbox" checked="@to.Calculator" @onchange="e => ToolOpt(o => o.Calculator = e.Value is true)" /> 🧮 @L["ماشین‌حساب"]</label>
+                                <label class="chk"><input type="checkbox" checked="@to.CodeRun" @onchange="e => ToolOpt(o => o.CodeRun = e.Value is true)" /> 🧪 @L["اجرای کد جاوااسکریپت (در محیط ایزوله)"]</label>
                             </details>
+
+                            @if (to.CodeRun)
+                            {
+                                <details class="adv-search">
+                                    <summary>🧪 @L["تنظیمات اجرای کد"]</summary>
+                                    <p class="muted small">@L["کد در یک مفسر جاوااسکریپت داخل خود برنامه اجرا می‌شود؛ به فایل‌ها، شبکه و سیستم دسترسی ندارد و فقط می‌تواند محاسبه و چاپ کند."]</p>
+                                    <label class="chk"><input type="checkbox" checked="@to.CodeAsk" @onchange="e => ToolOpt(o => o.CodeAsk = e.Value is true)" /> @L["قبل از هر اجرا از من بپرس (پیشنهادی)"]</label>
+                                    <label class="lbl">@L["حداکثر زمان اجرا (ثانیه)"]</label>
+                                    <input class="inp" type="number" min="1" max="120" value="@to.Code.TimeoutSec" @onchange="e => ToolOpt(o => o.Code.TimeoutSec = Math.Clamp(ToInt(e), 1, 120))" />
+                                    <label class="lbl">@L["حداکثر حافظه (مگابایت)"]</label>
+                                    <input class="inp" type="number" min="2" max="1024" value="@to.Code.MemoryMb" @onchange="e => ToolOpt(o => o.Code.MemoryMb = Math.Clamp(ToInt(e), 2, 1024))" />
+                                    <label class="lbl">@L["حداکثر طول خروجی (نویسه)"]</label>
+                                    <input class="inp" type="number" min="200" max="50000" step="200" value="@to.Code.OutputChars" @onchange="e => ToolOpt(o => o.Code.OutputChars = Math.Clamp(ToInt(e), 200, 50000))" />
+                                    <label class="lbl">@L["حداکثر تعداد دستورها (۰ = بدون محدودیت)"]</label>
+                                    <input class="inp" type="number" min="0" max="100000000" step="100000" value="@to.Code.MaxStatements" @onchange="e => ToolOpt(o => o.Code.MaxStatements = Math.Clamp(ToInt(e), 0, 100000000))" />
+                                    <label class="lbl">@L["حداکثر عمق بازگشت"]</label>
+                                    <input class="inp" type="number" min="20" max="2000" value="@to.Code.MaxRecursion" @onchange="e => ToolOpt(o => o.Code.MaxRecursion = Math.Clamp(ToInt(e), 20, 2000))" />
+                                </details>
+                            }
 
                             @if (to.WebSearch)
                             {

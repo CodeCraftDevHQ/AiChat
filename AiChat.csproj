@@ -15,8 +15,8 @@
 
 		<ApplicationTitle>AI Chat</ApplicationTitle>
 		<ApplicationId>com.aichat.multiprovider</ApplicationId>
-		<ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
-		<ApplicationVersion>2</ApplicationVersion>
+		<ApplicationDisplayVersion>1.2.0</ApplicationDisplayVersion>
+		<ApplicationVersion>3</ApplicationVersion>
 
 		<!-- Windows: unpackaged (plain .exe), no MSIX signing needed -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -43,6 +43,7 @@
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.*" />
 		<PackageReference Include="Markdig" Version="0.*" />
+		<PackageReference Include="Jint" Version="4.*" />
 		<PackageReference Include="PdfPig" Version="0.1.*" />
 	</ItemGroup>
 

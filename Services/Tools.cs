@@ -145,6 +145,11 @@ public class ToolOptions
     public bool Calculator { get; set; } = true;
     public bool WebSearch { get; set; } = true;
     public bool ReadPage { get; set; } = true;
+    /// <summary>The model may run JavaScript in a sandbox (off by default).</summary>
+    public bool CodeRun { get; set; }
+    /// <summary>Always ask before running code (recommended).</summary>
+    public bool CodeAsk { get; set; } = true;
+    public CodeLimits Code { get; set; } = new();
     /// <summary>How many times the model may call tools in one answer.</summary>
     public int MaxRounds { get; set; } = 5;
     /// <summary>A tool result is cut to this many characters.</summary>
@@ -309,6 +314,23 @@ public static class BuiltInTools
                     }
                     return sb.ToString().Trim();
                 }
+            });
+        }
+
+        if (o.CodeRun)
+        {
+            var lim = o.Code ?? new CodeLimits();
+            set.Tools.Add(new ToolDef
+            {
+                Name = "run_javascript",
+                Label = "JavaScript",
+                Ask = o.CodeAsk,
+                Description = "Runs JavaScript in a safe sandbox and returns what the code prints with console.log plus the value of the last expression. " +
+                              "Use it for exact calculations, data processing, parsing, sorting, dates, simulations and checking your own results. " +
+                              "There is no browser, no Node.js, no files and no network. " +
+                              $"The run is stopped after {lim.TimeoutSec} seconds.",
+                Parameters = Schema(("code", "string", "The JavaScript code. Print results with console.log.", true)),
+                Run = (a, ct) => CodeRunner.RunAsync(Str(a, "code"), lim, ct)
             });
         }
 
