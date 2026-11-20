@@ -1103,7 +1103,7 @@ public class ChatState
     {
         var mode = ToolOpts.AskMode;
         if (_toolAllowAll) return true;
-        if (!tool.Ask)
+        if (!tool.Ask && !(tool.AskFor?.Invoke(args) ?? false))
         {
             if (mode == 0) return true;
             if (mode == 1 && tool.Name is not ("web_search" or "read_page")) return true;

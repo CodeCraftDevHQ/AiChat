@@ -428,14 +428,42 @@
                             {
                                 <details class="adv-search">
                                     <summary>🧪 @L["تنظیمات اجرای کد"]</summary>
-                                    <p class="muted small">@L["کد در یک مفسر جاوااسکریپت داخل خود برنامه اجرا می‌شود؛ به فایل‌ها، شبکه و سیستم دسترسی ندارد و فقط می‌تواند محاسبه و چاپ کند."]</p>
-                                    <label class="chk"><input type="checkbox" checked="@to.CodeAsk" @onchange="e => ToolOpt(o => o.CodeAsk = e.Value is true)" /> @L["قبل از هر اجرا از من بپرس (پیشنهادی)"]</label>
-                                    <label class="lbl">@L["حداکثر زمان اجرا (ثانیه)"]</label>
+                                    <p class="muted small">@L["مدل با هر زبانی که فعال کنید می‌تواند کد بنویسد و اجرا کند. جاوااسکریپت داخل یک محیط ایزوله‌ی خود برنامه اجرا می‌شود (بدون فایل و شبکه). زبان‌های دیگر برنامه‌ی نصب‌شده روی همین کامپیوتر را اجرا می‌کنند (فقط ویندوز) و ایزوله نیستند: با دسترسی‌های خود شما کار می‌کنند، پس پرسیدن قبل از اجرا را روشن نگه دارید."]</p>
+                                    @foreach (var lg in to.CodeLanguages)
+                                    {
+                                        <details class="adv-search">
+                                            <summary>@(lg.Enabled ? "✅" : "⬜") @lg.Name</summary>
+                                            <label class="chk"><input type="checkbox" checked="@lg.Enabled" @onchange="e => Lang(lg, x => x.Enabled = e.Value is true)" /> @L["برای مدل فعال باشد"]</label>
+                                            <label class="chk"><input type="checkbox" checked="@lg.Ask" @onchange="e => Lang(lg, x => x.Ask = e.Value is true)" /> @L["قبل از هر اجرا از من بپرس (پیشنهادی)"]</label>
+                                            @if (!lg.Builtin)
+                                            {
+                                                <label class="lbl">@L["نام"]</label>
+                                                <input class="inp" dir="auto" value="@lg.Name" @onchange="e => Lang(lg, x => x.Name = StrOf(e))" />
+                                                <label class="lbl">@L["برنامه‌ای که اجرا می‌شود"]</label>
+                                                <input class="inp" dir="ltr" placeholder="python" value="@lg.Command" @onchange="e => Lang(lg, x => x.Command = StrOf(e))" />
+                                                <label class="lbl">@L["آرگومان‌ها ({file} = فایل کد، {dir} = پوشه‌ی آن؛ خودتان گیومه بگذارید)"]</label>
+                                                <input class="inp" dir="ltr" value="@lg.Args" @onchange="e => Lang(lg, x => x.Args = StrOf(e))" />
+                                                <label class="lbl">@L["پسوند فایل کد"]</label>
+                                                <input class="inp" dir="ltr" placeholder=".py" value="@lg.Extension" @onchange="e => Lang(lg, x => x.Extension = StrOf(e))" />
+                                                <label class="lbl">@L["پوشه‌ی کار (خالی = پوشه‌ی موقت خالی که بعد پاک می‌شود)"]</label>
+                                                <input class="inp" dir="ltr" placeholder="C:\Work" value="@lg.WorkDir" @onchange="e => Lang(lg, x => x.WorkDir = StrOf(e))" />
+                                                <label class="chk"><input type="checkbox" checked="@lg.CleanEnv" @onchange="e => Lang(lg, x => x.CleanEnv = e.Value is true)" /> @L["متغیرهای محیطی برنامه (مثل کلیدها) به برنامه داده نشود"]</label>
+                                                <label class="lbl">@L["محدودیت زمان این زبان (ثانیه، ۰ = همان محدودیت عمومی)"]</label>
+                                                <input class="inp" type="number" min="0" max="600" value="@lg.TimeoutSec" @onchange="e => Lang(lg, x => x.TimeoutSec = Math.Clamp(ToInt(e), 0, 600))" />
+                                                <button class="btn sm" style="margin-top:8px" @onclick="() => RemoveLang(lg)">🗑 @L["حذف این زبان"]</button>
+                                            }
+                                        </details>
+                                    }
+                                    <button class="btn sm" style="margin-top:8px" @onclick="AddLang">➕ @L["افزودن زبان یا برنامه"]</button>
+                                    <button class="btn sm" style="margin-top:8px" @onclick="ResetLangs">@L["بازنشانی فهرست زبان‌ها"]</button>
+
+                                    <label class="lbl" style="margin-top:12px">@L["حداکثر زمان اجرا (ثانیه)"]</label>
                                     <input class="inp" type="number" min="1" max="120" value="@to.Code.TimeoutSec" @onchange="e => ToolOpt(o => o.Code.TimeoutSec = Math.Clamp(ToInt(e), 1, 120))" />
-                                    <label class="lbl">@L["حداکثر حافظه (مگابایت)"]</label>
-                                    <input class="inp" type="number" min="2" max="1024" value="@to.Code.MemoryMb" @onchange="e => ToolOpt(o => o.Code.MemoryMb = Math.Clamp(ToInt(e), 2, 1024))" />
                                     <label class="lbl">@L["حداکثر طول خروجی (نویسه)"]</label>
                                     <input class="inp" type="number" min="200" max="50000" step="200" value="@to.Code.OutputChars" @onchange="e => ToolOpt(o => o.Code.OutputChars = Math.Clamp(ToInt(e), 200, 50000))" />
+                                    <p class="muted small" style="margin-top:8px">@L["محدودیت‌های زیر فقط برای جاوااسکریپتِ داخلی است:"]</p>
+                                    <label class="lbl">@L["حداکثر حافظه (مگابایت)"]</label>
+                                    <input class="inp" type="number" min="2" max="1024" value="@to.Code.MemoryMb" @onchange="e => ToolOpt(o => o.Code.MemoryMb = Math.Clamp(ToInt(e), 2, 1024))" />
                                     <label class="lbl">@L["حداکثر تعداد دستورها (۰ = بدون محدودیت)"]</label>
                                     <input class="inp" type="number" min="0" max="100000000" step="100000" value="@to.Code.MaxStatements" @onchange="e => ToolOpt(o => o.Code.MaxStatements = Math.Clamp(ToInt(e), 0, 100000000))" />
                                     <label class="lbl">@L["حداکثر عمق بازگشت"]</label>
@@ -855,6 +883,27 @@ else if (_dlg == 2)
     void OnSystemPromptInput(ChangeEventArgs e) => State.SetSystemPrompt(e.Value?.ToString() ?? string.Empty);
 
     void OnRtlChanged(ChangeEventArgs e) => State.SetRtl(e.Value is true);
+
+    static string StrOf(ChangeEventArgs e) => e.Value?.ToString() ?? "";
+
+    void Lang(CodeLanguage l, Action<CodeLanguage> set)
+    {
+        set(l);
+        State.SaveToolOpts();
+    }
+
+    void AddLang() => ToolOpt(o => o.CodeLanguages.Add(new CodeLanguage
+    {
+        Id = "lang" + Guid.NewGuid().ToString("N")[..6],
+        Name = L["زبان جدید"],
+        Command = "",
+        Args = "\"{file}\"",
+        Extension = ".txt"
+    }));
+
+    void RemoveLang(CodeLanguage l) => ToolOpt(o => o.CodeLanguages.Remove(l));
+
+    void ResetLangs() => ToolOpt(o => o.CodeLanguages = CodeLanguage.Defaults());
 
     static int ToInt(ChangeEventArgs e) => int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
     void OnFullWidth(ChangeEventArgs e) => State.SetUi(width: e.Value is true ? 0 : 768);

@@ -21,6 +21,8 @@ public class ToolDef
     public Func<JsonObject, CancellationToken, Task<string>> Run = (_, _) => Task.FromResult("");
     /// <summary>Always ask the user before this tool runs.</summary>
     public bool Ask;
+    /// <summary>Decides from the arguments whether to ask (used when <see cref="Ask"/> is false).</summary>
+    public Func<JsonObject, bool>? AskFor;
     /// <summary>"" = built in, "mcp" = from an MCP server.</summary>
     public string Source = "";
 }
@@ -147,8 +149,8 @@ public class ToolOptions
     public bool ReadPage { get; set; } = true;
     /// <summary>The model may run JavaScript in a sandbox (off by default).</summary>
     public bool CodeRun { get; set; }
-    /// <summary>Always ask before running code (recommended).</summary>
-    public bool CodeAsk { get; set; } = true;
+    /// <summary>The languages the model may use; each one has its own switch, question and settings.</summary>
+    public List<CodeLanguage> CodeLanguages { get; set; } = CodeLanguage.Defaults();
     public CodeLimits Code { get; set; } = new();
     /// <summary>How many times the model may call tools in one answer.</summary>
     public int MaxRounds { get; set; } = 5;
@@ -320,18 +322,35 @@ public static class BuiltInTools
         if (o.CodeRun)
         {
             var lim = o.Code ?? new CodeLimits();
-            set.Tools.Add(new ToolDef
+            var langs = (o.CodeLanguages ?? new()).Where(l => l.Enabled && (l.Builtin || CodeRunner.ExternalAllowed)).ToList();
+            if (langs.Count > 0)
             {
-                Name = "run_javascript",
-                Label = "JavaScript",
-                Ask = o.CodeAsk,
-                Description = "Runs JavaScript in a safe sandbox and returns what the code prints with console.log plus the value of the last expression. " +
-                              "Use it for exact calculations, data processing, parsing, sorting, dates, simulations and checking your own results. " +
-                              "There is no browser, no Node.js, no files and no network. " +
-                              $"The run is stopped after {lim.TimeoutSec} seconds.",
-                Parameters = Schema(("code", "string", "The JavaScript code. Print results with console.log.", true)),
-                Run = (a, ct) => CodeRunner.RunAsync(Str(a, "code"), lim, ct)
-            });
+                CodeLanguage? Pick(JsonObject a)
+                {
+                    var id = Str(a, "language").Trim();
+                    if (id.Length == 0) return langs[0];
+                    return langs.FirstOrDefault(l => l.Id.Equals(id, StringComparison.OrdinalIgnoreCase) || l.Name.Equals(id, StringComparison.OrdinalIgnoreCase));
+                }
+                set.Tools.Add(new ToolDef
+                {
+                    Name = "run_code",
+                    Label = "Run code",
+                    AskFor = a => Pick(a)?.Ask ?? true,
+                    Description = "Runs code and returns what it prints (standard output; in JavaScript also the value of the last expression). " +
+                                  "Use it for exact calculations, data processing, parsing, sorting, dates, simulations and checking your own results. " +
+                                  "Available languages (use the id): " + string.Join(", ", langs.Select(l => $"{l.Id} ({l.Name})")) + ". " +
+                                  (langs.Any(l => l.Builtin) ? "JavaScript runs in a sandbox with no files, no network and no Node.js. " : "") +
+                                  "Always print the results. The run is stopped after a time limit.",
+                    Parameters = Schema(("code", "string", "The complete program. Print results to the standard output (console.log in JavaScript).", true),
+                                        ("language", "string", "Language id. Default: " + langs[0].Id, false)),
+                    Run = (a, ct) =>
+                    {
+                        var l = Pick(a);
+                        if (l == null) return Task.FromResult("Error: unknown language. Available: " + string.Join(", ", langs.Select(x => x.Id)));
+                        return CodeRunner.RunAsync(l, Str(a, "code"), lim, ct);
+                    }
+                });
+            }
         }
 
         if (o.ReadPage)
