@@ -2,20 +2,20 @@
 
 <p class="muted small">@L["در گفتگوهای طولانی، پیام‌های قدیمی به‌جای ارسال کامل، به‌صورت یک خلاصه به مدل داده می‌شوند. پیام‌ها در برنامه سر جایشان می‌مانند و فقط چیزی که به مدل فرستاده می‌شود کوتاه‌تر است."]</p>
 
-<label class="chk"><input type="checkbox" checked="@State.SummaryOpts.Enabled" @onchange="OnEnabled" /> @L["خلاصه‌سازی خودکار گفتگوهای طولانی"]</label>
+<label id="set108" class="chk"><input type="checkbox" checked="@State.SummaryOpts.Enabled" @onchange="OnEnabled" /> @L["خلاصه‌سازی خودکار گفتگوهای طولانی"]</label>
 
-<label class="lbl">@L["شروع خلاصه‌سازی بعد از (توکن تقریبی)"]</label>
+<label id="set109" class="lbl">@L["شروع خلاصه‌سازی بعد از (توکن تقریبی)"]</label>
 <input class="inp" type="number" min="500" max="200000" step="500" value="@State.SummaryOpts.TriggerTokens" @onchange="OnTrigger" />
 
-<label class="lbl">@L["تعداد آخرین پیام‌هایی که کامل می‌مانند"]</label>
+<label id="set110" class="lbl">@L["تعداد آخرین پیام‌هایی که کامل می‌مانند"]</label>
 <input class="inp" type="number" min="2" max="100" value="@State.SummaryOpts.KeepLast" @onchange="OnKeep" />
 
-<label class="lbl">@L["حداکثر طول خلاصه (کلمه)"]</label>
+<label id="set111" class="lbl">@L["حداکثر طول خلاصه (کلمه)"]</label>
 <input class="inp" type="number" min="50" max="2000" step="50" value="@State.SummaryOpts.MaxWords" @onchange="OnWords" />
 
 <details class="adv-search">
-    <summary>@L["پیشرفته"]</summary>
-    <label class="lbl first">@L["API و مدل خلاصه‌ساز (خالی = همان API و مدل گفتگو)"]</label>
+    <summary id="set112">@L["پیشرفته"]</summary>
+    <label id="set113" class="lbl first">@L["API و مدل خلاصه‌ساز (خالی = همان API و مدل گفتگو)"]</label>
     <AppSelect Title="API" Value="@State.SummaryOpts.ProviderId" ValueChanged="OnProvider" Options="ProviderOptions()" />
     @if (!string.IsNullOrEmpty(State.SummaryOpts.ProviderId))
     {
@@ -28,7 +28,7 @@
         </datalist>
     }
 
-    <label class="lbl">@L["دستور خلاصه‌سازی (خالی = پیش‌فرض)"]</label>
+    <label id="set114" class="lbl">@L["دستور خلاصه‌سازی (خالی = پیش‌فرض)"]</label>
     <textarea class="inp" rows="5" dir="auto" placeholder="@SummaryHelper.DefaultInstructions" value="@State.SummaryOpts.Prompt" @oninput="OnPrompt"></textarea>
 </details>
 

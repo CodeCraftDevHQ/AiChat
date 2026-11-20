@@ -10,7 +10,7 @@
 
         <GenFields Value="_edit.Gen" Hint="@L["دستور سیستمی همان توضیح شخصیت است. عددهای تیک‌خورده، مقدار API و تنظیمات عمومی را برای این شخصیت لغو می‌کنند."]" />
 
-        <label class="lbl">@L["API و مدل (اختیاری؛ با انتخاب شخصیت، خودکار عوض می‌شود)"]</label>
+        <label id="set129" class="lbl">@L["API و مدل (اختیاری؛ با انتخاب شخصیت، خودکار عوض می‌شود)"]</label>
         <AppSelect Title="API" Value="@ProviderValue()" ValueChanged="OnProvider" Options="ProviderOptions()" />
         @if (!string.IsNullOrEmpty(_edit.ProviderId))
         {
@@ -23,10 +23,10 @@
             </datalist>
         }
 
-        <label class="lbl">@L["ابزارها"]</label>
+        <label id="set130" class="lbl">@L["ابزارها"]</label>
         <AppSelect Title="@L["ابزارها"]" Value="@ToolsValue()" ValueChanged="OnTools" Options="ToolsOptions()" />
 
-        <label class="lbl">@L["حافظه‌ی بلندمدت"]</label>
+        <label id="set131" class="lbl">@L["حافظه‌ی بلندمدت"]</label>
         <AppSelect Title="@L["حافظه‌ی بلندمدت"]" Value="@MemoryValue()" ValueChanged="OnMemory" Options="MemoryOptionsList()" />
 
         <div class="row">

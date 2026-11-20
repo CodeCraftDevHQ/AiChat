@@ -7,7 +7,15 @@
             <div class="modal-head"><h2>🔧 @L["اجازه‌ی استفاده از ابزار"]</h2></div>
             <div class="p-body">
                 <p>@L.F("مدل می‌خواهد از «{0}» استفاده کند:", ask.Label)</p>
-                <pre class="tool-ask-detail" dir="auto">@ask.Detail</pre>
+                @if (ask.Code != null)
+                {
+                    <p class="muted small">@L["زبان"]: <b>@ask.Sub</b></p>
+                    <pre class="tool-ask-detail code" dir="ltr">@ask.Code</pre>
+                }
+                else
+                {
+                    <pre class="tool-ask-detail" dir="auto">@ask.Detail</pre>
+                }
             </div>
             <div class="modal-foot">
                 <button class="btn" @onclick="() => State.AnswerToolAsk(0)">@L["رد کن"]</button>

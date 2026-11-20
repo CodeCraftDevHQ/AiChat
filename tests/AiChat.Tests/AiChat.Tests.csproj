@@ -39,6 +39,11 @@
 		<Compile Include="..\..\Services\Memory.cs" Link="App\Memory.cs" />
 		<Compile Include="..\..\Services\Summary.cs" Link="App\Summary.cs" />
 		<Compile Include="..\..\Services\CodeRun.cs" Link="App\CodeRun.cs" />
+		<Compile Include="..\..\Services\SearchText.cs" Link="App\SearchText.cs" />
+		<Compile Include="..\..\Services\Loc.cs" Link="App\Loc.cs" />
+		<Compile Include="..\..\Services\Translations.cs" Link="App\Translations.cs" />
+		<Compile Include="..\..\Services\SettingsIndex.cs" Link="App\SettingsIndex.cs" />
+		<Compile Include="..\..\Services\SettingsIndex.Items.cs" Link="App\SettingsIndex.Items.cs" />
 		<Compile Include="..\..\Services\ConnectorRepo.cs" Link="App\ConnectorRepo.cs" />
 	</ItemGroup>
 

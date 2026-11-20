@@ -490,3 +490,20 @@ document.addEventListener('keydown', (e) => {
         window.chat.dotnet.invokeMethodAsync('OnFind');
     }
 });
+
+
+// settings search: open the collapsed groups around an element, scroll to it and flash it
+window.chat = window.chat || {};
+window.chat.gotoSetting = function (id) {
+    requestAnimationFrame(function () {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var d = el.closest('details');
+        while (d) { d.open = true; d = d.parentElement ? d.parentElement.closest('details') : null; }
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.classList.remove('set-flash');
+        void el.offsetWidth;
+        el.classList.add('set-flash');
+        setTimeout(function () { el.classList.remove('set-flash'); }, 2200);
+    });
+};

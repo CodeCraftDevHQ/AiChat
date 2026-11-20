@@ -3,11 +3,11 @@
 @if (_editing)
 {
     <div class="persona-edit">
-        <label class="lbl first">@L["نام دستور (بدون فاصله؛ با /نام صدا زده می‌شود)"]</label>
+        <label id="set132" class="lbl first">@L["نام دستور (بدون فاصله؛ با /نام صدا زده می‌شود)"]</label>
         <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="translate" value="@_name" @oninput="OnName" />
-        <label class="lbl">@L["توضیح کوتاه"]</label>
+        <label id="set133" class="lbl">@L["توضیح کوتاه"]</label>
         <input class="inp" dir="auto" placeholder="Translate text to English" value="@_desc" @oninput="OnDesc" />
-        <label class="lbl">@L["متن پرامپت"]</label>
+        <label id="set134" class="lbl">@L["متن پرامپت"]</label>
         <textarea class="inp" rows="8" dir="auto" placeholder="Translate the following text to English. Reply with the translation only:&#10;&#10;{{text}}" value="@_prompt" @oninput="OnPrompt"></textarea>
         <p class="muted small">@L["{{text}} جای متن بعد از دستور را می‌گیرد. اگر نباشد، متن شما بعد از پرامپت اضافه می‌شود."]</p>
         <div class="row">
@@ -57,7 +57,7 @@ else
     }
 
     <details class="adv" style="margin-top:14px">
-        <summary>@L["ویرایش پیشرفته (JSON)"]</summary>
+        <summary id="set135">@L["ویرایش پیشرفته (JSON)"]</summary>
         <textarea class="inp code" rows="10" dir="ltr" autocapitalize="off" spellcheck="false"
                   value="@JsonText" @oninput="OnJson"></textarea>
         <div class="row">

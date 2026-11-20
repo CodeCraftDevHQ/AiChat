@@ -183,6 +183,21 @@
                     }
                 </div>
             }
+            @if (_toolsMenu)
+            {
+                <div class="menu-backdrop" @onclick="() => _toolsMenu = false"></div>
+                <div class="menu tools-menu" style="top:auto; bottom:84px; left:14px; right:auto">
+                    @if (State.CurrentProvider is { IsGenerator: false })
+                    {
+                        <button @onclick="() => State.SetWebSearch(!State.WebSearchOn)">🌐 @L["جستجو در وب"]<span class="ck">@(State.WebSearchOn ? "✓" : "")</span></button>
+                    }
+                    @if (State.ToolsAvailable)
+                    {
+                        <button @onclick="() => State.SetToolsEnabled(!State.ToolOpts.Enabled)">🔧 @L["ابزارها"]<span class="ck">@(State.ToolOpts.Enabled ? "✓" : "")</span></button>
+                    }
+                    <button @onclick="OpenPromptsFromMenu">📚 @L["کتابخانه‌ی پرامپت"]</button>
+                </div>
+            }
             @if (_plusMenu)
             {
                 <div class="menu-backdrop" @onclick="() => _plusMenu = false"></div>
@@ -214,21 +229,9 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
                     </button>
                 }
-                @if (State.CurrentProvider is { IsGenerator: false })
-                {
-                    <button class="icon-btn attach @(State.WebSearchOn ? "on" : "")" title="@(State.WebSearchOn ? L["جستجوی وب روشن است"] : L["جستجو در وب"])" @onclick="() => State.SetWebSearch(!State.WebSearchOn)">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" /></svg>
-                    </button>
-                }
-                <button class="icon-btn attach" title="@L["کتابخانه‌ی پرامپت"]" @onclick="State.OpenPrompts">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5" /><path d="M9 8h6" /></svg>
+                <button class="icon-btn attach @(State.WebSearchOn || (State.ToolsAvailable && State.ToolOpts.Enabled) ? "on" : "")" title="@L["جستجو، ابزارها و پرامپت‌ها"]" @onclick="() => _toolsMenu = !_toolsMenu">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10" /><path d="M18 7h2" /><circle cx="16" cy="7" r="2" /><path d="M4 17h2" /><path d="M10 17h10" /><circle cx="8" cy="17" r="2" /></svg>
                 </button>
-                @if (State.ToolsAvailable)
-                {
-                    <button class="icon-btn attach @(State.ToolOpts.Enabled ? "on" : "")" title="@(State.ToolOpts.Enabled ? L["ابزارها روشن است"] : L["ابزارها (مدل خودش جستجو می‌کند و ...)"])" @onclick="() => State.SetToolsEnabled(!State.ToolOpts.Enabled)">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" /></svg>
-                    </button>
-                }
                 <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="enter" placeholder="@L["هر چیزی بپرسید..."]"></textarea>
                 @if (State.IsStreaming)
                 {
@@ -596,7 +599,13 @@
     }
 
     static bool IsMobile => DeviceInfo.Current.Platform == DevicePlatform.Android || DeviceInfo.Current.Platform == DevicePlatform.iOS;
-    bool _plusMenu;
+    bool _plusMenu, _toolsMenu;
+
+    void OpenPromptsFromMenu()
+    {
+        _toolsMenu = false;
+        State.OpenPrompts();
+    }
 
     async Task PickFromMenu()
     {

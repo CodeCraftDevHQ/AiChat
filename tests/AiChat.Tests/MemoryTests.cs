@@ -96,7 +96,7 @@ public class MemoryTests
     {
         var saved = new List<string>();
         var hooks = new MemoryHooks { Ask = true, Remember = t => { saved.Add(t); return "Saved."; }, Forget = t => "Deleted: " + t };
-        var set = BuiltInTools.Build(new ToolOptions { Enabled = true, DateTime = false, Calculator = false, WebSearch = false, ReadPage = false },
+        var set = BuiltInTools.Build(new ToolOptions { Enabled = true, DateTime = false, Calculator = false, WebSearch = false, ReadPage = false, CodeRun = false },
             new WebSearchService(new HttpClient()), "ddg", "", "", new SearchOptions(), null, hooks);
 
         Assert.Equal(new[] { "remember", "forget" }, set.Tools.Select(t => t.Name));

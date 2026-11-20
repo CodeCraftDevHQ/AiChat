@@ -1,4 +1,5 @@
 @inherits StateComponent
+@inject IJSRuntime JS
 
 <div class="modal-backdrop" @onclick="State.CloseSettings">
     <div class="modal settings" @onclick:stopPropagation="true">
@@ -21,6 +22,33 @@
             @if (!State.IsNarrow || Section == null)
             {
                 <nav class="s-nav">
+                    <div class="s-search">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                        <input type="text" dir="auto" autocomplete="off" spellcheck="false" placeholder="@L["جستجو در تنظیمات..."]" value="@_q"
+                               @oninput="e => _q = e.Value?.ToString() ?? string.Empty" @onkeydown="OnSearchKey" />
+                        @if (_q.Length > 0)
+                        {
+                            <button class="icon-btn sm" title="@L["پاک کردن"]" @onclick="() => _q = string.Empty">✕</button>
+                        }
+                    </div>
+                    @if (_q.Trim().Length > 0)
+                    {
+                        var hits = SettingsIndex.Search(_q, L);
+                        if (hits.Count == 0)
+                        {
+                            <p class="muted small s-nohit">@L["چیزی پیدا نشد. با کلمه‌ی دیگری امتحان کنید؛ فارسی و انگلیسی هر دو جواب می‌دهند."]</p>
+                        }
+                        foreach (var h in hits)
+                        {
+                            var hit = h;
+                            <button class="s-hit" @onclick="() => GoTo(hit)">
+                                <span class="s-hit-title" dir="auto">@hit.Title</span>
+                                <span class="s-hit-path" dir="auto">@(hit.SectionTitle + (hit.Anchor.Length > 0 ? "" : " ›"))</span>
+                            </button>
+                        }
+                    }
+                    else
+                    {
                     @foreach (var item in Sections)
                     {
                         var key = item.Key;
@@ -32,6 +60,7 @@
                             }
                         </button>
                     }
+                    }
                 </nav>
             }
 
@@ -41,35 +70,35 @@
                     @switch (Section)
                     {
                         case "general":
-                            <label class="lbl first">@L["زبان برنامه"]</label>
+                            <label id="set1" class="lbl first">@L["زبان برنامه"]</label>
                             <AppSelect Title="@L["زبان برنامه"]" Value="@State.Language" ValueChanged="State.SetLanguage"
                                        Options="@(new AppSelect.SelectOption[] { new("fa", "فارسی"), new("en", "English") })" />
 
-                            <label class="lbl">@L["تم برنامه"]</label>
+                            <label id="set2" class="lbl">@L["تم برنامه"]</label>
                             <AppSelect Title="@L["تم برنامه"]" Value="@State.Theme" ValueChanged="State.SetTheme"
                                        Options="@(new AppSelect.SelectOption[] { new("system", L["مطابق سیستم"]), new("dark", L["تاریک"]), new("light", L["روشن"]) })" />
 
-                            <label class="check" style="margin-top:18px">
+                            <label id="set3" class="check" style="margin-top:18px">
                                 <input type="checkbox" checked="@State.IsRtl" @onchange="OnRtlChanged" />
                                 <span>@L["رابط راست‌به‌چپ (فارسی)"]</span>
                             </label>
                             break;
 
                         case "appearance":
-                            <label class="lbl first">@L["اندازه‌ی متن"]: @State.UiFontSize px</label>
+                            <label id="set4" class="lbl first">@L["اندازه‌ی متن"]: @State.UiFontSize px</label>
                             <input type="range" class="range" min="12" max="26" step="1" value="@State.UiFontSize" @oninput="e => State.SetUi(fontSize: ToInt(e))" />
 
-                            <label class="lbl">@L["عرض خطوط (عرض محتوا)"]: @(State.UiWidth == 0 ? L["تمام‌عرض"] : State.UiWidth + " px")</label>
+                            <label id="set5" class="lbl">@L["عرض خطوط (عرض محتوا)"]: @(State.UiWidth == 0 ? L["تمام‌عرض"] : State.UiWidth + " px")</label>
                             <input type="range" class="range" min="480" max="1400" step="20" value="@(State.UiWidth == 0 ? 1400 : State.UiWidth)" @oninput="e => State.SetUi(width: ToInt(e))" />
-                            <label class="check" style="margin-top:8px">
+                            <label id="set6" class="check" style="margin-top:8px">
                                 <input type="checkbox" checked="@(State.UiWidth == 0)" @onchange="OnFullWidth" />
                                 <span>@L["تمام‌عرض"]</span>
                             </label>
 
-                            <label class="lbl">@L["فاصله‌ی خطوط"]: @(State.UiLineHeight / 100.0) </label>
+                            <label id="set7" class="lbl">@L["فاصله‌ی خطوط"]: @(State.UiLineHeight / 100.0) </label>
                             <input type="range" class="range" min="120" max="220" step="5" value="@State.UiLineHeight" @oninput="e => State.SetUi(lineHeight: ToInt(e))" />
 
-                            <label class="lbl">@L["قلم"]</label>
+                            <label id="set8" class="lbl">@L["قلم"]</label>
                             <AppSelect Title="@L["قلم"]" Value="@State.UiFont" ValueChanged="OnFontChosen"
                                        Options="@(new AppSelect.SelectOption[] { new("default", L["پیش‌فرض"]), new("tahoma", "Tahoma"), new("serif", L["سریف"]), new("mono", L["تک‌فاصله"]) })" />
 
@@ -92,7 +121,7 @@
                             }
                             else
                             {
-                                <label class="lbl">@L["الگوی آماده"]</label>
+                                <label id="set9" class="lbl">@L["الگوی آماده"]</label>
                                 <AppSelect Title="@L["الگوی آماده"]" Value="" ValueChanged="OnPresetChosen" Placeholder="@L["— انتخاب کنید (اختیاری) —"]"
                                            Options="@PresetOptions()" />
                                 <div class="row">
@@ -104,17 +133,17 @@
                                 </div>
 
 
-                                <label class="lbl">@L["نام نمایشی"]</label>
+                                <label id="set10" class="lbl">@L["نام نمایشی"]</label>
                                 <input class="inp" dir="auto" @bind="_editing.Name" @bind:event="oninput" />
 
-                                <label class="lbl">@L["نوع API"]</label>
+                                <label id="set11" class="lbl">@L["نوع API"]</label>
                                 <AppSelect Title="@L["نوع API"]" Value="@_editing.Type.ToString()" ValueChanged="OnTypeChosen"
                                            Options="@(Enum.GetValues<ProviderType>().Select(t => new AppSelect.SelectOption(t.ToString(), L[ProviderDefaults.TypeLabel(t)])).ToList())" />
 
-                                <label class="lbl">@L["آدرس پایه (Base URL)"]</label>
+                                <label id="set12" class="lbl">@L["آدرس پایه (Base URL)"]</label>
                                 <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_editing.BaseUrl" @bind:event="oninput" />
 
-                                <label class="lbl">@L["کلید API"]</label>
+                                <label id="set13" class="lbl">@L["کلید API"]</label>
                                 <div class="row">
                                     <input class="inp" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false"
                                            type="@(_showKey ? "text" : "password")" @bind="_editing.ApiKey" @bind:event="oninput" />
@@ -124,24 +153,24 @@
                                 @if (_editing.Type == ProviderType.FooocusApi)
                                 {
                                     <div class="img-opts">
-                                        <label class="lbl">@L["تنظیمات تصویرسازی"]</label>
+                                        <label id="set14" class="lbl">@L["تنظیمات تصویرسازی"]</label>
                                         <p class="muted small">@L["هر پیام یک توضیح تصویر حساب می‌شود. برای نتیجه‌ی بهتر، توضیح را انگلیسی بنویسید."]</p>
 
-                                        <label class="lbl">@L["نسبت تصویر"]</label>
+                                        <label id="set15" class="lbl">@L["نسبت تصویر"]</label>
                                         <AppSelect Title="@L["نسبت تصویر"]" Value="@_editing.ImageAspect" ValueChanged="v => _editing.ImageAspect = v"
                                                    Options="@(AspectRatios.Select(a => new AppSelect.SelectOption(a, a.Replace("*", " × "))).ToList())" />
 
-                                        <label class="lbl">@L["سرعت / کیفیت"]</label>
+                                        <label id="set16" class="lbl">@L["سرعت / کیفیت"]</label>
                                         <AppSelect Title="@L["سرعت / کیفیت"]" Value="@_editing.ImagePerformance" ValueChanged="v => _editing.ImagePerformance = v"
                                                    Options="@(new AppSelect.SelectOption[] { new("Speed", "Speed"), new("Quality", "Quality"), new("Extreme Speed", "Extreme Speed") })" />
 
-                                        <label class="lbl">@L["تعداد تصویر در هر پیام"]</label>
+                                        <label id="set17" class="lbl">@L["تعداد تصویر در هر پیام"]</label>
                                         <input type="number" class="inp" min="1" max="4" @bind="_editing.ImageCount" @bind:event="onchange" />
 
-                                        <label class="lbl">@L["استایل‌ها (با ویرگول جدا کنید)"]</label>
+                                        <label id="set18" class="lbl">@L["استایل‌ها (با ویرگول جدا کنید)"]</label>
                                         <input class="inp" dir="ltr" @bind="_editing.ImageStyles" @bind:event="oninput" />
 
-                                        <label class="lbl">@L["متن منفی (چیزهایی که نباید در تصویر باشد)"]</label>
+                                        <label id="set19" class="lbl">@L["متن منفی (چیزهایی که نباید در تصویر باشد)"]</label>
                                         <input class="inp" dir="ltr" @bind="_editing.NegativePrompt" @bind:event="oninput" />
                                     </div>
                                 }
@@ -149,40 +178,40 @@
                                 @if (_editing.Type is not (ProviderType.FooocusApi or ProviderType.Custom))
                                 {
                                     <details class="adv" open="@_advOpen" @ontoggle="() => _advOpen = !_advOpen">
-                                        <summary>@L["تنظیمات پیشرفته"]</summary>
+                                        <summary id="set20">@L["تنظیمات پیشرفته"]</summary>
                                         <p class="muted small">@L["همه‌ی این موارد اختیاری‌اند. برای APIهای غیرمعمول یا سرویس‌های واسط استفاده کنید."]</p>
 
-                                        <label class="lbl">@L["روش ارسال کلید"]</label>
+                                        <label id="set21" class="lbl">@L["روش ارسال کلید"]</label>
                                         <AppSelect Title="@L["روش ارسال کلید"]" Value="@_editing.AuthMode" ValueChanged="v => _editing.AuthMode = v"
                                                    Options="@(AuthModes.Select(a => new AppSelect.SelectOption(a.Key, L[a.Label])).ToList())" />
 
                                         @if (_editing.AuthMode is "header" or "query")
                                         {
-                                            <label class="lbl">@L["نام هدر یا پارامتر کلید"]</label>
+                                            <label id="set22" class="lbl">@L["نام هدر یا پارامتر کلید"]</label>
                                             <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="X-API-Key" @bind="_editing.AuthName" @bind:event="oninput" />
                                         }
 
-                                        <label class="lbl">@L["هدرهای اضافی (هر خط: Name: value)"]</label>
+                                        <label id="set23" class="lbl">@L["هدرهای اضافی (هر خط: Name: value)"]</label>
                                         <textarea class="inp" rows="3" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="X-Org: my-team" @bind="_editing.Headers" @bind:event="oninput"></textarea>
                                         <p class="muted small">@L["در مقدار می‌توانید {apiKey} را بنویسید تا با کلید جایگزین شود."]</p>
 
                                         @if (!_editing.IsGenerator)
                                         {
-                                            <label class="lbl">@L["تنظیمات پاسخ این API"]</label>
+                                            <label id="set24" class="lbl">@L["تنظیمات پاسخ این API"]</label>
                                             <GenFields Value="_editing.Gen" Hint="@L["فقط برای این API؛ تنظیمات عمومی را لغو می‌کند و گفتگو می‌تواند دوباره لغوش کند."]" />
                                         }
 
-                                        <label class="lbl">@L["پارامترهای اضافی بدنه (JSON)"]</label>
+                                        <label id="set25" class="lbl">@L["پارامترهای اضافی بدنه (JSON)"]</label>
                                         <textarea class="inp" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder='{"temperature": 0.7}' @bind="_editing.ExtraBody" @bind:event="oninput"></textarea>
                                         <p class="muted small">@L["این فیلدها به هر درخواست اضافه می‌شوند. مقدار null آن فیلد را حذف می‌کند."]</p>
 
-                                        <label class="lbl">@L["مسیر چت (اختیاری)"]</label>
+                                        <label id="set26" class="lbl">@L["مسیر چت (اختیاری)"]</label>
                                         <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="chat/completions" @bind="_editing.ChatPath" @bind:event="oninput" />
 
-                                        <label class="lbl">@L["مسیر لیست مدل‌ها (اختیاری)"]</label>
+                                        <label id="set27" class="lbl">@L["مسیر لیست مدل‌ها (اختیاری)"]</label>
                                         <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="models" @bind="_editing.ModelsPath" @bind:event="oninput" />
 
-                                        <label class="lbl">@L["کنترل‌ها (JSON، اختیاری)"]</label>
+                                        <label id="set28" class="lbl">@L["کنترل‌ها (JSON، اختیاری)"]</label>
                                         <textarea class="inp code" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder='[{"id":"temperature","type":"slider","min":0,"max":2,"step":0.1,"default":"0.7"}]'
                                                   @bind="_editing.Controls" @bind:event="oninput"></textarea>
                                         <p class="muted small">@L["هر کنترل یک فیلد در همین فرم می‌سازد (slider, number, select, bool, text). مقدارش را در پارامترهای اضافی بدنه با {{input.id}} بنویسید."]</p>
@@ -196,8 +225,8 @@
 
                                         @if (_editing.Type == ProviderType.OpenAiCompatible)
                                         {
-                                            <label class="chk"><input type="checkbox" @bind="_editing.NoStream" /> @L["پاسخ یکجا (بدون استریم)"]</label>
-                                            <label class="chk"><input type="checkbox" @bind="_editing.UseTools" /> @L["اجازه‌ی استفاده از ابزارها برای این API"]</label>
+                                            <label id="set29" class="chk"><input type="checkbox" @bind="_editing.NoStream" /> @L["پاسخ یکجا (بدون استریم)"]</label>
+                                            <label id="set30" class="chk"><input type="checkbox" @bind="_editing.UseTools" /> @L["اجازه‌ی استفاده از ابزارها برای این API"]</label>
                                         }
                                     </details>
                                 }
@@ -205,7 +234,7 @@
                                 @if (_editing.Type == ProviderType.Custom)
                                 {
                                     <div class="img-opts">
-                                        <label class="lbl">@L["اتصال سفارشی"]</label>
+                                        <label id="set31" class="lbl">@L["اتصال سفارشی"]</label>
                                         <p class="muted small">@L["رفتار API با یک فایل JSON توصیف می‌شود: آدرس‌ها، بدنه‌ی درخواست، و محل نتیجه در پاسخ. با یک الگو شروع کنید و ویرایشش کنید."]</p>
 
                                         <AppSelect Title="@L["الگوی اتصال"]" Value="" ValueChanged="OnTemplateChosen" Placeholder="@L["— شروع از یک الگو —"]"
@@ -237,14 +266,14 @@
                                     </div>
                                 }
 
-                                <label class="lbl">@L["مدل‌ها (هر خط یک مدل)"]</label>
+                                <label id="set32" class="lbl">@L["مدل‌ها (هر خط یک مدل)"]</label>
                                 <textarea class="inp" rows="6" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_modelsText" @bind:event="oninput"></textarea>
 
                                 <div class="row">
                                     <button class="btn" disabled="@_busy" @onclick="FetchModels">@L["دریافت خودکار لیست مدل‌ها"]</button>
                                 </div>
 
-                                <label class="lbl">@L["مدل پیش‌فرض"]</label>
+                                <label id="set33" class="lbl">@L["مدل پیش‌فرض"]</label>
                                 <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" @bind="_editing.DefaultModel" @bind:event="oninput" />
 
                                 @if (_status != null)
@@ -270,18 +299,18 @@
                             break;
 
                         case "chat":
-                            <label class="lbl first">@L["پیام سیستمی (اختیاری، برای همه مدل‌ها)"]</label>
+                            <label id="set34" class="lbl first">@L["پیام سیستمی (اختیاری، برای همه مدل‌ها)"]</label>
                             <textarea class="inp" rows="6" dir="auto" placeholder="@L["مثلاً: همیشه به فارسی پاسخ بده."]"
                                       value="@State.SystemPrompt" @oninput="OnSystemPromptInput"></textarea>
                             <p class="muted small" style="margin-top:8px">@L["دستورالعمل‌های هر پروژه به این پیام اضافه می‌شود."]</p>
 
-                            <label class="lbl">@L["محدودیت حجم فایل‌ها (مگابایت)"]</label>
+                            <label id="set35" class="lbl">@L["محدودیت حجم فایل‌ها (مگابایت)"]</label>
                             <div class="limits">
                                 <label>@L["عکس"] <input class="inp" type="number" min="1" max="500" value="@State.LimitImageMb" @onchange="e => State.SetLimits(imageMb: ToInt(e))" /></label>
                                 <label>@L["PDF"] <input class="inp" type="number" min="1" max="500" value="@State.LimitPdfMb" @onchange="e => State.SetLimits(pdfMb: ToInt(e))" /></label>
                                 <label>@L["متن و کد"] <input class="inp" type="number" min="1" max="100" value="@State.LimitTextMb" @onchange="e => State.SetLimits(textMb: ToInt(e))" /></label>
                             </div>
-                            <label class="chk"><input type="checkbox" checked="@State.ShrinkImages" @onchange="e => State.SetLimits(shrink: (bool)(e.Value ?? false))" /> @L["کوچک‌کردن خودکار عکس‌های بزرگ (بیش از ۳ مگابایت)"]</label>
+                            <label id="set36" class="chk"><input type="checkbox" checked="@State.ShrinkImages" @onchange="e => State.SetLimits(shrink: (bool)(e.Value ?? false))" /> @L["کوچک‌کردن خودکار عکس‌های بزرگ (بیش از ۳ مگابایت)"]</label>
                             <p class="muted small">@L["بعضی سرویس‌ها (مثل Claude) عکس بزرگ‌تر از ۵ مگابایت را نمی‌پذیرند؛ کوچک‌کردن خودکار آن را به حدود ۲۰۴۸ پیکسل (JPEG) می‌رساند."]</p>
 
                             <p class="muted small" style="margin-top:12px">@L["میانبرهای / و پرامپت‌های آماده در «کتابخانه‌ی پرامپت» مدیریت می‌شوند."]</p>
@@ -289,22 +318,22 @@
                             break;
 
                         case "answer":
-                            <label class="lbl first">@L["تنظیمات پیش‌فرض پاسخ (برای همه)"]</label>
+                            <label id="set37" class="lbl first">@L["تنظیمات پیش‌فرض پاسخ (برای همه)"]</label>
                             <GenFields Value="State.GenDefaults" ShowSystem="false" OnChanged="State.SaveGenDefaults"
                                        Hint="@L["مقدار پیش‌فرض همه‌ی APIها؛ تنظیمات هر API یا هر گفتگو آن را لغو می‌کند."]" />
                             <div class="row-btns">
                                 <button class="btn" @onclick="State.ResetGenDefaults">@L["بازنشانی"]</button>
                             </div>
 
-                            <label class="lbl">@L["نمایش فکر کردن مدل"]</label>
+                            <label id="set38" class="lbl">@L["نمایش فکر کردن مدل"]</label>
                             <AppSelect Title="@L["نمایش فکر کردن مدل"]" Value="@State.ThinkMode" ValueChanged="State.SetThinkMode"
                                        Options="@(new AppSelect.SelectOption[] { new("auto", L["باز هنگام فکر، بسته بعد از آن"]), new("open", L["همیشه باز"]), new("closed", L["همیشه بسته"]), new("hidden", L["نمایش داده نشود"]) })" />
-                            <label class="lbl">@L["حداکثر ارتفاع جعبه‌ی فکر"]: @State.ThinkMaxHeight px</label>
+                            <label id="set39" class="lbl">@L["حداکثر ارتفاع جعبه‌ی فکر"]: @State.ThinkMaxHeight px</label>
                             <input type="range" class="range" min="100" max="900" step="20" value="@State.ThinkMaxHeight" @oninput="e => State.SetThinkMaxHeight(ToInt(e))" />
                             break;
 
                         case "search":
-                            <label class="lbl first">@L["جستجو در وب"]</label>
+                            <label id="set40" class="lbl first">@L["جستجو در وب"]</label>
                             <p class="muted small">@L["با دکمه‌ی 🌐 کنار کادر پیام روشن می‌شود. نتایج جستجو به مدل داده می‌شود و منابع زیر پاسخ می‌آید؛ با هر مدل چتی کار می‌کند."]</p>
                             <AppSelect Title="@L["موتور جستجو"]" Value="@State.SearchEngine" ValueChanged="State.SetSearchEngine"
                                        Options="@(new AppSelect.SelectOption[] { new("ddg", "DuckDuckGo (" + L["بدون کلید"] + ")"), new("brave", "Brave Search (" + L["نیاز به کلید"] + ")"), new("searxng", "SearXNG (" + L["سرور خودتان"] + ")"), new("custom", L["موتور سفارشی (آدرس + JSON)"]) })" />
@@ -317,57 +346,57 @@
                                 <input class="inp" style="margin-top:6px" dir="ltr" placeholder="http://localhost:8080" value="@State.SearchBaseUrl" @onchange="e => State.SetSearchBaseUrl(e.Value?.ToString() ?? string.Empty)" />
                             }
                             <details class="adv-search">
-                                <summary>@L["تنظیمات پیشرفته‌ی جستجو"]</summary>
+                                <summary id="set41">@L["تنظیمات پیشرفته‌ی جستجو"]</summary>
                                 @{ var so = State.SearchOpts; }
-                                <label class="lbl">@L["تعداد نتایج"]: @so.SafeCount</label>
+                                <label id="set42" class="lbl">@L["تعداد نتایج"]: @so.SafeCount</label>
                                 <input type="range" class="range" min="1" max="10" step="1" value="@so.SafeCount" @oninput="e => Opt(o => o.Count = ToInt(e))" />
 
-                                <label class="lbl">@L["عبارت جستجو"]</label>
+                                <label id="set43" class="lbl">@L["عبارت جستجو"]</label>
                                 <AppSelect Title="@L["عبارت جستجو"]" Value="@so.QueryMode" ValueChanged="v => Opt(o => o.QueryMode = v)"
                                            Options="@(new AppSelect.SelectOption[] { new("last", L["همان آخرین پیام"]), new("ai", L["مدل از روی گفتگو بسازد (یک درخواست اضافه)"]) })" />
 
-                                <label class="lbl">@L["بازه‌ی زمانی نتایج"]</label>
+                                <label id="set44" class="lbl">@L["بازه‌ی زمانی نتایج"]</label>
                                 <AppSelect Title="@L["بازه‌ی زمانی نتایج"]" Value="@so.TimeRange" ValueChanged="v => Opt(o => o.TimeRange = v)"
                                            Options="@(new AppSelect.SelectOption[] { new("", L["هر زمان"]), new("day", L["۲۴ ساعت اخیر"]), new("week", L["هفته‌ی اخیر"]), new("month", L["ماه اخیر"]), new("year", L["سال اخیر"]) })" />
 
-                                <label class="lbl">@L["جستجوی امن"]</label>
+                                <label id="set45" class="lbl">@L["جستجوی امن"]</label>
                                 <AppSelect Title="@L["جستجوی امن"]" Value="@so.SafeSearch" ValueChanged="v => Opt(o => o.SafeSearch = v)"
                                            Options="@(new AppSelect.SelectOption[] { new("off", L["خاموش"]), new("moderate", L["متوسط"]), new("strict", L["سخت‌گیرانه"]) })" />
 
-                                <label class="lbl">@L["منطقه / زبان نتایج"]</label>
+                                <label id="set46" class="lbl">@L["منطقه / زبان نتایج"]</label>
                                 <input class="inp" dir="ltr" placeholder="DuckDuckGo: us-en, de-de · Brave: US · SearXNG: fa" value="@so.Region" @onchange="e => Opt(o => o.Region = e.Value?.ToString() ?? string.Empty)" />
 
-                                <label class="lbl">@L["حداکثر زمان انتظار (ثانیه)"]</label>
+                                <label id="set47" class="lbl">@L["حداکثر زمان انتظار (ثانیه)"]</label>
                                 <input class="inp" type="number" min="5" max="120" dir="ltr" value="@so.TimeoutSec" @onchange="e => Opt(o => o.TimeoutSec = Math.Clamp(ToInt(e), 5, 120))" />
 
-                                <label class="lbl">@L["خواندن متن صفحه‌ها"]: @(so.PageCount == 0 ? L["خاموش"] : so.PageCount.ToString())</label>
+                                <label id="set48" class="lbl">@L["خواندن متن صفحه‌ها"]: @(so.PageCount == 0 ? L["خاموش"] : so.PageCount.ToString())</label>
                                 <input type="range" class="range" min="0" max="5" step="1" value="@so.PageCount" @oninput="e => Opt(o => o.PageCount = ToInt(e))" />
                                 <p class="muted small">@L["اگر روشن باشد، متن چند نتیجه‌ی اول هم باز و خوانده می‌شود (دقیق‌تر، ولی کندتر و پر مصرف‌تر)."]</p>
                                 @if (so.PageCount > 0)
                                 {
-                                    <label class="lbl">@L["حداکثر نویسه‌ی هر صفحه"]: @so.PageChars</label>
+                                    <label id="set49" class="lbl">@L["حداکثر نویسه‌ی هر صفحه"]: @so.PageChars</label>
                                     <input type="range" class="range" min="500" max="12000" step="500" value="@so.PageChars" @oninput="e => Opt(o => o.PageChars = ToInt(e))" />
 
-                                    <label class="lbl">@L["حداکثر زمان باز کردن هر صفحه (ثانیه)"]</label>
+                                    <label id="set50" class="lbl">@L["حداکثر زمان باز کردن هر صفحه (ثانیه)"]</label>
                                     <input class="inp" type="number" min="3" max="60" dir="ltr" value="@so.PageTimeoutSec" @onchange="e => Opt(o => o.PageTimeoutSec = Math.Clamp(ToInt(e), 3, 60))" />
 
-                                    <label class="lbl">@L["سایت‌های مسدود (هر خط یک دامنه)"]</label>
+                                    <label id="set51" class="lbl">@L["سایت‌های مسدود (هر خط یک دامنه)"]</label>
                                     <textarea class="inp" rows="3" dir="ltr" placeholder="example.com" value="@so.BlockedDomains" @onchange="e => Opt(o => o.BlockedDomains = e.Value?.ToString() ?? string.Empty)"></textarea>
                                 }
 
-                                <label class="check" style="margin-top:10px">
+                                <label id="set52" class="check" style="margin-top:10px">
                                     <input type="checkbox" checked="@so.ShowSources" @onchange="e => Opt(o => o.ShowSources = e.Value is true)" />
                                     <span>@L["فهرست منابع زیر پاسخ نمایش داده شود"]</span>
                                 </label>
 
-                                <label class="lbl">@L["دستور همراه نتایج برای مدل (خالی = پیش‌فرض)"]</label>
+                                <label id="set53" class="lbl">@L["دستور همراه نتایج برای مدل (خالی = پیش‌فرض)"]</label>
                                 <textarea class="inp" rows="5" dir="auto" placeholder="@WebSearchService.DefaultPrompt" value="@so.PromptTemplate"
                                           @onchange="e => Opt(o => o.PromptTemplate = e.Value?.ToString() ?? string.Empty)"></textarea>
                                 <p class="muted small">@L["می‌توانید {date} (تاریخ امروز) و {results} (جای نتایج) را بنویسید."]</p>
 
                                 @if (State.SearchEngine == "custom")
                                 {
-                                    <label class="lbl">@L["موتور سفارشی"]</label>
+                                    <label id="set54" class="lbl">@L["موتور سفارشی"]</label>
                                     <p class="muted small">@L["آدرس می‌تواند {query}، {count}، {key} و {region} داشته باشد. مسیرهای JSON مثل $.results[*] هستند."]</p>
                                     <input class="inp" dir="ltr" placeholder="https://api.example.com/search?q={query}&n={count}" value="@so.CustomUrl" @onchange="e => Opt(o => o.CustomUrl = e.Value?.ToString() ?? string.Empty)" />
                                     <textarea class="inp" style="margin-top:6px" rows="2" dir="ltr" placeholder="Authorization: Bearer {key}" value="@so.CustomHeaders" @onchange="e => Opt(o => o.CustomHeaders = e.Value?.ToString() ?? string.Empty)"></textarea>
@@ -411,23 +440,23 @@
 
                         case "tools":
                             var to = State.ToolOpts;
-                            <label class="chk first"><input type="checkbox" checked="@to.Enabled" @onchange="e => ToolOpt(o => o.Enabled = e.Value is true)" /> @L["ابزارها برای مدل فعال باشند"]</label>
+                            <label id="set55" class="chk first"><input type="checkbox" checked="@to.Enabled" @onchange="e => ToolOpt(o => o.Enabled = e.Value is true)" /> @L["ابزارها برای مدل فعال باشند"]</label>
                             <p class="muted small">@L["مدل خودش تصمیم می‌گیرد چه موقع از ابزار استفاده کند (مثلاً جستجو کند، صفحه بخواند یا محاسبه کند)، نتیجه را می‌گیرد و جوابش را ادامه می‌دهد. فقط برای APIهای سازگار با OpenAI و مدل‌هایی که ابزار را پشتیبانی می‌کنند؛ اگر مدلی پشتیبانی نکند، خودکار بدون ابزار جواب می‌دهد."]</p>
 
 
                             <details class="adv-search" open>
-                                <summary>@L["ابزارهای در دسترس"]</summary>
-                                <label class="chk"><input type="checkbox" checked="@to.WebSearch" @onchange="e => ToolOpt(o => o.WebSearch = e.Value is true)" /> 🔎 @L["جستجوی وب (از تنظیمات «جستجو در وب» استفاده می‌کند)"]</label>
-                                <label class="chk"><input type="checkbox" checked="@to.ReadPage" @onchange="e => ToolOpt(o => o.ReadPage = e.Value is true)" /> 📄 @L["خواندن صفحه‌ی وب با آدرس"]</label>
-                            <label class="chk"><input type="checkbox" checked="@to.DateTime" @onchange="e => ToolOpt(o => o.DateTime = e.Value is true)" /> 🕒 @L["تاریخ و ساعت"]</label>
-                            <label class="chk"><input type="checkbox" checked="@to.Calculator" @onchange="e => ToolOpt(o => o.Calculator = e.Value is true)" /> 🧮 @L["ماشین‌حساب"]</label>
-                                <label class="chk"><input type="checkbox" checked="@to.CodeRun" @onchange="e => ToolOpt(o => o.CodeRun = e.Value is true)" /> 🧪 @L["اجرای کد جاوااسکریپت (در محیط ایزوله)"]</label>
+                                <summary id="set56">@L["ابزارهای در دسترس"]</summary>
+                                <label id="set57" class="chk"><input type="checkbox" checked="@to.WebSearch" @onchange="e => ToolOpt(o => o.WebSearch = e.Value is true)" /> 🔎 @L["جستجوی وب (از تنظیمات «جستجو در وب» استفاده می‌کند)"]</label>
+                                <label id="set58" class="chk"><input type="checkbox" checked="@to.ReadPage" @onchange="e => ToolOpt(o => o.ReadPage = e.Value is true)" /> 📄 @L["خواندن صفحه‌ی وب با آدرس"]</label>
+                            <label id="set59" class="chk"><input type="checkbox" checked="@to.DateTime" @onchange="e => ToolOpt(o => o.DateTime = e.Value is true)" /> 🕒 @L["تاریخ و ساعت"]</label>
+                            <label id="set60" class="chk"><input type="checkbox" checked="@to.Calculator" @onchange="e => ToolOpt(o => o.Calculator = e.Value is true)" /> 🧮 @L["ماشین‌حساب"]</label>
+                                <label id="set61" class="chk"><input type="checkbox" checked="@to.CodeRun" @onchange="e => ToolOpt(o => o.CodeRun = e.Value is true)" /> 🧪 @L["اجرای کد جاوااسکریپت (در محیط ایزوله)"]</label>
                             </details>
 
                             @if (to.CodeRun)
                             {
                                 <details class="adv-search">
-                                    <summary>🧪 @L["تنظیمات اجرای کد"]</summary>
+                                    <summary id="set62">🧪 @L["تنظیمات اجرای کد"]</summary>
                                     <p class="muted small">@L["مدل با هر زبانی که فعال کنید می‌تواند کد بنویسد و اجرا کند. جاوااسکریپت داخل یک محیط ایزوله‌ی خود برنامه اجرا می‌شود (بدون فایل و شبکه). زبان‌های دیگر برنامه‌ی نصب‌شده روی همین کامپیوتر را اجرا می‌کنند (فقط ویندوز) و ایزوله نیستند: با دسترسی‌های خود شما کار می‌کنند، پس پرسیدن قبل از اجرا را روشن نگه دارید."]</p>
                                     @foreach (var lg in to.CodeLanguages)
                                     {
@@ -437,18 +466,18 @@
                                             <label class="chk"><input type="checkbox" checked="@lg.Ask" @onchange="e => Lang(lg, x => x.Ask = e.Value is true)" /> @L["قبل از هر اجرا از من بپرس (پیشنهادی)"]</label>
                                             @if (!lg.Builtin)
                                             {
-                                                <label class="lbl">@L["نام"]</label>
+                                                <label id="set63" class="lbl">@L["نام"]</label>
                                                 <input class="inp" dir="auto" value="@lg.Name" @onchange="e => Lang(lg, x => x.Name = StrOf(e))" />
-                                                <label class="lbl">@L["برنامه‌ای که اجرا می‌شود"]</label>
+                                                <label id="set64" class="lbl">@L["برنامه‌ای که اجرا می‌شود"]</label>
                                                 <input class="inp" dir="ltr" placeholder="python" value="@lg.Command" @onchange="e => Lang(lg, x => x.Command = StrOf(e))" />
-                                                <label class="lbl">@L["آرگومان‌ها ({file} = فایل کد، {dir} = پوشه‌ی آن؛ خودتان گیومه بگذارید)"]</label>
+                                                <label id="set65" class="lbl">@L["آرگومان‌ها ({file} = فایل کد، {dir} = پوشه‌ی آن؛ خودتان گیومه بگذارید)"]</label>
                                                 <input class="inp" dir="ltr" value="@lg.Args" @onchange="e => Lang(lg, x => x.Args = StrOf(e))" />
-                                                <label class="lbl">@L["پسوند فایل کد"]</label>
+                                                <label id="set66" class="lbl">@L["پسوند فایل کد"]</label>
                                                 <input class="inp" dir="ltr" placeholder=".py" value="@lg.Extension" @onchange="e => Lang(lg, x => x.Extension = StrOf(e))" />
-                                                <label class="lbl">@L["پوشه‌ی کار (خالی = پوشه‌ی موقت خالی که بعد پاک می‌شود)"]</label>
+                                                <label id="set67" class="lbl">@L["پوشه‌ی کار (خالی = پوشه‌ی موقت خالی که بعد پاک می‌شود)"]</label>
                                                 <input class="inp" dir="ltr" placeholder="C:\Work" value="@lg.WorkDir" @onchange="e => Lang(lg, x => x.WorkDir = StrOf(e))" />
                                                 <label class="chk"><input type="checkbox" checked="@lg.CleanEnv" @onchange="e => Lang(lg, x => x.CleanEnv = e.Value is true)" /> @L["متغیرهای محیطی برنامه (مثل کلیدها) به برنامه داده نشود"]</label>
-                                                <label class="lbl">@L["محدودیت زمان این زبان (ثانیه، ۰ = همان محدودیت عمومی)"]</label>
+                                                <label id="set68" class="lbl">@L["محدودیت زمان این زبان (ثانیه، ۰ = همان محدودیت عمومی)"]</label>
                                                 <input class="inp" type="number" min="0" max="600" value="@lg.TimeoutSec" @onchange="e => Lang(lg, x => x.TimeoutSec = Math.Clamp(ToInt(e), 0, 600))" />
                                                 <button class="btn sm" style="margin-top:8px" @onclick="() => RemoveLang(lg)">🗑 @L["حذف این زبان"]</button>
                                             }
@@ -457,16 +486,16 @@
                                     <button class="btn sm" style="margin-top:8px" @onclick="AddLang">➕ @L["افزودن زبان یا برنامه"]</button>
                                     <button class="btn sm" style="margin-top:8px" @onclick="ResetLangs">@L["بازنشانی فهرست زبان‌ها"]</button>
 
-                                    <label class="lbl" style="margin-top:12px">@L["حداکثر زمان اجرا (ثانیه)"]</label>
+                                    <label id="set69" class="lbl" style="margin-top:12px">@L["حداکثر زمان اجرا (ثانیه)"]</label>
                                     <input class="inp" type="number" min="1" max="120" value="@to.Code.TimeoutSec" @onchange="e => ToolOpt(o => o.Code.TimeoutSec = Math.Clamp(ToInt(e), 1, 120))" />
-                                    <label class="lbl">@L["حداکثر طول خروجی (نویسه)"]</label>
+                                    <label id="set70" class="lbl">@L["حداکثر طول خروجی (نویسه)"]</label>
                                     <input class="inp" type="number" min="200" max="50000" step="200" value="@to.Code.OutputChars" @onchange="e => ToolOpt(o => o.Code.OutputChars = Math.Clamp(ToInt(e), 200, 50000))" />
                                     <p class="muted small" style="margin-top:8px">@L["محدودیت‌های زیر فقط برای جاوااسکریپتِ داخلی است:"]</p>
-                                    <label class="lbl">@L["حداکثر حافظه (مگابایت)"]</label>
+                                    <label id="set71" class="lbl">@L["حداکثر حافظه (مگابایت)"]</label>
                                     <input class="inp" type="number" min="2" max="1024" value="@to.Code.MemoryMb" @onchange="e => ToolOpt(o => o.Code.MemoryMb = Math.Clamp(ToInt(e), 2, 1024))" />
-                                    <label class="lbl">@L["حداکثر تعداد دستورها (۰ = بدون محدودیت)"]</label>
+                                    <label id="set72" class="lbl">@L["حداکثر تعداد دستورها (۰ = بدون محدودیت)"]</label>
                                     <input class="inp" type="number" min="0" max="100000000" step="100000" value="@to.Code.MaxStatements" @onchange="e => ToolOpt(o => o.Code.MaxStatements = Math.Clamp(ToInt(e), 0, 100000000))" />
-                                    <label class="lbl">@L["حداکثر عمق بازگشت"]</label>
+                                    <label id="set73" class="lbl">@L["حداکثر عمق بازگشت"]</label>
                                     <input class="inp" type="number" min="20" max="2000" value="@to.Code.MaxRecursion" @onchange="e => ToolOpt(o => o.Code.MaxRecursion = Math.Clamp(ToInt(e), 20, 2000))" />
                                 </details>
                             }
@@ -474,40 +503,40 @@
                             @if (to.WebSearch)
                             {
                                 <details class="adv-search">
-                                    <summary>🔎 @L["تنظیمات ابزار جستجوی وب"]</summary>
+                                    <summary id="set74">🔎 @L["تنظیمات ابزار جستجوی وب"]</summary>
                                     <p class="muted small">@L["اگر ابزار جستجو روشن است، دکمه‌ی 🌐 کنار کادر پیام را خاموش نگه دارید تا جستجو دو بار انجام نشود."]</p>
                                     <button class="btn sm" @onclick='() => State.SetSettingsSection("search")'>⚙ @L["رفتن به تنظیمات جستجوی وب"]</button>
-                                    <label class="chk"><input type="checkbox" checked="@to.SearchModelControls" @onchange="e => ToolOpt(o => o.SearchModelControls = e.Value is true)" /> @L["مدل خودش تعیین کند: تعداد نتایج، خواندن صفحه‌ها و بازه‌ی زمانی"]</label>
+                                    <label id="set75" class="chk"><input type="checkbox" checked="@to.SearchModelControls" @onchange="e => ToolOpt(o => o.SearchModelControls = e.Value is true)" /> @L["مدل خودش تعیین کند: تعداد نتایج، خواندن صفحه‌ها و بازه‌ی زمانی"]</label>
                                     @if (to.SearchModelControls)
                                     {
-                                        <label class="lbl">@L["حداکثر نتایج هر جستجو که مدل می‌تواند بخواهد"]: @to.SearchMaxResults</label>
+                                        <label id="set76" class="lbl">@L["حداکثر نتایج هر جستجو که مدل می‌تواند بخواهد"]: @to.SearchMaxResults</label>
                                         <input type="range" class="range" min="1" max="10" step="1" value="@to.SearchMaxResults" @oninput="e => ToolOpt(o => o.SearchMaxResults = ToInt(e))" />
-                                        <label class="lbl">@L["حداکثر صفحه‌هایی که مدل می‌تواند در هر جستجو بخواند (۰ = هیچ)"]: @to.SearchMaxPages</label>
+                                        <label id="set77" class="lbl">@L["حداکثر صفحه‌هایی که مدل می‌تواند در هر جستجو بخواند (۰ = هیچ)"]: @to.SearchMaxPages</label>
                                         <input type="range" class="range" min="0" max="10" step="1" value="@to.SearchMaxPages" @oninput="e => ToolOpt(o => o.SearchMaxPages = ToInt(e))" />
                                     }
-                                    <label class="lbl">@L["حداکثر تعداد جستجو در یک پاسخ (۰ = بدون محدودیت)"]</label>
+                                    <label id="set78" class="lbl">@L["حداکثر تعداد جستجو در یک پاسخ (۰ = بدون محدودیت)"]</label>
                                     <input class="inp" type="number" min="0" max="50" value="@to.MaxSearchCalls" @onchange="e => ToolOpt(o => o.MaxSearchCalls = Math.Clamp(ToInt(e), 0, 50))" />
                                     <p class="muted small">@L["موتور جستجو، منطقه، SafeSearch، فهرست سیاه سایت‌ها و ... از تنظیمات «جستجو در وب» می‌آید. اگر مدل چیزی تعیین نکند، همان مقدارها اعمال می‌شود."]</p>
                                                                 </details>
                             }
 
                             <details class="adv-search">
-                                <summary>@L["اجرا و نمایش"]</summary>
-                                <label class="lbl">@L["حداکثر دفعات استفاده از ابزار در یک پاسخ"]: @to.MaxRounds</label>
+                                <summary id="set79">@L["اجرا و نمایش"]</summary>
+                                <label id="set80" class="lbl">@L["حداکثر دفعات استفاده از ابزار در یک پاسخ"]: @to.MaxRounds</label>
                             <input type="range" class="range" min="1" max="15" step="1" value="@to.MaxRounds" @oninput="e => ToolOpt(o => o.MaxRounds = ToInt(e))" />
 
-                            <label class="lbl">@L["حداکثر طول نتیجه‌ی هر ابزار (نویسه)"]</label>
+                            <label id="set81" class="lbl">@L["حداکثر طول نتیجه‌ی هر ابزار (نویسه)"]</label>
                             <input class="inp" type="number" min="500" max="50000" step="500" value="@to.ResultChars" @onchange="e => ToolOpt(o => o.ResultChars = Math.Clamp(ToInt(e), 500, 50000))" />
 
-                            <label class="lbl">@L["پرسیدن قبل از اجرای ابزار"]</label>
+                            <label id="set82" class="lbl">@L["پرسیدن قبل از اجرای ابزار"]</label>
                             <AppSelect Title="@L["پرسیدن قبل از اجرای ابزار"]" Value="@to.AskMode.ToString()" ValueChanged="v => ToolOpt(o => o.AskMode = int.TryParse(v, out var n) ? n : 0)"
                                        Options="@(new AppSelect.SelectOption[] { new("0", L["هرگز (خودکار اجرا شود)"]), new("1", L["فقط ابزارهای اینترنتی (جستجو و خواندن صفحه)"]), new("2", L["همه‌ی ابزارها"]) })" />
-                                <label class="chk"><input type="checkbox" checked="@to.ShowCalls" @onchange="e => ToolOpt(o => o.ShowCalls = e.Value is true)" /> @L["هر استفاده از ابزار را داخل پاسخ نشان بده (🔧)"]</label>
+                                <label id="set83" class="chk"><input type="checkbox" checked="@to.ShowCalls" @onchange="e => ToolOpt(o => o.ShowCalls = e.Value is true)" /> @L["هر استفاده از ابزار را داخل پاسخ نشان بده (🔧)"]</label>
                             </details>
 
                             <details class="adv-search">
-                                <summary>@L["دستور اضافه برای مدل"]</summary>
-                                <label class="lbl">@L["دستور اضافه برای مدل هنگام فعال بودن ابزارها (اختیاری)"]</label>
+                                <summary id="set84">@L["دستور اضافه برای مدل"]</summary>
+                                <label id="set85" class="lbl">@L["دستور اضافه برای مدل هنگام فعال بودن ابزارها (اختیاری)"]</label>
                             <textarea class="inp" rows="3" dir="auto" placeholder="@L["مثلاً: برای اخبار و قیمت‌ها حتماً جستجو کن."]" value="@to.ExtraPrompt" @onchange="e => ToolOpt(o => o.ExtraPrompt = e.Value?.ToString() ?? string.Empty)"></textarea>
                             </details>
 
@@ -517,25 +546,25 @@
                             break;
 
                         case "cost":
-                            <label class="lbl first">@L["توکن و هزینه"]</label>
+                            <label id="set86" class="lbl first">@L["توکن و هزینه"]</label>
                             <p class="muted small">@L["تعداد توکن و هزینه فقط تخمین است. قیمت‌ها را خودتان از سایت سرویس‌دهنده وارد کنید."]</p>
                             <AppSelect Title="@L["نمایش توکن و هزینه"]" Value="@State.CostOpts.Mode" ValueChanged="v => Cost(c => c.Mode = v)"
                                        Options="@(new AppSelect.SelectOption[] { new("off", L["نمایش داده نشود"]), new("total", L["مجموع گفتگو (زیر کادر پیام)"]), new("message", L["هر پاسخ"]), new("both", L["هر دو"]) })" />
                             @if (State.CostOpts.Mode != "off")
                             {
-                                <label class="lbl">@L["نماد پول"]</label>
+                                <label id="set87" class="lbl">@L["نماد پول"]</label>
                                 <input class="inp" dir="ltr" maxlength="8" value="@State.CostOpts.Currency" @onchange="e => Cost(c => c.Currency = e.Value?.ToString() ?? string.Empty)" />
 
-                                <label class="lbl">@L["توکن هر تصویر"]: @State.CostOpts.ImageTokens</label>
+                                <label id="set88" class="lbl">@L["توکن هر تصویر"]: @State.CostOpts.ImageTokens</label>
                                 <input type="range" class="range" min="0" max="3000" step="50" value="@State.CostOpts.ImageTokens" @oninput="e => Cost(c => c.ImageTokens = ToInt(e))" />
 
-                                <label class="lbl">@L["نویسه در هر توکن (لاتین)"]: @State.CostOpts.LatinCharsPerToken.ToString("0.0")</label>
+                                <label id="set89" class="lbl">@L["نویسه در هر توکن (لاتین)"]: @State.CostOpts.LatinCharsPerToken.ToString("0.0")</label>
                                 <input type="range" class="range" min="2" max="6" step="0.1" value="@State.CostOpts.LatinCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.LatinCharsPerToken = ToDouble(e, 4))" />
 
-                                <label class="lbl">@L["نویسه در هر توکن (فارسی/عربی)"]: @State.CostOpts.ArabicCharsPerToken.ToString("0.0")</label>
+                                <label id="set90" class="lbl">@L["نویسه در هر توکن (فارسی/عربی)"]: @State.CostOpts.ArabicCharsPerToken.ToString("0.0")</label>
                                 <input type="range" class="range" min="1" max="5" step="0.1" value="@State.CostOpts.ArabicCharsPerToken.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Cost(c => c.ArabicCharsPerToken = ToDouble(e, 2.2))" />
 
-                                <label class="lbl">@L["جدول قیمت مدل‌ها"]</label>
+                                <label id="set91" class="lbl">@L["جدول قیمت مدل‌ها"]</label>
                                 <p class="muted small">@L["اولین ردیفی که بخشی از نام مدل در آن باشد استفاده می‌شود. ردیف با نام خالی برای همه‌ی مدل‌هاست. قیمت‌ها برای هر یک میلیون توکن."]</p>
                                 @foreach (var row in State.CostOpts.Prices.ToList())
                                 {
@@ -557,7 +586,7 @@
                             break;
 
                         case "security":
-                            <label class="lbl first">@L["قفل برنامه"]</label>
+                            <label id="set92" class="lbl first">@L["قفل برنامه"]</label>
                             @if (!State.HasPin)
                             {
                                 <p class="muted small">@L["با رمز، باز کردن برنامه محافظت می‌شود. این فقط یک قفل صفحه است و داده‌ها را رمزگذاری نمی‌کند."]</p>
@@ -581,7 +610,7 @@
                                 <p class="status" dir="auto">@_pinStatus</p>
                             }
 
-                            <label class="lbl">@L["گفتگوها"]</label>
+                            <label id="set93" class="lbl">@L["گفتگوها"]</label>
                             @if (_confirmClear)
                             {
                                 <button class="btn danger" @onclick="ClearAll">@L["مطمئنید؟ همه گفتگوها پاک می‌شود"]</button>
@@ -593,13 +622,13 @@
                             break;
 
                         case "data":
-                            <label class="lbl first">@L["لاگ برنامه"]</label>
+                            <label id="set94" class="lbl first">@L["لاگ برنامه"]</label>
                             <p class="muted small">@L["اگر برنامه خطا داد، لاگ را کپی کنید و بفرستید. کلید API و متن پیام‌ها در لاگ نمی‌آید."]</p>
                             <button class="btn" @onclick="State.OpenLogs">@L["مشاهده لاگ‌ها"]</button>
 
-                            <label class="lbl">@L["نسخه پشتیبان"]</label>
+                            <label id="set95" class="lbl">@L["نسخه پشتیبان"]</label>
                             <p class="muted small">@L["همه گفتگوها، پروژه‌ها، API ها، الگوها و فایل‌های پیوست در یک فایل zip ذخیره می‌شود."]</p>
-                            <label class="check"><input type="checkbox" checked="@_bkKeys" @onchange="e => _bkKeys = e.Value is true" /> @L["کلیدهای API هم در فایل باشد (فایل را به کسی ندهید)"]</label>
+                            <label id="set96" class="check"><input type="checkbox" checked="@_bkKeys" @onchange="e => _bkKeys = e.Value is true" /> @L["کلیدهای API هم در فایل باشد (فایل را به کسی ندهید)"]</label>
                             <div class="row-btns">
                                 <button class="btn" @onclick="MakeBackup">@L["ساخت نسخه پشتیبان"]</button>
                                 @if (_bkRestore)
@@ -618,7 +647,7 @@
                             break;
 
                         case "about":
-                            <label class="lbl first">AI Chat</label>
+                            <label id="set97" class="lbl first">AI Chat</label>
                             <p>@L["نسخه"] @AppInfo.Current.VersionString</p>
                             <p class="muted small">@L["چت چندسرویسی با پشتیبانی از OpenAI-compatible، Claude و Gemini."]</p>
                             break;
@@ -674,7 +703,7 @@ else if (_dlg == 1)
                 </ol>
                 <p class="muted small">@L["بعد از ساخت، با «ذخیره به‌عنوان الگو» آن را نگه دارید تا دفعه‌ی بعد در لیست باشد. راهنمای کامل قالب در فایل docs/CONNECTORS.md پروژه است."]</p>
 
-                <label class="lbl">@L["پرامپت برای هوش مصنوعی"]</label>
+                <label id="set98" class="lbl">@L["پرامپت برای هوش مصنوعی"]</label>
                 <textarea class="inp code" rows="12" dir="ltr" readonly>@ConnectorGuide.AiPrompt</textarea>
                 <div class="row">
                     <button class="primary" type="button" @onclick="CopyPrompt">@L["کپی پرامپت"]</button>
@@ -695,13 +724,13 @@ else if (_dlg == 2)
             <div class="help-body">
                 @if (_pvJson == null)
                 {
-                    <label class="lbl first">@L["آدرس مستقیم فایل JSON"]</label>
+                    <label id="set99" class="lbl first">@L["آدرس مستقیم فایل JSON"]</label>
                     <p class="muted small">@L["لینک صفحه‌ی GitHub یا فایل raw هر دو قبول است."]</p>
                     <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="https://github.com/.../connector.json" value="@_repoUrl"
                            @oninput="e => _repoUrl = e.Value?.ToString() ?? string.Empty" />
                     <div class="row"><button class="btn" type="button" disabled="@_repoBusy" @onclick="() => FetchPreview(_repoUrl)">@L["دریافت"]</button></div>
 
-                    <label class="lbl">@L["کاتالوگ اتصال‌ها"]</label>
+                    <label id="set100" class="lbl">@L["کاتالوگ اتصال‌ها"]</label>
                     <p class="muted small">@L["فهرستی از اتصال‌های آماده (مثلاً یک مخزن GitHub). آدرس فهرست را می‌توانید عوض کنید."]</p>
                     <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" value="@State.ConnectorCatalogUrl"
                            @onchange="e => State.SetConnectorCatalogUrl(e.Value?.ToString() ?? string.Empty)" />
@@ -877,6 +906,31 @@ else if (_dlg == 2)
         : Sections.First(x => x.Key == Section).Title;
 
     void Back() => State.SetSettingsSection(null);
+
+    // ---------------- search in the settings
+    string _q = "";
+    string? _goto;
+
+    void OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") _q = "";
+        else if (e.Key == "Enter" && SettingsIndex.Search(_q, L, 1).FirstOrDefault() is { } h) GoTo(h);
+    }
+
+    void GoTo(SettingsHit h)
+    {
+        _q = "";
+        _goto = h.Anchor.Length > 0 ? h.Anchor : null;
+        State.SetSettingsSection(h.Section);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_goto == null) return;
+        var id = _goto;
+        _goto = null;
+        try { await JS.InvokeVoidAsync("chat.gotoSetting", id); } catch { }
+    }
 
     // ---------------- general / chat / data
 

@@ -140,15 +140,15 @@ public static class ToolMarks
 /// <summary>User settings of the tools (stored as JSON in the preferences).</summary>
 public class ToolOptions
 {
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
     /// <summary>Use the tools of the MCP servers (when tools are on).</summary>
     public bool McpEnabled { get; set; } = true;
     public bool DateTime { get; set; } = true;
     public bool Calculator { get; set; } = true;
     public bool WebSearch { get; set; } = true;
     public bool ReadPage { get; set; } = true;
-    /// <summary>The model may run JavaScript in a sandbox (off by default).</summary>
-    public bool CodeRun { get; set; }
+    /// <summary>The model may run code (JavaScript in a sandbox by default; it asks before every run).</summary>
+    public bool CodeRun { get; set; } = true;
     /// <summary>The languages the model may use; each one has its own switch, question and settings.</summary>
     public List<CodeLanguage> CodeLanguages { get; set; } = CodeLanguage.Defaults();
     public CodeLimits Code { get; set; } = new();

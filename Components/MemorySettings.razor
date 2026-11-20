@@ -2,22 +2,22 @@
 
 <p class="muted small">@L["حافظه‌ی بلندمدت: چیزهایی که از شما می‌داند (نام، شغل، ترجیحات …) در همه‌ی گفتگوها به مدل داده می‌شود. همه‌چیز فقط روی همین دستگاه ذخیره می‌شود و فقط وقتی روشن باشد به API انتخاب‌شده فرستاده می‌شود."]</p>
 
-<label class="chk"><input type="checkbox" checked="@State.MemoryOpts.Enabled" @onchange="OnEnabled" /> @L["استفاده از حافظه در گفتگوها"]</label>
+<label id="set101" class="chk"><input type="checkbox" checked="@State.MemoryOpts.Enabled" @onchange="OnEnabled" /> @L["استفاده از حافظه در گفتگوها"]</label>
 
 <details class="adv-search">
-    <summary>@L["تنظیمات حافظه"]</summary>
-    <label class="lbl first">@L["حداکثر حجم حافظه ارسالی (کاراکتر)"]</label>
+    <summary id="set102">@L["تنظیمات حافظه"]</summary>
+    <label id="set103" class="lbl first">@L["حداکثر حجم حافظه ارسالی (کاراکتر)"]</label>
     <input class="inp" type="number" min="200" max="20000" step="100" value="@State.MemoryOpts.MaxChars" @onchange="OnMax" />
     <p class="muted small">@L["مصرف فعلی"]: @MemoryHelper.UsedChars(State.Memory) / @State.MemoryOpts.MaxChars</p>
 
-    <label class="chk"><input type="checkbox" checked="@State.MemoryOpts.ModelCanSave" @onchange="OnModelCanSave" /> @L["مدل بتواند خودش حافظه را ذخیره و حذف کند (نیاز به روشن بودن ابزارها)"]</label>
-    <label class="chk"><input type="checkbox" checked="@State.MemoryOpts.AskBeforeSave" @onchange="OnAsk" /> @L["قبل از ذخیره یا حذف توسط مدل از من بپرس"]</label>
+    <label id="set104" class="chk"><input type="checkbox" checked="@State.MemoryOpts.ModelCanSave" @onchange="OnModelCanSave" /> @L["مدل بتواند خودش حافظه را ذخیره و حذف کند (نیاز به روشن بودن ابزارها)"]</label>
+    <label id="set105" class="chk"><input type="checkbox" checked="@State.MemoryOpts.AskBeforeSave" @onchange="OnAsk" /> @L["قبل از ذخیره یا حذف توسط مدل از من بپرس"]</label>
 
-    <label class="lbl">@L["جمله‌ی ابتدای حافظه (خالی = پیش‌فرض)"]</label>
+    <label id="set106" class="lbl">@L["جمله‌ی ابتدای حافظه (خالی = پیش‌فرض)"]</label>
     <textarea class="inp" rows="3" dir="auto" placeholder="@MemoryHelper.DefaultHeader" value="@State.MemoryOpts.Header" @oninput="OnHeader"></textarea>
 </details>
 
-<label class="lbl">@L["موارد ذخیره‌شده"] (@State.Memory.Count)</label>
+<label id="set107" class="lbl">@L["موارد ذخیره‌شده"] (@State.Memory.Count)</label>
 <div class="row">
     <input class="inp" dir="auto" placeholder="@L["مثلاً: من برنامه‌نویس C# هستم و فارسی صحبت می‌کنم"]" value="@_new" @oninput="OnNew" @onkeydown="OnKey" />
     <button class="primary" @onclick="Add">+ @L["افزودن"]</button>

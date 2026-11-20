@@ -3,12 +3,12 @@
 @if (_edit != null)
 {
     <div class="persona-edit">
-        <label class="lbl first">@L["نام سرور"]</label>
+        <label id="set115" class="lbl first">@L["نام سرور"]</label>
         <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="my-server" value="@_edit.Name" @oninput="OnName" />
 
         @if (McpProcess.Supported)
         {
-            <label class="lbl">@L["نوع اتصال"]</label>
+            <label id="set116" class="lbl">@L["نوع اتصال"]</label>
             <AppSelect Title="@L["نوع اتصال"]" Value="@_edit.Transport" ValueChanged="OnTransport" Options="TransportOptions()" />
         }
 
@@ -16,33 +16,33 @@
         {
             <p class="muted small warn">⚠ @L["این گزینه یک برنامه را روی این کامپیوتر با دسترسی‌های شما اجرا می‌کند. فقط برنامه‌هایی را اضافه کنید که به آن‌ها اعتماد دارید."]</p>
 
-            <label class="lbl">@L["برنامه"]</label>
+            <label id="set117" class="lbl">@L["برنامه"]</label>
             <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="npx" value="@_edit.Command" @oninput="OnCommand" />
 
-            <label class="lbl">@L["آرگومان‌ها (هر خط یکی)"]</label>
+            <label id="set118" class="lbl">@L["آرگومان‌ها (هر خط یکی)"]</label>
             <textarea class="inp code" rows="4" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="-y&#10;@@modelcontextprotocol/server-filesystem&#10;C:\Users\me\Documents" value="@ArgsText()" @oninput="OnArgs"></textarea>
 
-            <label class="lbl">@L["متغیرهای محیطی (اختیاری؛ هر خط KEY=value)"]</label>
+            <label id="set119" class="lbl">@L["متغیرهای محیطی (اختیاری؛ هر خط KEY=value)"]</label>
             <textarea class="inp code" rows="2" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="API_KEY=your-key" value="@_edit.Env" @oninput="OnEnv"></textarea>
             <p class="muted small">@L["متغیرها (مثل کلید API) در حافظه‌ی امن دستگاه ذخیره می‌شوند."]</p>
 
-            <label class="lbl">@L["پوشه‌ی کاری (اختیاری)"]</label>
+            <label id="set120" class="lbl">@L["پوشه‌ی کاری (اختیاری)"]</label>
             <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="C:\Users\me\Documents" value="@_edit.WorkDir" @oninput="OnWorkDir" />
         }
         else
         {
-            <label class="lbl">@L["آدرس سرور MCP (HTTP)"]</label>
+            <label id="set121" class="lbl">@L["آدرس سرور MCP (HTTP)"]</label>
             <input class="inp" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="https://example.com/mcp" value="@_edit.Url" @oninput="OnUrl" />
 
-            <label class="lbl">@L["هدرها (اختیاری؛ هر خط یک هدر)"]</label>
+            <label id="set122" class="lbl">@L["هدرها (اختیاری؛ هر خط یک هدر)"]</label>
             <textarea class="inp code" rows="3" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="Authorization: Bearer YOUR_TOKEN" value="@_edit.Headers" @oninput="OnHeaders"></textarea>
             <p class="muted small">@L["هدرها (مثل توکن) در حافظه‌ی امن دستگاه ذخیره می‌شوند."]</p>
         }
 
-        <label class="chk"><input type="checkbox" checked="@_edit.Enabled" @onchange="OnEnabled" /> @L["فعال"]</label>
-        <label class="chk"><input type="checkbox" checked="@_edit.Ask" @onchange="OnAsk" /> @L["قبل از اجرای هر ابزار این سرور از من بپرس"]</label>
+        <label id="set123" class="chk"><input type="checkbox" checked="@_edit.Enabled" @onchange="OnEnabled" /> @L["فعال"]</label>
+        <label id="set124" class="chk"><input type="checkbox" checked="@_edit.Ask" @onchange="OnAsk" /> @L["قبل از اجرای هر ابزار این سرور از من بپرس"]</label>
 
-        <label class="lbl">@L["مهلت هر درخواست (ثانیه)"]</label>
+        <label id="set125" class="lbl">@L["مهلت هر درخواست (ثانیه)"]</label>
         <input class="inp" type="number" min="3" max="300" value="@_edit.TimeoutSec" @onchange="OnTimeout" />
 
         <div class="row">
@@ -57,7 +57,7 @@
 
         @if (State.McpTools.TryGetValue(_edit.Id, out var tools))
         {
-            <label class="lbl">@L["ابزارهای این سرور (تیک = فعال)"]</label>
+            <label id="set126" class="lbl">@L["ابزارهای این سرور (تیک = فعال)"]</label>
             @foreach (var t in tools)
             {
                 var tool = t;
@@ -72,7 +72,7 @@
 else
 {
     <p class="muted small">@L["MCP یک استاندارد باز است: سرورهای MCP ابزار (مثل GitHub، پایگاه داده، فایل، تقویم و …) به مدل می‌دهند. ابزارها باید روشن باشند و API شما از ابزار پشتیبانی کند. سرورهای راه‌دور (HTTP) در همه‌جا و برنامه‌های محلی (stdio، مثل npx) فقط در ویندوز پشتیبانی می‌شوند."]</p>
-    <label class="chk"><input type="checkbox" checked="@State.ToolOpts.McpEnabled" @onchange="OnMaster" /> @L["استفاده از ابزارهای سرورهای MCP"]</label>
+    <label id="set127" class="chk"><input type="checkbox" checked="@State.ToolOpts.McpEnabled" @onchange="OnMaster" /> @L["استفاده از ابزارهای سرورهای MCP"]</label>
 
     @if (State.McpServers.Count == 0)
     {
@@ -105,7 +105,7 @@ else
     }
 
     <details class="adv" style="margin-top:14px">
-        <summary>@L["وارد کردن از JSON (قالب mcpServers)"]</summary>
+        <summary id="set128">@L["وارد کردن از JSON (قالب mcpServers)"]</summary>
         <textarea class="inp code" rows="8" dir="ltr" autocapitalize="off" spellcheck="false"
                   placeholder='{ "mcpServers": { "my-server": { "url": "https://example.com/mcp", "headers": { "Authorization": "Bearer YOUR_TOKEN" } } } }'
                   value="@_json" @oninput="OnJson"></textarea>

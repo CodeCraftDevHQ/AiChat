@@ -565,6 +565,14 @@ public class ChatState
         LoadSummaryOpts();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
+        if (!Preferences.Default.ContainsKey("tools_default_v89"))
+        {
+            // one time: tools and code execution are on by default (the user can still switch them off)
+            ToolOpts.Enabled = true;
+            ToolOpts.CodeRun = true;
+            Preferences.Default.Set("tool_opts", System.Text.Json.JsonSerializer.Serialize(ToolOpts));
+            Preferences.Default.Set("tools_default_v89", true);
+        }
         McpServers = await _storage.LoadMcpServersAsync();
         PreconnectMcp();
         SearchEngine = Preferences.Default.Get("search_engine", WebSearchService.Ddg);
@@ -1083,7 +1091,7 @@ public class ChatState
     }
 
     // ---- asking before a tool runs
-    public record ToolAskInfo(string Label, string Detail, string Name);
+    public record ToolAskInfo(string Label, string Detail, string Name, string? Code = null, string? Sub = null);
     public ToolAskInfo? ToolAsk { get; private set; }
     TaskCompletionSource<bool>? _toolAskTcs;
     bool _toolAllowAll;
@@ -1112,7 +1120,16 @@ public class ChatState
         var detail = string.Join("\n", args.Select(kv => kv.Key + ": " + (kv.Value is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : kv.Value?.ToJsonString())));
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _toolAskTcs = tcs;
-        ToolAsk = new ToolAskInfo(tool.Label.Length > 0 ? tool.Label : tool.Name, detail, tool.Name);
+        string? code = null, sub = null;
+        if (tool.Name == "run_code" && args["code"] is System.Text.Json.Nodes.JsonValue cv && cv.TryGetValue<string>(out var cs))
+        {
+            code = cs;
+            var lid = args["language"] is System.Text.Json.Nodes.JsonValue lv && lv.TryGetValue<string>(out var ls) ? ls : "";
+            sub = ToolOpts.CodeLanguages.FirstOrDefault(l => l.Id.Equals(lid, StringComparison.OrdinalIgnoreCase) || l.Name.Equals(lid, StringComparison.OrdinalIgnoreCase))?.Name
+                  ?? ToolOpts.CodeLanguages.FirstOrDefault(l => l.Enabled)?.Name ?? lid;
+            detail = "";
+        }
+        ToolAsk = new ToolAskInfo(tool.Label.Length > 0 ? tool.Label : tool.Name, detail, tool.Name, code, sub);
         GenStatus = null;
         Notify();
         using var reg = ct.Register(() => tcs.TrySetResult(false));
@@ -1643,7 +1660,7 @@ public class ChatState
 
     void LoadTestSettings()
     {
-        _testBatch = Preferences.Default.Get("test_batch", 10);
+        _testBatch = Preferences.Default.Get("test_batch", 0);
         _testWindow = Preferences.Default.Get("test_window", 60);
         _testParallel = Preferences.Default.Get("test_parallel", 3);
         _testLimitMode = Preferences.Default.Get("test_limit_mode", 0);
