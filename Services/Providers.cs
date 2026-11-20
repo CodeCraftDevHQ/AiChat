@@ -629,6 +629,7 @@ public class OpenAiCompatibleProvider : IChatProvider
             else
             {
                 var inReason = false;
+                var reasonAll = new StringBuilder();
                 await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
                 {
                     if (data == "[DONE]") break;
@@ -681,6 +682,7 @@ public class OpenAiCompatibleProvider : IChatProvider
                     if (!string.IsNullOrEmpty(reason))
                     {
                         if (!inReason) { yield return "<think>"; inReason = true; }
+                        reasonAll.Append(reason);
                         yield return reason;
                     }
                     if (!string.IsNullOrEmpty(text))
@@ -690,7 +692,15 @@ public class OpenAiCompatibleProvider : IChatProvider
                         yield return text;
                     }
                 }
-                if (inReason) yield return "</think>";
+                if (inReason) yield return "</think>\n\n";
+
+                // some models (e.g. certain DeepSeek versions) write the whole answer as "reasoning" and leave the answer empty:
+                // then the reasoning IS the answer (the thinking box is hidden when it equals the answer)
+                if (said.Length == 0 && calls.Count == 0 && reasonAll.ToString().Trim() is { Length: > 0 } onlyReason)
+                {
+                    said.Append(onlyReason);
+                    yield return onlyReason;
+                }
             }
 
             // some local models answer with nothing after a tool result: ask once more for the answer

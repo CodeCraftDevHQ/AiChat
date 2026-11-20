@@ -72,7 +72,7 @@ public static class MarkdownRenderer
     }
 
     // <think> blocks and groups of "> 🔧 ..." tool-call lines
-    static readonly Regex Segments = new(@"<think>(?<t>.*?)(?:(?<c></think>)|\z)|(?<tool>(?:^> 🔧 [^\n]*(?:\n|\z)\s*)+)",
+    static readonly Regex Segments = new(@"<think>(?<t>.*?)(?:(?<c></think>)|\z)|(?<tool>(?:(?:^|(?<=</think>))> 🔧 [^\n]*(?:\n|\z)\s*)+)",
         RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.Compiled);
 
     public static string ToHtml(string? markdown)
@@ -101,6 +101,11 @@ public static class MarkdownRenderer
             var tail = Think.Replace(markdown[(last.Index + last.Length)..], "");
             toolsAnswered = tail.Trim().Length > 0;
         }
+
+        // a model that put its whole answer into the reasoning: the answer is the same text, so show it only once
+        if (thinks.Count == 1 && merged.Length > 0 && lastClosed && toolMatches.Count == 0 &&
+            Think.Replace(markdown, "").Trim() == merged)
+            return Render(merged);
 
         var sb = new System.Text.StringBuilder();
         var pos = 0;

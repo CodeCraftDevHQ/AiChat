@@ -99,4 +99,24 @@ public class ThinkTests
         Assert.Contains("q2", done);
         Assert.DoesNotContain("<details class=\"think toolbox\" open>", done);
     }
+
+    [Fact]
+    public void Tool_lines_right_after_a_closed_think_block_are_still_grouped()
+    {
+        var md = "<think>a</think>> 🔧 Web search: x\n\n<think>b</think>> 🔧 Read page: https://e.com\n\nThe answer";
+        var html = MarkdownRenderer.ToHtml(md);
+        Assert.Equal(1, html.Split("<details class=\"think toolbox\"").Length - 1);
+        Assert.DoesNotContain("<blockquote", html);
+        Assert.Contains("The answer", html);
+    }
+
+    [Fact]
+    public void Answer_written_only_as_reasoning_is_shown_once()
+    {
+        var html = MarkdownRenderer.ToHtml("<think>Hello! How can I help?</think>\n\nHello! How can I help?");
+        Assert.DoesNotContain("<details", html);
+        Assert.Equal(1, html.Split("How can I help").Length - 1);
+        // real thinking plus a different answer keeps the box
+        Assert.Contains("<details", MarkdownRenderer.ToHtml("<think>hmm</think>\n\nAnswer"));
+    }
 }

@@ -35,6 +35,7 @@ public class OpenAiStreamTests
     public async Task Reasoning_only_answer_is_not_lost()
     {
         var all = await Stream("data: {\"choices\":[{\"delta\":{\"reasoning\":\"only thoughts\"}}]}\n\ndata: [DONE]\n\n");
-        Assert.Equal("<think>only thoughts</think>", all);
+        // the reasoning is also the answer (some DeepSeek versions leave the answer empty)
+        Assert.Equal("<think>only thoughts</think>\n\nonly thoughts", all);
     }
 }
