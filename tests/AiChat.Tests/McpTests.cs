@@ -173,9 +173,9 @@ public class McpStdioTests
     static McpStdioTransport.Running FakeProgram(Func<string, string?> handler, bool noise = false)
     {
         var c2s = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.Out);
-        var serverIn = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, c2s.ClientSafePipeHandle);
+        var serverIn = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, c2s.GetClientHandleAsString());
         var s2c = new System.IO.Pipes.AnonymousPipeServerStream(System.IO.Pipes.PipeDirection.In);
-        var serverOut = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.Out, s2c.ClientSafePipeHandle);
+        var serverOut = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.Out, s2c.GetClientHandleAsString());
         c2s.DisposeLocalCopyOfClientHandle();
         s2c.DisposeLocalCopyOfClientHandle();
 
