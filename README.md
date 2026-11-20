@@ -52,6 +52,24 @@ A modern, cross-platform ChatGPT-style application built for **Windows** and **A
 
 * **Gallery** of everything the models generated, with filters, search and seed re-use.
 
+* **Tools (function calling):** the model can get the date, calculate, search the web and read pages (OpenAI-compatible, Claude, Gemini). All calls of an answer are grouped in one collapsible box, with limits per answer and optional "ask before running". Tools are on by default.
+
+* **MCP servers:** connect remote [MCP](https://modelcontextprotocol.io) servers (HTTP) or local programs (stdio, Windows) and give their tools to the model; per-tool on/off, headers kept in secure storage, import of the common `mcpServers` JSON.
+
+* **Personas:** ready-made chat styles (system prompt, generation settings, API / model, tools on/off) picked from the welcome screen or per chat.
+
+* **Code execution:** the model can run code to calculate exactly or process data. JavaScript runs in a built-in sandbox (no files, no network; Windows and Android); Python, PowerShell, CMD, Node.js, C# script or any program of your own can be added on Windows. Per language: on/off, ask before every run, clean environment, time limit, working folder.
+
+* **Long-term memory:** facts and preferences the model remembers across chats (you can add, edit, import / export them; the model can save and forget with your approval; per chat / persona override; "suggest memories from this chat").
+
+* **Automatic summary of long chats:** older messages are replaced by a summary for the model only, with your own limits, a separate summary model and a banner you can edit.
+
+* **Select many chats** in the sidebar to delete them or move them to a project.
+
+* **Settings search:** find any setting by name (Persian or English); the group opens and the setting is highlighted.
+
+* **Prompt library:** your own `/commands` with a searchable picker (📚) and a full editor with import / export.
+
 ### 📎 Attachments & File Handling
 
 * Attach images, documents (PDFs), and plain text via drag-and-drop, clipboard paste, or file selection (supports camera input on mobile).
