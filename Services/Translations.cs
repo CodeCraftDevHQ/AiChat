@@ -666,5 +666,16 @@ public static class Translations
         ["{0} پیام خلاصه شد."] = "{0} messages summarized.",
         ["گفتگو برای خلاصه‌سازی کوتاه است."] = "The chat is too short to summarize.",
         ["مدل خلاصه‌ای برنگرداند."] = "The model returned no summary.",
+        ["مقایسه‌ی دو مدل"] = "Compare two models",
+        ["یک پرسش بنویسید تا هر دو مدل جواب بدهند…"] = "Write a question and both models will answer…",
+        ["پیام‌های همین گفتگو هم به هر دو مدل داده شود (و انتخاب شما به همین گفتگو اضافه شود)"] = "Also give this chat's messages to both models (and add your choice to this chat)",
+        ["در مقایسه، جستجوی وب و ابزارها خاموش‌اند تا هر دو مدل شرایط یکسان داشته باشند."] = "Web search and tools are off while comparing, so both models get the same conditions.",
+        ["جابجایی"] = "Swap",
+        ["توقف"] = "Stop",
+        ["دوباره اجرا کن"] = "Run again",
+        ["مقایسه کن"] = "Compare",
+        ["این جواب را نگه دار و ادامه بده"] = "Keep this answer and continue",
+        ["ابتدا پرسش را بنویسید."] = "Write the question first.",
+        ["برای هر دو طرف API و مدل انتخاب کنید."] = "Choose an API and a model for both sides.",
     };
 }

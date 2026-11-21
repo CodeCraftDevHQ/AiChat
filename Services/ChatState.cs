@@ -892,6 +892,178 @@ public class ChatState
 
     public MemorySuggestState? MemorySuggest { get; private set; }
 
+    // ------------------------------------------------------------ compare two models
+    public class CompareState
+    {
+        public string Prompt = "";
+        public CompareSide A = new(), B = new();
+        public bool Running => A.Running || B.Running;
+        public bool Any => A.Finished || B.Finished;
+        public bool UseChat = true;
+        public CancellationTokenSource? Cts;
+    }
+
+    public CompareState? Compare { get; private set; }
+
+    public void OpenCompare()
+    {
+        var c = new CompareState();
+        var p = CurrentProvider ?? Providers.FirstOrDefault();
+        c.A.ProviderId = p?.Id ?? "";
+        c.A.Model = p == CurrentProvider ? CurrentModel : FirstModel(p);
+        // side B: another model of the same API, otherwise the next API
+        var other = ModelsFor(p).FirstOrDefault(m => m != c.A.Model);
+        if (other != null) { c.B.ProviderId = c.A.ProviderId; c.B.Model = other; }
+        else
+        {
+            var q = Providers.FirstOrDefault(x => x.Id != c.A.ProviderId && !x.IsGenerator) ?? p;
+            c.B.ProviderId = q?.Id ?? "";
+            c.B.Model = FirstModel(q);
+        }
+        Compare = c;
+        Notify();
+    }
+
+    public void CloseCompare()
+    {
+        Compare?.Cts?.Cancel();
+        Compare = null;
+        Notify();
+    }
+
+    public void SetCompareProvider(CompareSide side, string id)
+    {
+        side.ProviderId = id;
+        side.Model = FirstModel(Providers.FirstOrDefault(p => p.Id == id));
+        Notify();
+    }
+
+    public void SetCompareModel(CompareSide side, string model) { side.Model = model; Notify(); }
+
+    public void SwapCompare()
+    {
+        if (Compare == null || Compare.Running) return;
+        (Compare.A, Compare.B) = (Compare.B, Compare.A);
+        Notify();
+    }
+
+    public void StopCompare() => Compare?.Cts?.Cancel();
+
+    public async Task RunCompareAsync()
+    {
+        var c = Compare;
+        if (c == null || c.Running) return;
+        var prompt = c.Prompt.Trim();
+        if (prompt.Length == 0) { SetNotice(L["ابتدا پرسش را بنویسید."]); return; }
+        var pa = Providers.FirstOrDefault(p => p.Id == c.A.ProviderId);
+        var pb = Providers.FirstOrDefault(p => p.Id == c.B.ProviderId);
+        if (pa == null || pb == null || string.IsNullOrWhiteSpace(c.A.Model) || string.IsNullOrWhiteSpace(c.B.Model))
+        { SetNotice(L["برای هر دو طرف API و مدل انتخاب کنید."]); return; }
+
+        c.Cts = new CancellationTokenSource();
+        var history = CompareHelper.BuildHistory(c.UseChat ? Active?.Messages : null, prompt);
+        await Task.WhenAll(RunCompareSideAsync(c, c.A, pa, history, c.Cts.Token), RunCompareSideAsync(c, c.B, pb, history, c.Cts.Token));
+        c.Cts.Dispose();
+        c.Cts = null;
+        Notify();
+    }
+
+    async Task RunCompareSideAsync(CompareState c, CompareSide side, ProviderConfig provider, List<ChatMessage> history, CancellationToken ct)
+    {
+        side.Content = ""; side.Error = null; side.Finished = false; side.Running = true;
+        side.FirstToken = null; side.Attachments = new();
+        side.Started = DateTime.UtcNow;
+        Notify();
+        try
+        {
+            var conv = c.UseChat ? Active : null;
+            var system = BuildSystem(provider, conv != null ? ProjectOf(conv) : null, conv);
+            var gen = WithGen(provider, conv);
+            gen.Tools = null; // compare = plain answers (no tools / web search), so both sides get the same chance
+            var impl = _factory.Create(gen.Type);
+
+            async Task OnImage(string rawMime, byte[] data)
+            {
+                var (mime, _) = MimeMeta.Split(rawMime);
+                var kind = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image"
+                    : mime.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? "video"
+                    : mime.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ? "audio" : "file";
+                var att = await _storage.SaveAttachmentAsync($"{kind}-{side.Attachments.Count + 1}{FileExportService.ExtensionFromMime(mime)}", mime, kind, data);
+                side.Attachments.Add(att);
+                Notify();
+            }
+
+            var last = DateTime.MinValue;
+            await foreach (var chunk in impl.StreamAsync(gen, side.Model, history, system, OnImage, ct))
+            {
+                if (chunk.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) continue;
+                side.FirstToken ??= DateTime.UtcNow - side.Started;
+                side.Content += chunk;
+                side.Elapsed = DateTime.UtcNow - side.Started;
+                if ((DateTime.UtcNow - last).TotalMilliseconds > 80) { last = DateTime.UtcNow; Notify(); }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            side.Error = ProviderHttp.Describe(ex);
+            _log.Error($"Compare request to {provider.Name} / {side.Model} failed", ex);
+        }
+        finally
+        {
+            side.Elapsed = DateTime.UtcNow - side.Started;
+            side.Running = false;
+            side.Finished = true;
+            Notify();
+        }
+    }
+
+    /// <summary>Stats line parts of one side: tokens, speed, cost.</summary>
+    public (int Tokens, double PerSec, double? Cost) CompareStats(CompareSide side)
+    {
+        var tokens = TokenCost.Estimate(MarkdownRenderer.StripThink(side.Content), CostOpts);
+        var all = TokenCost.Estimate(side.Content, CostOpts);
+        var input = CompareHelper.BuildHistory(Compare != null && Compare.UseChat ? Active?.Messages : null, Compare?.Prompt ?? "").Sum(m => TokenCost.ForMessage(m, CostOpts));
+        return (tokens, CompareHelper.TokensPerSecond(all, side.Elapsed), CompareHelper.Cost(CostOpts, side.Model, input, all));
+    }
+
+    /// <summary>Continues the chat with the chosen answer (the question and this answer are added to the chat).</summary>
+    public async Task PickCompareAsync(CompareSide side)
+    {
+        var c = Compare;
+        if (c == null || c.Running || string.IsNullOrEmpty(side.Content) && side.Attachments.Count == 0) return;
+        var provider = Providers.FirstOrDefault(p => p.Id == side.ProviderId);
+        if (provider == null) return;
+        var prompt = c.Prompt.Trim();
+
+        if (Active == null || !c.UseChat)
+        {
+            Active = new Conversation { Title = MakeTitle(prompt), ProjectId = DraftProjectId, PersonaId = DraftPersonaId };
+            DraftProjectId = null; DraftPersonaId = null;
+            Conversations.Insert(0, Active);
+        }
+        var conv = Active;
+        conv.ProviderId = provider.Id;
+        conv.Model = side.Model;
+        conv.Messages.Add(new ChatMessage { Role = "user", Content = prompt });
+        conv.Messages.Add(new ChatMessage
+        {
+            Role = "assistant",
+            Content = side.Content,
+            ErrorText = side.Error,
+            Attachments = side.Attachments,
+            Model = $"{provider.Name} · {side.Model}"
+        });
+        conv.Updated = DateTime.UtcNow;
+        if (Conversations.Remove(conv)) Conversations.Insert(0, conv);
+
+        CurrentProviderId = provider.Id;
+        SelectModel(side.Model);
+        Compare = null;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
     // ------------------------------------------------------------ export of a chat / an answer
     public class ExportState
     {
@@ -2093,6 +2265,7 @@ public class ChatState
             return true;
         }
         if (PdfPrompt != null) { ChoosePdfMode("text"); return true; }
+        if (Compare != null) { CloseCompare(); return true; }
         if (Export != null) { CloseExport(); return true; }
         if (MemorySuggest != null) { CloseMemorySuggest(); return true; }
         if (PromptsOpen) { ClosePrompts(); return true; }

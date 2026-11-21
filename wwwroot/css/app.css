@@ -845,3 +845,16 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .exp-fmt { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border: 1px solid var(--border); border-radius: 12px; background: transparent; color: var(--text); }
 .exp-fmt small { color: var(--muted); font-size: 11.5px; }
 .exp-fmt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* compare two models */
+.modal.cmp-modal { width: min(1100px, 100%); height: auto; max-height: 92dvh; display: flex; flex-direction: column; border-radius: 16px; border: 1px solid var(--border); }
+.cmp-body { overflow-y: auto; min-height: 0; padding: 4px 18px 8px; display: flex; flex-direction: column; gap: 8px; }
+.cmp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cmp-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cmp-pick { display: flex; gap: 6px; flex-wrap: wrap; }
+.cmp-pick .inp { flex: 1 1 120px; min-width: 0; }
+.cmp-out { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; min-height: 140px; max-height: 46dvh; overflow: auto; word-break: break-word; }
+.cmp-err { color: #e5484d; white-space: pre-wrap; font-size: 13px; margin-bottom: 6px; }
+.cmp-stats { display: flex; gap: 4px; flex-wrap: wrap; }
+.modal.cmp-modal .modal-foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 12px 18px 16px; }
+@media (max-width: 760px) { .cmp-cols { grid-template-columns: 1fr; } .modal-backdrop:has(> .cmp-modal) { padding: 8px; } }

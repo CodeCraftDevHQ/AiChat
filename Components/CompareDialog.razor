@@ -1,0 +1,89 @@
+@inherits StateComponent
+
+@if (State.Compare is { } c)
+{
+    <div class="modal-backdrop" @onclick="State.CloseCompare">
+        <div class="modal cmp-modal" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>@L["مقایسه‌ی دو مدل"]</h2>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseCompare">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            </div>
+            <div class="p-body cmp-body">
+                <textarea class="inp" rows="3" dir="auto" placeholder="@L["یک پرسش بنویسید تا هر دو مدل جواب بدهند…"]" value="@c.Prompt" @oninput="e => c.Prompt = e.Value?.ToString() ?? string.Empty"></textarea>
+                @if (State.Active is { Messages.Count: > 0 })
+                {
+                    <label class="chk"><input type="checkbox" checked="@c.UseChat" @onchange="e => c.UseChat = e.Value is true" /> @L["پیام‌های همین گفتگو هم به هر دو مدل داده شود (و انتخاب شما به همین گفتگو اضافه شود)"]</label>
+                }
+                <p class="muted small">@L["در مقایسه، جستجوی وب و ابزارها خاموش‌اند تا هر دو مدل شرایط یکسان داشته باشند."]</p>
+
+                <div class="cmp-cols">
+                    @foreach (var s in new[] { c.A, c.B })
+                    {
+                        var provider = State.Providers.FirstOrDefault(x => x.Id == s.ProviderId);
+                        var models = State.ModelsFor(provider);
+                        if (!string.IsNullOrWhiteSpace(s.Model) && !models.Contains(s.Model)) models.Insert(0, s.Model);
+                        <div class="cmp-col">
+    <div class="cmp-pick">
+        <select class="inp" disabled="@State.Compare!.Running" @onchange="e => State.SetCompareProvider(s, e.Value?.ToString() ?? string.Empty)">
+            @foreach (var pr in State.Providers)
+            {
+                <option value="@pr.Id" selected="@(pr.Id == s.ProviderId)">@pr.Name</option>
+            }
+        </select>
+        <select class="inp" dir="ltr" disabled="@State.Compare!.Running" @onchange="e => State.SetCompareModel(s, e.Value?.ToString() ?? string.Empty)">
+            @foreach (var m in models)
+            {
+                <option value="@m" selected="@(m == s.Model)">@m</option>
+            }
+        </select>
+    </div>
+    <div class="cmp-out" dir="auto">
+        @if (s.Error != null)
+        {
+            <div class="cmp-err">@s.Error</div>
+        }
+        @if (s.Running && s.Content.Length == 0)
+        {
+            <span class="muted">…</span>
+        }
+        @if (s.Content.Length > 0)
+        {
+            <div class="md">@((MarkupString)MarkdownRenderer.ToHtml(s.Content))</div>
+        }
+        @foreach (var a in s.Attachments)
+        {
+            <AttachmentChip Attachment="a" />
+        }
+    </div>
+    @if (s.Finished)
+    {
+        var st = State.CompareStats(s);
+        <div class="cmp-stats muted small" dir="ltr">
+            ⏱ @CompareHelper.FormatTime(s.Elapsed)
+            @if (s.FirstToken is { } ft) { <span> · ⚡ @CompareHelper.FormatTime(ft)</span> }
+            · ~@st.Tokens tok
+            @if (st.PerSec > 0) { <span> · @st.PerSec.ToString("0") tok/s</span> }
+            @if (st.Cost is { } cost) { <span> · @State.CostOpts.Currency@cost.ToString("0.0000")</span> }
+        </div>
+        <button class="btn primary sm" disabled="@State.Compare!.Running" @onclick="() => State.PickCompareAsync(s)">✓ @L["این جواب را نگه دار و ادامه بده"]</button>
+    }
+</div>
+                    }
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn" disabled="@c.Running" @onclick="State.SwapCompare">⇄ @L["جابجایی"]</button>
+                @if (c.Running)
+                {
+                    <button class="btn" @onclick="State.StopCompare">■ @L["توقف"]</button>
+                }
+                else
+                {
+                    <button class="btn primary" @onclick="State.RunCompareAsync">@(c.Any ? L["دوباره اجرا کن"] : L["مقایسه کن"])</button>
+                }
+            </div>
+        </div>
+    </div>
+}

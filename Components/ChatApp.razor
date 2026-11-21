@@ -196,6 +196,7 @@
                         <button @onclick="() => State.SetToolsEnabled(!State.ToolOpts.Enabled)">🔧 @L["ابزارها"]<span class="ck">@(State.ToolOpts.Enabled ? "✓" : "")</span></button>
                     }
                     <button @onclick="OpenPromptsFromMenu">📚 @L["کتابخانه‌ی پرامپت"]</button>
+                    <button @onclick="OpenCompareFromMenu">⚖️ @L["مقایسه‌ی دو مدل"]</button>
                 </div>
             }
             @if (_plusMenu)
@@ -326,6 +327,7 @@
 <PromptLibrary />
 <MemorySuggestDialog />
 <ExportDialog />
+<CompareDialog />
 
     @if (State.ShowLogs)
     {
@@ -665,6 +667,12 @@
     {
         _toolsMenu = false;
         State.OpenPrompts();
+    }
+
+    void OpenCompareFromMenu()
+    {
+        _toolsMenu = false;
+        State.OpenCompare();
     }
 
     async Task PickFromMenu()

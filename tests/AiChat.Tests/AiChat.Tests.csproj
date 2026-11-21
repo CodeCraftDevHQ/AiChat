@@ -38,6 +38,7 @@
 		<Compile Include="..\..\Services\Mcp.cs" Link="App\Mcp.cs" />
 		<Compile Include="..\..\Services\Memory.cs" Link="App\Memory.cs" />
 		<Compile Include="..\..\Services\Summary.cs" Link="App\Summary.cs" />
+		<Compile Include="..\..\Services\Compare.cs" Link="App\Compare.cs" />
 		<Compile Include="..\..\Services\CodeRun.cs" Link="App\CodeRun.cs" />
 		<Compile Include="..\..\Services\Export.cs" Link="App\Export.cs" />
 		<Compile Include="..\..\Services\SearchText.cs" Link="App\SearchText.cs" />
