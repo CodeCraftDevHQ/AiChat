@@ -159,6 +159,11 @@ public class ChatMessage
     public List<MessageVersion>? Versions { get; set; }
     public int VersionIndex { get; set; }
 
+    /// <summary>Two-model chat: the answer of the second model (this message is the first model's answer).</summary>
+    public ChatMessage? Pair { get; set; }
+    /// <summary>Two-model chat: the user's verdict on the pair: "a" | "b" | "both" | "bad".</summary>
+    public string? Vote { get; set; }
+
     public string Role { get; set; } = "user"; // "user" | "assistant"
     public string Content { get; set; } = "";
     public List<Attachment> Attachments { get; set; } = new();
@@ -248,6 +253,10 @@ public class Persona
 
 public class Conversation
 {
+    /// <summary>Two-model chat: the second API / model that answers every message together with the main one.</summary>
+    public string? ArenaProviderId { get; set; }
+    public string ArenaModel { get; set; } = "";
+
     /// <summary>The persona used in this chat (null = none).</summary>
     public string? PersonaId { get; set; }
 

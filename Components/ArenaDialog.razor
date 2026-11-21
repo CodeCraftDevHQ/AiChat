@@ -1,0 +1,72 @@
+@inherits StateComponent
+
+@if (State.ArenaDialogOpen)
+{
+    var models = State.ModelsFor(State.Providers.FirstOrDefault(x => x.Id == _provider));
+    if (!string.IsNullOrWhiteSpace(_model) && !models.Contains(_model)) models.Insert(0, _model);
+    <div class="modal-backdrop" @onclick="State.CloseArena">
+        <div class="modal tool-ask" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>🆚 @L["چت همزمان با دو مدل"]</h2>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseArena">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            </div>
+            <div class="p-body">
+                <p class="muted small">@L["هر پیام شما هم به مدل بالای صفحه (A) و هم به مدل دومی که اینجا انتخاب می‌کنید (B) فرستاده می‌شود و دو جواب کنار هم می‌آید. هر مدل تاریخچه‌ی جواب‌های خودش را می‌بیند. مدل B بدون جستجوی وب و ابزار جواب می‌دهد."]</p>
+                <p class="muted small" dir="ltr">A: @State.CurrentProvider?.Name · @State.CurrentModel</p>
+
+                <label class="lbl first">@L["مدل دوم (B)"]</label>
+                <select class="inp" @onchange="OnProvider">
+                    @foreach (var pr in State.Providers)
+                    {
+                        <option value="@pr.Id" selected="@(pr.Id == _provider)">@pr.Name</option>
+                    }
+                </select>
+                <select class="inp" dir="ltr" style="margin-top:6px" @onchange="OnModel">
+                    @foreach (var m in models)
+                    {
+                        <option value="@m" selected="@(m == _model)">@m</option>
+                    }
+                </select>
+            </div>
+            <div class="modal-foot">
+                @if (State.ArenaOn)
+                {
+                    <button class="btn" @onclick="State.ClearArena">@L["خاموش کردن"]</button>
+                }
+                <button class="btn" @onclick="State.CloseArena">@L["انصراف"]</button>
+                <button class="btn primary" disabled="@(string.IsNullOrWhiteSpace(_model))" @onclick="Apply">@L["فعال کن"]</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    string? _provider;
+    string _model = "";
+    bool _was;
+
+    protected override void OnParametersSet()
+    {
+        var open = State.ArenaDialogOpen;
+        if (open && !_was)
+        {
+            _provider = State.ArenaOn ? State.ArenaProviderId : (State.Providers.FirstOrDefault(p => p.Id != State.CurrentProviderId)?.Id ?? State.CurrentProviderId);
+            var prov = State.Providers.FirstOrDefault(p => p.Id == _provider);
+            _model = State.ArenaOn ? State.ArenaModelName
+                : State.ModelsFor(prov).FirstOrDefault(m => prov?.Id != State.CurrentProviderId || m != State.CurrentModel) ?? "";
+        }
+        _was = open;
+    }
+
+    void OnProvider(ChangeEventArgs e)
+    {
+        _provider = e.Value?.ToString();
+        _model = State.ModelsFor(State.Providers.FirstOrDefault(p => p.Id == _provider)).FirstOrDefault() ?? "";
+    }
+
+    void OnModel(ChangeEventArgs e) => _model = e.Value?.ToString() ?? "";
+
+    void Apply() => State.SetArena(_provider, _model);
+}

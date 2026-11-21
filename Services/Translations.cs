@@ -677,5 +677,16 @@ public static class Translations
         ["این جواب را نگه دار و ادامه بده"] = "Keep this answer and continue",
         ["ابتدا پرسش را بنویسید."] = "Write the question first.",
         ["برای هر دو طرف API و مدل انتخاب کنید."] = "Choose an API and a model for both sides.",
+        ["چت همزمان با دو مدل"] = "Chat with two models at once",
+        ["هر پیام شما هم به مدل بالای صفحه (A) و هم به مدل دومی که اینجا انتخاب می‌کنید (B) فرستاده می‌شود و دو جواب کنار هم می‌آید. هر مدل تاریخچه‌ی جواب‌های خودش را می‌بیند. مدل B بدون جستجوی وب و ابزار جواب می‌دهد."] = "Every message goes to the model at the top (A) and to the second model you choose here (B), and the two answers appear side by side. Each model sees the history of its own answers. Model B answers without web search or tools.",
+        ["مدل دوم (B)"] = "Second model (B)",
+        ["فعال کن"] = "Turn on",
+        ["خاموش کردن"] = "Turn off",
+        ["تغییر"] = "Change",
+        ["A بهتر است"] = "A is better",
+        ["B بهتر است"] = "B is better",
+        ["هر دو خوب"] = "Both are good",
+        ["هر دو بد"] = "Both are bad",
+        ["ادامه‌ی گفتگو فقط با یک مدل:"] = "Continue with one model only:",
     };
 }

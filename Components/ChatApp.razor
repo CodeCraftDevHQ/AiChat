@@ -134,7 +134,41 @@
                         {
                             <SummaryBanner Conv="State.Active" />
                         }
-                        <MessageView @key="msgs[i]" Message="msgs[i]" Index="i" IsLast="last" Streaming="@(State.IsStreaming && last)" />
+                        @if (msgs[i].Role == "assistant" && msgs[i].Pair is { } pair)
+                        {
+                            var am = msgs[i];
+                            <div class="arena-row">
+                                <div class="arena-col">
+                                    <div class="arena-head" dir="ltr"><b>A</b> · @am.Model</div>
+                                    <MessageView @key="am" Message="am" Index="i" IsLast="last" Streaming="@(State.IsStreaming && last)" />
+                                </div>
+                                <div class="arena-col">
+                                    <div class="arena-head" dir="ltr"><b>B</b> · @pair.Model</div>
+                                    <MessageView @key="pair" Message="pair" Index="i" IsLast="false" Streaming="@(State.IsStreaming && last)" />
+                                </div>
+                            </div>
+                            @if (!State.IsStreaming)
+                            {
+                                <div class="arena-vote">
+                                    <button class="@(am.Vote == "a" ? "on" : "")" @onclick="() => State.VoteArenaAsync(am, VoteA)">← @L["A بهتر است"]</button>
+                                    <button class="@(am.Vote == "both" ? "on" : "")" @onclick="() => State.VoteArenaAsync(am, VoteBoth)">⇄ @L["هر دو خوب"]</button>
+                                    <button class="@(am.Vote == "bad" ? "on" : "")" @onclick="() => State.VoteArenaAsync(am, VoteBad)">⊘ @L["هر دو بد"]</button>
+                                    <button class="@(am.Vote == "b" ? "on" : "")" @onclick="() => State.VoteArenaAsync(am, VoteB)">@L["B بهتر است"] →</button>
+                                </div>
+                                @if (last)
+                                {
+                                    <div class="arena-keep muted small">
+                                        @L["ادامه‌ی گفتگو فقط با یک مدل:"]
+                                        <button class="btn sm" @onclick="() => State.KeepArenaSideAsync(false)">A</button>
+                                        <button class="btn sm" @onclick="() => State.KeepArenaSideAsync(true)">B</button>
+                                    </div>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <MessageView @key="msgs[i]" Message="msgs[i]" Index="i" IsLast="last" Streaming="@(State.IsStreaming && last)" />
+                        }
                     }
                 </div>
             }
@@ -196,6 +230,7 @@
                         <button @onclick="() => State.SetToolsEnabled(!State.ToolOpts.Enabled)">🔧 @L["ابزارها"]<span class="ck">@(State.ToolOpts.Enabled ? "✓" : "")</span></button>
                     }
                     <button @onclick="OpenPromptsFromMenu">📚 @L["کتابخانه‌ی پرامپت"]</button>
+                    <button @onclick="OpenArenaFromMenu">🆚 @L["چت همزمان با دو مدل"]<span class="ck">@(State.ArenaOn ? "✓" : "")</span></button>
                     <button @onclick="OpenCompareFromMenu">⚖️ @L["مقایسه‌ی دو مدل"]</button>
                 </div>
             }
@@ -205,6 +240,14 @@
                 <div class="menu" style="top:auto; bottom:84px; left:14px; right:auto">
                     <button @onclick="PickFromMenu">📎 @L["فایل یا عکس"]</button>
                     <button @onclick="TakePhoto">📷 @L["دوربین"]</button>
+                </div>
+            }
+            @if (State.ArenaOn)
+            {
+                <div class="arena-chip" dir="auto">
+                    <span>🆚 B: <bdi dir="ltr">@State.ArenaLabel</bdi></span>
+                    <button class="icon-btn sm" title="@L["تغییر"]" @onclick="State.OpenArena">✎</button>
+                    <button class="icon-btn sm" title="@L["خاموش کردن"]" @onclick="State.ClearArena">✕</button>
                 </div>
             }
             @if (_slash.Count > 0)
@@ -328,6 +371,7 @@
 <MemorySuggestDialog />
 <ExportDialog />
 <CompareDialog />
+<ArenaDialog />
 
     @if (State.ShowLogs)
     {
@@ -667,6 +711,14 @@
     {
         _toolsMenu = false;
         State.OpenPrompts();
+    }
+
+    const string VoteA = "a", VoteB = "b", VoteBoth = "both", VoteBad = "bad";
+
+    void OpenArenaFromMenu()
+    {
+        _toolsMenu = false;
+        State.OpenArena();
     }
 
     void OpenCompareFromMenu()

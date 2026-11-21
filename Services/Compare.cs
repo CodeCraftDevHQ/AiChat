@@ -46,4 +46,35 @@ public static class CompareHelper
     /// <summary>Output tokens per second (0 when unknown).</summary>
     public static double TokensPerSecond(int tokens, TimeSpan elapsed) =>
         elapsed.TotalSeconds < 0.05 ? 0 : tokens / elapsed.TotalSeconds;
+
+    /// <summary>History of the second model in a two-model chat: its own earlier answers replace the first model's.</summary>
+    public static List<ChatMessage> ArenaHistory(IEnumerable<ChatMessage> before)
+    {
+        var list = new List<ChatMessage>();
+        foreach (var m in before)
+        {
+            var x = m.Role == "assistant" && m.Pair != null ? m.Pair : m;
+            if (x.Role == "assistant" && string.IsNullOrEmpty(x.Content) && x.Attachments.Count == 0) continue;
+            list.Add(x);
+        }
+        return list;
+    }
+
+    /// <summary>Ends the two-model chat by keeping only one side (the other side's answers are dropped).</summary>
+    public static void KeepSide(IEnumerable<ChatMessage> messages, bool sideB)
+    {
+        foreach (var m in messages)
+        {
+            if (m.Pair == null) continue;
+            if (sideB)
+            {
+                m.Content = m.Pair.Content;
+                m.Attachments = m.Pair.Attachments;
+                m.ErrorText = m.Pair.ErrorText;
+                m.Model = m.Pair.Model;
+            }
+            m.Pair = null;
+            m.Vote = null;
+        }
+    }
 }

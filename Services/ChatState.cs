@@ -892,6 +892,133 @@ public class ChatState
 
     public MemorySuggestState? MemorySuggest { get; private set; }
 
+    // ------------------------------------------------------------ two models in one chat (arena)
+    string? _draftArenaProvider;
+    string _draftArenaModel = "";
+    CancellationTokenSource? _pairCts;
+
+    public string? ArenaProviderId => Active != null ? Active.ArenaProviderId : _draftArenaProvider;
+    public string ArenaModelName => Active != null ? Active.ArenaModel : _draftArenaModel;
+    public bool ArenaOn => !string.IsNullOrEmpty(ArenaModelName) && Providers.Any(p => p.Id == ArenaProviderId);
+    public string ArenaLabel => ArenaOn ? $"{Providers.First(p => p.Id == ArenaProviderId).Name} · {ArenaModelName}" : "";
+    public bool ArenaDialogOpen { get; private set; }
+
+    public void OpenArena() { ArenaDialogOpen = true; Notify(); }
+    public void CloseArena() { ArenaDialogOpen = false; Notify(); }
+    public void ClearArena() => SetArena(null, "");
+
+    public void SetArena(string? providerId, string model)
+    {
+        if (Active != null)
+        {
+            Active.ArenaProviderId = providerId;
+            Active.ArenaModel = model;
+            _ = _storage.SaveConversationsAsync(Conversations);
+        }
+        else { _draftArenaProvider = providerId; _draftArenaModel = model; }
+        ArenaDialogOpen = false;
+        Notify();
+    }
+
+    public async Task VoteArenaAsync(ChatMessage a, string vote)
+    {
+        a.Vote = a.Vote == vote ? null : vote;
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
+    /// <summary>Stops the two-model mode and continues with one model (its answers become the chat's answers).</summary>
+    public async Task KeepArenaSideAsync(bool sideB)
+    {
+        var conv = Active;
+        if (conv == null || IsStreaming) return;
+        CompareHelper.KeepSide(conv.Messages, sideB);
+        if (sideB && Providers.FirstOrDefault(p => p.Id == conv.ArenaProviderId) is { } pb)
+        {
+            conv.ProviderId = pb.Id;
+            conv.Model = conv.ArenaModel;
+            CurrentProviderId = pb.Id;
+            SelectModel(conv.ArenaModel);
+        }
+        conv.ArenaProviderId = null;
+        conv.ArenaModel = "";
+        Notify();
+        await _storage.SaveConversationsAsync(Conversations);
+    }
+
+    /// <summary>Runs one turn: the normal answer, and (in a two-model chat) the second model's answer at the same time.</summary>
+    async Task RunTurnAsync(Conversation conv, ChatMessage reply, ProviderConfig provider, string model)
+    {
+        var pb = !provider.IsGenerator && !string.IsNullOrEmpty(conv.ArenaModel)
+            ? Providers.FirstOrDefault(p => p.Id == conv.ArenaProviderId) : null;
+        if (pb == null) { await RunAsync(conv, reply, provider, model); return; }
+
+        var pair = new ChatMessage { Role = "assistant", Model = $"{pb.Name} · {conv.ArenaModel}" };
+        reply.Pair = pair;
+        _pairCts = new CancellationTokenSource();
+        var bTask = RunPairAsync(conv, reply, pair, pb, conv.ArenaModel, _pairCts.Token);
+        try
+        {
+            await RunAsync(conv, reply, provider, model);
+            if (!bTask.IsCompleted) { IsStreaming = true; Notify(); }
+            await bTask;
+        }
+        finally
+        {
+            IsStreaming = false;
+            _pairCts?.Dispose();
+            _pairCts = null;
+            Notify();
+            await _storage.SaveConversationsAsync(Conversations);
+        }
+    }
+
+    async Task RunPairAsync(Conversation conv, ChatMessage reply, ChatMessage pair, ProviderConfig provider, string model, CancellationToken ct)
+    {
+        try
+        {
+            var history = CompareHelper.ArenaHistory(conv.Messages.TakeWhile(m => !ReferenceEquals(m, reply)));
+            var project = ProjectOf(conv);
+            if (project is { Files.Count: > 0 })
+                history.Insert(0, new ChatMessage { Role = "user", Content = "(Reference files of this project)", Attachments = project.Files });
+            var system = BuildSystem(provider, project, conv);
+            var gen = WithGen(provider, conv);
+            gen.Tools = null; // the second model answers without tools / web search
+            var impl = _factory.Create(gen.Type);
+
+            async Task OnImage(string rawMime, byte[] data)
+            {
+                var (mime, _) = MimeMeta.Split(rawMime);
+                var kind = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image"
+                    : mime.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? "video"
+                    : mime.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ? "audio" : "file";
+                var att = await _storage.SaveAttachmentAsync($"{kind}-{pair.Attachments.Count + 1}{FileExportService.ExtensionFromMime(mime)}", mime, kind, data);
+                pair.Attachments.Add(att);
+                Notify();
+            }
+
+            var last = DateTime.MinValue;
+            await foreach (var chunk in impl.StreamAsync(gen, model, history, system, OnImage, ct))
+            {
+                if (chunk.StartsWith(ProviderStatus.Prefix, StringComparison.Ordinal)) continue;
+                pair.Content += chunk;
+                if ((DateTime.UtcNow - last).TotalMilliseconds > 60) { last = DateTime.UtcNow; Notify(); }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            pair.ErrorText = ProviderHttp.Describe(ex);
+            _log.Error($"Second-model request to {provider.Name} / {model} failed", ex);
+        }
+        finally
+        {
+            if (string.IsNullOrEmpty(pair.Content) && pair.ErrorText == null && pair.Attachments.Count == 0 && !ct.IsCancellationRequested)
+                pair.ErrorText = L["مدل پاسخ خالی برگرداند. اگر مدل «تفکری» است، حداکثر طول پاسخ یا طول context مدل را بیشتر کنید؛ جزئیات در لاگ‌ها است."];
+            Notify();
+        }
+    }
+
     // ------------------------------------------------------------ compare two models
     public class CompareState
     {
@@ -2265,6 +2392,7 @@ public class ChatState
             return true;
         }
         if (PdfPrompt != null) { ChoosePdfMode("text"); return true; }
+        if (ArenaDialogOpen) { CloseArena(); return true; }
         if (Compare != null) { CloseCompare(); return true; }
         if (Export != null) { CloseExport(); return true; }
         if (MemorySuggest != null) { CloseMemorySuggest(); return true; }
@@ -2569,7 +2697,7 @@ public class ChatState
 
         var reply = new ChatMessage { Role = "assistant", Model = $"{provider.Name} · {CurrentModel}" };
         conv.Messages.Add(reply);
-        await RunAsync(conv, reply, provider, CurrentModel);
+        await RunTurnAsync(conv, reply, provider, CurrentModel);
     }
 
     /// <summary>Shows the previous (delta = -1) or next (delta = +1) version of an edited message.</summary>
@@ -2669,6 +2797,9 @@ public class ChatState
             };
             DraftProjectId = null;
             DraftPersonaId = null;
+            Active.ArenaProviderId = _draftArenaProvider;
+            Active.ArenaModel = _draftArenaModel;
+            _draftArenaProvider = null; _draftArenaModel = "";
             Conversations.Insert(0, Active);
         }
 
@@ -2680,7 +2811,7 @@ public class ChatState
         var reply = new ChatMessage { Role = "assistant", Model = $"{provider.Name} · {CurrentModel}" };
         conv.Messages.Add(reply);
 
-        await RunAsync(conv, reply, provider, CurrentModel);
+        await RunTurnAsync(conv, reply, provider, CurrentModel);
     }
 
     public async Task RegenerateAsync()
@@ -2703,13 +2834,13 @@ public class ChatState
         conv.Messages.Add(reply);
         Notice = null;
 
-        await RunAsync(conv, reply, provider, CurrentModel);
+        await RunTurnAsync(conv, reply, provider, CurrentModel);
     }
 
     /// <summary>Progress line of a running async job (e.g. "running · 42% · 0:35"), shown in the waiting bubble.</summary>
     public string? GenStatus { get; private set; }
 
-    public void Stop() => _cts?.Cancel();
+    public void Stop() { _cts?.Cancel(); _pairCts?.Cancel(); }
 
     static bool LooksLikeImageRejection(string error)
     {
@@ -2888,7 +3019,7 @@ public class ChatState
 
             if (string.IsNullOrEmpty(reply.Content) && reply.ErrorText == null && reply.Attachments.Count == 0)
             {
-                if (stopped) conv.Messages.Remove(reply); // stopped before any text arrived -> drop the empty bubble
+                if (stopped && string.IsNullOrEmpty(reply.Pair?.Content)) conv.Messages.Remove(reply); // stopped before any text arrived -> drop the empty bubble
                 else
                 {
                     // the server answered but sent no text: say so instead of hiding the bubble

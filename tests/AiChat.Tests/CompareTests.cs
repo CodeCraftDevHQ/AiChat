@@ -50,3 +50,53 @@ public class CompareTests
         Assert.Equal(50, CompareHelper.TokensPerSecond(100, TimeSpan.FromSeconds(2)), 3);
     }
 }
+
+public class ArenaTests
+{
+    static ChatMessage A(string text, string b) => new() { Role = "assistant", Content = text, Model = "A", Pair = new ChatMessage { Role = "assistant", Content = b, Model = "B" } };
+
+    [Fact]
+    public void ArenaHistory_uses_pair_answers()
+    {
+        var msgs = new[] { new ChatMessage { Role = "user", Content = "q" }, A("a1", "b1"), new ChatMessage { Role = "user", Content = "q2" } };
+        var h = CompareHelper.ArenaHistory(msgs);
+        Assert.Equal(new[] { "q", "b1", "q2" }, h.Select(m => m.Content));
+    }
+
+    [Fact]
+    public void ArenaHistory_skips_empty_pair_answer()
+    {
+        var msgs = new[] { new ChatMessage { Role = "user", Content = "q" }, A("a1", ""), new ChatMessage { Role = "user", Content = "q2" } };
+        Assert.Equal(2, CompareHelper.ArenaHistory(msgs).Count);
+    }
+
+    [Fact]
+    public void KeepSide_B_replaces_and_clears()
+    {
+        var m = A("a1", "b1");
+        m.Vote = "a";
+        CompareHelper.KeepSide(new[] { m }, true);
+        Assert.Equal("b1", m.Content);
+        Assert.Equal("B", m.Model);
+        Assert.Null(m.Pair);
+        Assert.Null(m.Vote);
+    }
+
+    [Fact]
+    public void KeepSide_A_keeps_main()
+    {
+        var m = A("a1", "b1");
+        CompareHelper.KeepSide(new[] { m }, false);
+        Assert.Equal("a1", m.Content);
+        Assert.Null(m.Pair);
+    }
+
+    [Fact]
+    public void Pair_survives_json()
+    {
+        var m = A("a1", "b1"); m.Vote = "both";
+        var back = System.Text.Json.JsonSerializer.Deserialize<ChatMessage>(System.Text.Json.JsonSerializer.Serialize(m))!;
+        Assert.Equal("b1", back.Pair!.Content);
+        Assert.Equal("both", back.Vote);
+    }
+}
