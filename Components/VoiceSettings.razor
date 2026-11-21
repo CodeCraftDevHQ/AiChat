@@ -1,0 +1,139 @@
+@inherits StateComponent
+
+@{
+    var o = State.VoiceOpts;
+}
+
+<p class="muted small">@L["خواندن پاسخ‌ها با صدا و گفتن پیام با میکروفون. این بخش به‌صورت پیش‌فرض خاموش است و هیچ صدایی ضبط یا پخش نمی‌شود مگر خودتان روشن کنید."]</p>
+
+<label id="set200" class="chk"><input type="checkbox" checked="@o.Enabled" @onchange="e => Save(v => v.Enabled = e.Value is true)" /> @L["فعال کردن قابلیت‌های صدا"]</label>
+
+@if (o.Enabled)
+{
+    <label id="set201" class="lbl">@L["خواندن پاسخ با صدا"]</label>
+    <label id="set202" class="chk"><input type="checkbox" checked="@o.ReadButton" @onchange="e => Save(v => v.ReadButton = e.Value is true)" /> @L["دکمه‌ی 🔊 روی هر پاسخ"]</label>
+    <label id="set203" class="chk"><input type="checkbox" checked="@o.AutoRead" @onchange="e => Save(v => v.AutoRead = e.Value is true)" /> @L["خواندن خودکار هر پاسخ جدید"]</label>
+
+    <AppSelect Title="@L["منبع صدا"]" Value="@o.TtsMode" ValueChanged="v => Save(x => x.TtsMode = v)"
+               Options="@(new AppSelect.SelectOption[] { new("device", L["صدای خود دستگاه (رایگان و آفلاین)"]), new("api", L["API (مثل OpenAI /audio/speech)"]) })" />
+
+    <p class="muted small" style="margin-top:8px">@L["چه چیزهایی خوانده نشود:"]</p>
+    <label id="set204" class="chk"><input type="checkbox" checked="@o.SkipCode" @onchange="e => Save(v => v.SkipCode = e.Value is true)" /> @L["بلوک‌های کد"]</label>
+    <label id="set205" class="chk"><input type="checkbox" checked="@o.SkipThinking" @onchange="e => Save(v => v.SkipThinking = e.Value is true)" /> @L["فکر کردن مدل"]</label>
+    <label id="set206" class="chk"><input type="checkbox" checked="@o.SkipLinks" @onchange="e => Save(v => v.SkipLinks = e.Value is true)" /> @L["آدرس لینک‌ها"]</label>
+    <label id="set207" class="chk"><input type="checkbox" checked="@o.SkipToolLines" @onchange="e => Save(v => v.SkipToolLines = e.Value is true)" /> @L["خط‌های فراخوانی ابزار"]</label>
+
+    @if (o.TtsMode == "api")
+    {
+        <label id="set208" class="lbl">@L["API صدا"]</label>
+        <AppSelect Title="API" Value="@o.TtsProviderId" ValueChanged="v => Save(x => x.TtsProviderId = v)" Options="ProviderOptions()" />
+        @if (string.IsNullOrEmpty(o.TtsProviderId))
+        {
+            <input class="inp" dir="ltr" placeholder="Base URL" value="@o.TtsBaseUrl" @onchange="e => Save(v => v.TtsBaseUrl = Str(e))" />
+            <input class="inp" style="margin-top:6px" type="password" dir="ltr" placeholder="@L["کلید API"]" value="@o.TtsKey" @onchange='e => SaveKey("tts", e)' />
+        }
+        <label id="set209" class="lbl">@L["مدل و صدا"]</label>
+        <div class="row-btns">
+            <input class="inp" dir="ltr" placeholder="model" value="@o.TtsModel" @onchange="e => Save(v => v.TtsModel = Str(e))" />
+            <input class="inp" dir="ltr" placeholder="voice" value="@o.TtsVoice" @onchange="e => Save(v => v.TtsVoice = Str(e))" />
+        </div>
+        <label id="set210" class="lbl">@L["سرعت"]: @o.TtsSpeed.ToString("0.00")</label>
+        <input type="range" class="range" min="0.25" max="4" step="0.05" value="@o.TtsSpeed.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Save(v => v.TtsSpeed = Dbl(e, 1))" />
+
+        <details class="adv-search">
+            <summary id="set211">@L["پیشرفته"]</summary>
+            <label class="lbl first">@L["مسیر (Path)"]</label>
+            <input class="inp" dir="ltr" value="@o.TtsPath" @onchange="e => Save(v => v.TtsPath = Str(e))" />
+            <AppSelect Title="@L["قالب فایل صدا"]" Value="@o.TtsFormat" ValueChanged="v => Save(x => x.TtsFormat = v)"
+                       Options="@(new AppSelect.SelectOption[] { new("mp3", "mp3"), new("wav", "wav"), new("opus", "opus"), new("aac", "aac"), new("flac", "flac") })" />
+            <label class="lbl">@L["حداکثر طول هر درخواست (نویسه)"]</label>
+            <input class="inp" type="number" min="200" max="4000" step="100" value="@o.TtsChunk" @onchange="e => Save(v => v.TtsChunk = Int(e, 3000))" />
+            <label class="lbl">@L["بدنه‌ی اضافه (JSON، اختیاری)"]</label>
+            <textarea class="inp" rows="3" dir="ltr" placeholder='{"language": "fa"}' value="@o.TtsExtraBody" @onchange="e => Save(v => v.TtsExtraBody = Str(e))"></textarea>
+        </details>
+    }
+    else
+    {
+        <label id="set212" class="lbl">@L["صدای دستگاه"]</label>
+        <input class="inp" dir="ltr" list="voice-list" placeholder="@L["خالی = خودکار بر اساس زبان متن (مثلاً fa-IR یا en-US)"]" value="@o.DeviceLocale" @onchange="e => Save(v => v.DeviceLocale = Str(e))" />
+        <datalist id="voice-list">
+            @foreach (var v in _voices)
+            {
+                <option value="@v"></option>
+            }
+        </datalist>
+        <button class="btn sm" style="margin-top:6px" @onclick="LoadVoices">@L["نمایش صداهای نصب‌شده"]</button>
+        @if (_voicesLoaded)
+        {
+            <p class="muted small" dir="ltr">@(_voices.Count == 0 ? L["صدایی پیدا نشد."] : string.Join(" · ", _voices.Take(30)))</p>
+        }
+        <label id="set213" class="lbl">@L["زیر و بمی"]: @o.Pitch.ToString("0.0")</label>
+        <input type="range" class="range" min="0" max="2" step="0.1" value="@o.Pitch.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Save(v => v.Pitch = Dbl(e, 1))" />
+        <label id="set214" class="lbl">@L["بلندی صدا"]: @o.Volume.ToString("0.0")</label>
+        <input type="range" class="range" min="0" max="1" step="0.1" value="@o.Volume.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => Save(v => v.Volume = Dbl(e, 1))" />
+    }
+
+    <div class="row-btns" style="margin-top:10px">
+        <button id="set215" class="btn" @onclick="TestVoice">🔊 @L["آزمایش صدا"]</button>
+        @if (State.Speaking != null)
+        {
+            <button class="btn" @onclick="State.StopSpeak">■ @L["توقف"]</button>
+        }
+    </div>
+
+    <label id="set216" class="lbl" style="margin-top:16px">@L["تبدیل گفتار به متن"]</label>
+    <p class="muted small">@L["دکمه‌ی 🎤 کنار ارسال، صدای شما را ضبط می‌کند و با یک API (مثل Whisper) به متن تبدیل می‌کند. در ویندوز بار اول از شما اجازه‌ی میکروفون می‌پرسد؛ روی اندروید ممکن است بسته به نسخه‌ی WebView کار نکند."]</p>
+    <label id="set217" class="chk"><input type="checkbox" checked="@o.SttEnabled" @onchange="e => Save(v => v.SttEnabled = e.Value is true)" /> @L["نمایش دکمه‌ی میکروفون"]</label>
+    @if (o.SttEnabled)
+    {
+        <AppSelect Title="API" Value="@o.SttProviderId" ValueChanged="v => Save(x => x.SttProviderId = v)" Options="ProviderOptions()" />
+        @if (string.IsNullOrEmpty(o.SttProviderId))
+        {
+            <input class="inp" dir="ltr" placeholder="Base URL" value="@o.SttBaseUrl" @onchange="e => Save(v => v.SttBaseUrl = Str(e))" />
+            <input class="inp" style="margin-top:6px" type="password" dir="ltr" placeholder="@L["کلید API"]" value="@o.SttKey" @onchange='e => SaveKey("stt", e)' />
+        }
+        <label id="set218" class="lbl">@L["مدل تبدیل گفتار"]</label>
+        <input class="inp" dir="ltr" value="@o.SttModel" @onchange="e => Save(v => v.SttModel = Str(e))" />
+        <label id="set219" class="lbl">@L["زبان گفتار (کد زبان، خالی = خودکار)"]</label>
+        <input class="inp" dir="ltr" placeholder="fa" value="@o.SttLanguage" @onchange="e => Save(v => v.SttLanguage = Str(e))" />
+        <label id="set220" class="chk" style="margin-top:8px"><input type="checkbox" checked="@o.AutoSend" @onchange="e => Save(v => v.AutoSend = e.Value is true)" /> @L["بعد از تبدیل، پیام خودکار ارسال شود"]</label>
+        <details class="adv-search">
+            <summary id="set221">@L["پیشرفته"]</summary>
+            <label class="lbl first">@L["مسیر (Path)"]</label>
+            <input class="inp" dir="ltr" value="@o.SttPath" @onchange="e => Save(v => v.SttPath = Str(e))" />
+            <label class="lbl">@L["راهنمای متن (prompt، اختیاری)"]</label>
+            <input class="inp" dir="auto" value="@o.SttPrompt" @onchange="e => Save(v => v.SttPrompt = Str(e))" />
+        </details>
+    }
+
+    <button class="btn sm" style="margin-top:14px" @onclick="State.ResetVoiceOpts">@L["بازنشانی"]</button>
+}
+
+@code {
+    List<string> _voices = new();
+    bool _voicesLoaded;
+
+    void Save(Action<VoiceOptions> change) { change(State.VoiceOpts); State.SaveVoiceOpts(); }
+    static string Str(ChangeEventArgs e) => e.Value?.ToString()?.Trim() ?? "";
+    static double Dbl(ChangeEventArgs e, double def) =>
+        double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : def;
+    static int Int(ChangeEventArgs e, int def) => int.TryParse(e.Value?.ToString(), out var n) ? n : def;
+
+    Task SaveKey(string kind, ChangeEventArgs e) => State.SetVoiceKeyAsync(kind, Str(e));
+
+    async Task LoadVoices()
+    {
+        _voices = await State.DeviceVoicesAsync();
+        _voicesLoaded = true;
+    }
+
+    Task TestVoice() => State.SpeakAsync(new AiChat.Models.ChatMessage
+    {
+        Role = "assistant",
+        Content = L.Language == "fa" ? "سلام! این یک آزمایش صدا است." : "Hello! This is a voice test."
+    });
+
+    AppSelect.SelectOption[] ProviderOptions() =>
+        new[] { new AppSelect.SelectOption("", L["— آدرس و کلید جداگانه —"]) }
+            .Concat(State.Providers.Where(p => !p.IsGenerator).Select(p => new AppSelect.SelectOption(p.Id, p.Name))).ToArray();
+}

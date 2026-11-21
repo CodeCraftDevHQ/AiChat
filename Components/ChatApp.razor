@@ -277,6 +277,19 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10" /><path d="M18 7h2" /><circle cx="16" cy="7" r="2" /><path d="M4 17h2" /><path d="M10 17h10" /><circle cx="8" cy="17" r="2" /></svg>
                 </button>
                 <textarea @ref="_input" rows="1" dir="auto" enterkeyhint="enter" placeholder="@L["هر چیزی بپرسید..."]"></textarea>
+                @if (State.VoiceMicAvailable && !State.IsStreaming)
+                {
+                    <button class="icon-btn attach mic @(State.Recording ? "rec" : "")" disabled="@State.Transcribing" title="@(State.Recording ? L["پایان ضبط و تبدیل به متن"] : L["گفتن پیام با میکروفون"])" @onclick="MicClick">
+                        @if (State.Transcribing)
+                        {
+                            <span class="muted">…</span>
+                        }
+                        else
+                        {
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></svg>
+                        }
+                    </button>
+                }
                 @if (State.IsStreaming)
                 {
                     <button class="send" title="@L["توقف"]" @onclick="State.Stop">
@@ -570,6 +583,13 @@
         {
             _self = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("chat.initComposer", _input, _self);
+            State.PlayAudioBytes = async (bytes, mime, ct) =>
+            {
+                using var reg = ct.Register(() => _ = JS.InvokeVoidAsync("chat.stopAudio"));
+                await JS.InvokeVoidAsync("chat.playAudio", Convert.ToBase64String(bytes), mime);
+                ct.ThrowIfCancellationRequested();
+            };
+            State.StopAudioBytes = async () => await JS.InvokeVoidAsync("chat.stopAudio");
             await JS.InvokeVoidAsync("chat.initDrop", _self);
             await JS.InvokeVoidAsync("chat.initRail", _self);
             await JS.InvokeVoidAsync("chat.initContextMenu", _self, CtxLabels());
@@ -714,6 +734,38 @@
     }
 
     const string VoteA = "a", VoteB = "b", VoteBoth = "both", VoteBad = "bad";
+
+    class MicResult { public string Data { get; set; } = ""; public string Mime { get; set; } = ""; }
+
+    async Task MicClick()
+    {
+        if (State.Transcribing) return;
+        if (!State.Recording)
+        {
+            State.StopSpeak();
+            if (DeviceInfo.Platform == DevicePlatform.Android)
+            {
+                var st = await Permissions.RequestAsync<Permissions.Microphone>();
+                if (st != PermissionStatus.Granted) { State.SetNotice(L["اجازه‌ی میکروفون داده نشد."]); return; }
+            }
+            var err = await JS.InvokeAsync<string>("chat.micStart");
+            if (!string.IsNullOrEmpty(err))
+            {
+                State.SetNotice(L["میکروفون در دسترس نیست یا اجازه داده نشد: "] + err);
+                return;
+            }
+            State.SetRecording(true);
+            return;
+        }
+
+        State.SetRecording(false);
+        var r = await JS.InvokeAsync<MicResult>("chat.micStop");
+        if (string.IsNullOrEmpty(r.Data)) return;
+        var text = await State.TranscribeAsync(Convert.FromBase64String(r.Data), r.Mime);
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await JS.InvokeVoidAsync("chat.appendValue", _input, text);
+        if (State.VoiceOpts.AutoSend) await SendClick();
+    }
 
     void OpenArenaFromMenu()
     {

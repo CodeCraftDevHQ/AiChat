@@ -47,6 +47,8 @@ public class StorageService
     // the web-search API key lives in secure storage too
     public Task SaveSearchKeyAsync(string key) => SetSecretAsync("websearch", key);
     public Task<string> LoadSearchKeyAsync() => GetSecretAsync("websearch");
+    public Task SaveVoiceKeyAsync(string kind, string key) => SetSecretAsync("voice-" + kind, key);
+    public Task<string> LoadVoiceKeyAsync(string kind) => GetSecretAsync("voice-" + kind);
 
     // MCP servers: the list is plain JSON in the preferences, the headers (tokens) are secrets
     public async Task<List<McpServerConfig>> LoadMcpServersAsync()

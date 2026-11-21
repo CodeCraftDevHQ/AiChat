@@ -692,3 +692,70 @@ window.chat.printHtml = function (html) {
         document.body.appendChild(f);
     });
 };
+
+// ---- voice: microphone recording and audio playback
+window.chat = window.chat || {};
+window.chat.micStart = async function () {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) return 'unsupported';
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+        const type = types.find(t => MediaRecorder.isTypeSupported(t));
+        const rec = new MediaRecorder(stream, type ? { mimeType: type } : {});
+        const m = { stream, rec, chunks: [] };
+        rec.ondataavailable = e => { if (e.data && e.data.size) m.chunks.push(e.data); };
+        rec.start();
+        window.chat._mic = m;
+        return '';
+    } catch (e) {
+        return String((e && (e.message || e.name)) || e);
+    }
+};
+window.chat.micStop = function () {
+    return new Promise(resolve => {
+        const m = window.chat._mic;
+        window.chat._mic = null;
+        if (!m) { resolve({ data: '', mime: '' }); return; }
+        m.rec.onstop = async () => {
+            m.stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(m.chunks, { type: m.rec.mimeType || 'audio/webm' });
+            const buf = new Uint8Array(await blob.arrayBuffer());
+            let bin = '';
+            for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+            resolve({ data: btoa(bin), mime: blob.type || 'audio/webm' });
+        };
+        try { m.rec.stop(); } catch (e) { resolve({ data: '', mime: '' }); }
+    });
+};
+window.chat.micCancel = function () {
+    const m = window.chat._mic;
+    window.chat._mic = null;
+    if (!m) return;
+    try { m.rec.onstop = null; m.rec.stop(); } catch (e) { }
+    m.stream.getTracks().forEach(t => t.stop());
+};
+window.chat.playAudio = function (b64, mime) {
+    return new Promise((resolve, reject) => {
+        window.chat.stopAudio();
+        const a = new Audio('data:' + mime + ';base64,' + b64);
+        window.chat._aud = { a, resolve };
+        a.onended = () => { window.chat._aud = null; resolve(); };
+        a.onerror = () => { window.chat._aud = null; reject(new Error('audio playback failed')); };
+        a.play().catch(err => { window.chat._aud = null; reject(err); });
+    });
+};
+window.chat.stopAudio = function () {
+    const x = window.chat._aud;
+    window.chat._aud = null;
+    if (!x) return;
+    try { x.a.pause(); } catch (e) { }
+    x.resolve();
+};
+window.chat.appendValue = function (el, text) {
+    if (!el) return;
+    const cur = el.value || '';
+    el.value = cur + (cur && !/\s$/.test(cur) ? ' ' : '') + text;
+    if (el.__resize) el.__resize();
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+};

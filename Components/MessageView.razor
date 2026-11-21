@@ -110,6 +110,19 @@
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11" /><path d="m7 11 5 5 5-5" /><path d="M5 20h14" /></svg>
                             </button>
                         }
+                        @if (State.VoiceReadAvailable && !string.IsNullOrEmpty(Message.Content))
+                        {
+                            <button class="icon-btn sm @(ReferenceEquals(State.Speaking, Message) ? "rec" : "")" title="@(ReferenceEquals(State.Speaking, Message) ? L["توقف خواندن"] : L["خواندن با صدا"])" @onclick="() => State.SpeakAsync(Message)">
+                                @if (ReferenceEquals(State.Speaking, Message))
+                                {
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                                }
+                                else
+                                {
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4Z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" /></svg>
+                                }
+                            </button>
+                        }
                         @if (IsLast)
                         {
                             <button class="icon-btn sm" title="@L["تولید مجدد"]" @onclick="() => State.RegenerateAsync()">

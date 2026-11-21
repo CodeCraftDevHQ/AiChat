@@ -600,6 +600,7 @@ public class ChatState
         catch { SearchOpts = new(); }
         LoadMemoryOpts();
         LoadSummaryOpts();
+        LoadVoiceOpts();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
         if (!Preferences.Default.ContainsKey("tools_default_v89"))
@@ -615,6 +616,8 @@ public class ChatState
         SearchEngine = Preferences.Default.Get("search_engine", WebSearchService.Ddg);
         SearchBaseUrl = Preferences.Default.Get("search_url", "");
         SearchKey = await _storage.LoadSearchKeyAsync();
+        VoiceOpts.TtsKey = await _storage.LoadVoiceKeyAsync("tts");
+        VoiceOpts.SttKey = await _storage.LoadVoiceKeyAsync("stt");
         Locked = HasPin;
         // first run: show the language page (people who already used the app are not asked)
         if (!Preferences.Default.ContainsKey("lang_chosen") &&
@@ -892,6 +895,196 @@ public class ChatState
 
     public MemorySuggestState? MemorySuggest { get; private set; }
 
+    // ------------------------------------------------------------ voice: read aloud / speech to text
+    public VoiceOptions VoiceOpts { get; private set; } = new();
+
+    void LoadVoiceOpts()
+    {
+        try { VoiceOpts = System.Text.Json.JsonSerializer.Deserialize<VoiceOptions>(Preferences.Default.Get("voice_opts", "")) ?? new(); }
+        catch { VoiceOpts = new(); }
+    }
+
+    public void SaveVoiceOpts() { Preferences.Default.Set("voice_opts", System.Text.Json.JsonSerializer.Serialize(VoiceOpts)); Notify(); }
+
+    public void ResetVoiceOpts()
+    {
+        StopSpeak();
+        var tts = VoiceOpts.TtsKey; var stt = VoiceOpts.SttKey;
+        VoiceOpts = new VoiceOptions { TtsKey = tts, SttKey = stt };
+        SaveVoiceOpts();
+    }
+
+    public async Task SetVoiceKeyAsync(string kind, string key)
+    {
+        if (kind == "tts") VoiceOpts.TtsKey = key; else VoiceOpts.SttKey = key;
+        await _storage.SaveVoiceKeyAsync(kind, key);
+    }
+
+    /// <summary>Set by the chat page: plays audio bytes in the web view (until finished or cancelled) / stops it.</summary>
+    public Func<byte[], string, CancellationToken, Task>? PlayAudioBytes { get; set; }
+    public Func<Task>? StopAudioBytes { get; set; }
+
+    public ChatMessage? Speaking { get; private set; }
+    public bool Recording { get; private set; }
+    public bool Transcribing { get; private set; }
+    CancellationTokenSource? _speakCts;
+    bool _noVoiceNoticeShown;
+
+    public bool VoiceReadAvailable => VoiceOpts.Enabled && VoiceOpts.ReadButton;
+    public bool VoiceMicAvailable => VoiceOpts.Enabled && VoiceOpts.SttEnabled;
+
+    public void StopSpeak()
+    {
+        _speakCts?.Cancel();
+        try { _ = StopAudioBytes?.Invoke(); } catch { }
+        if (Speaking != null) { Speaking = null; Notify(); }
+    }
+
+    /// <summary>Reads a message aloud (a second call for the same message stops it).</summary>
+    public async Task SpeakAsync(ChatMessage m)
+    {
+        if (ReferenceEquals(Speaking, m)) { StopSpeak(); return; }
+        StopSpeak();
+        var o = VoiceOpts;
+        if (!o.Enabled) return;
+        var text = SpeechText.Clean(m.Content, o);
+        if (text.Length == 0) { SetNotice(L["چیزی برای خواندن نیست."]); return; }
+
+        var cts = new CancellationTokenSource();
+        _speakCts = cts;
+        Speaking = m;
+        Notify();
+        try
+        {
+            if (o.TtsMode == "api") await SpeakApiAsync(text, o, cts.Token);
+            else await SpeakDeviceAsync(text, o, cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _log.Warn("Read aloud failed: " + ex.Message);
+            SetNotice(L["خواندن با صدا ناموفق بود: "] + ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(Speaking, m)) Speaking = null;
+            if (ReferenceEquals(_speakCts, cts)) _speakCts = null;
+            cts.Dispose();
+            Notify();
+        }
+    }
+
+    public async Task<List<string>> DeviceVoicesAsync()
+    {
+        try
+        {
+            var all = await Microsoft.Maui.Media.TextToSpeech.Default.GetLocalesAsync();
+            return all.Select(l => $"{l.Language}-{l.Country} {l.Name}".Trim()).Distinct().OrderBy(x => x).ToList();
+        }
+        catch { return new(); }
+    }
+
+    async Task SpeakDeviceAsync(string text, VoiceOptions o, CancellationToken ct)
+    {
+        var tts = Microsoft.Maui.Media.TextToSpeech.Default;
+        Microsoft.Maui.Media.Locale? loc = null;
+        try
+        {
+            var locales = (await tts.GetLocalesAsync()).ToList();
+            if (!string.IsNullOrWhiteSpace(o.DeviceLocale))
+                loc = locales.FirstOrDefault(l => $"{l.Language}-{l.Country} {l.Name}".Contains(o.DeviceLocale.Trim(), StringComparison.OrdinalIgnoreCase));
+            var guess = SpeechText.GuessLanguage(text);
+            loc ??= locales.FirstOrDefault(l => l.Language.StartsWith(guess, StringComparison.OrdinalIgnoreCase));
+            if (loc == null && guess == "fa" && !_noVoiceNoticeShown)
+            {
+                _noVoiceNoticeShown = true;
+                SetNotice(L["صدای فارسی روی این دستگاه پیدا نشد؛ از تنظیمات سیستم‌عامل یک صدای فارسی نصب کنید یا در تنظیمات «صدا» از API استفاده کنید."]);
+            }
+        }
+        catch { /* no list of voices: use the default voice */ }
+
+        var opts = new Microsoft.Maui.Media.SpeechOptions { Locale = loc, Pitch = (float)Math.Clamp(o.Pitch, 0, 2), Volume = (float)Math.Clamp(o.Volume, 0, 1) };
+        foreach (var chunk in SpeechText.Chunks(text, 400))
+        {
+            ct.ThrowIfCancellationRequested();
+            await tts.SpeakAsync(chunk, opts, ct);
+        }
+    }
+
+    async Task SpeakApiAsync(string text, VoiceOptions o, CancellationToken ct)
+    {
+        if (PlayAudioBytes == null) throw new InvalidOperationException("no audio player");
+        var chunks = SpeechText.Chunks(text, Math.Clamp(o.TtsChunk, 200, 4000));
+        var mime = VoiceApi.MimeFor(o.TtsFormat);
+        Task<byte[]> next = TtsFetchAsync(chunks[0], o, ct);
+        for (var i = 0; i < chunks.Count; i++)
+        {
+            var bytes = await next;
+            if (i + 1 < chunks.Count) next = TtsFetchAsync(chunks[i + 1], o, ct); // the next piece is made while this one plays
+            await PlayAudioBytes(bytes, mime, ct);
+        }
+    }
+
+    async Task<byte[]> TtsFetchAsync(string text, VoiceOptions o, CancellationToken ct)
+    {
+        var cfg = Providers.FirstOrDefault(p => p.Id == o.TtsProviderId);
+        var url = cfg != null ? ProviderHttp.Url(cfg, o.TtsPath) : VoiceApi.Join(o.TtsBaseUrl, o.TtsPath);
+        using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = ProviderHttp.JsonBody(VoiceApi.BuildSpeechBody(o, text)) };
+        var key = cfg != null ? cfg.ApiKey : o.TtsKey;
+        if (!string.IsNullOrWhiteSpace(key)) req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key.Trim());
+        if (cfg != null) ProviderHttp.Customize(req, cfg);
+        using var resp = await _http.SendAsync(req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var err = await resp.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException($"{(int)resp.StatusCode}: {ProviderHttp.ExtractError(err)}");
+        }
+        return await resp.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    public void SetRecording(bool on) { Recording = on; Notify(); }
+
+    /// <summary>Sends a recording to the speech-to-text API; returns the text (null + a notice on failure).</summary>
+    public async Task<string?> TranscribeAsync(byte[] audio, string mime)
+    {
+        var o = VoiceOpts;
+        Transcribing = true;
+        Notify();
+        try
+        {
+            var cfg = Providers.FirstOrDefault(p => p.Id == o.SttProviderId);
+            var url = cfg != null ? ProviderHttp.Url(cfg, o.SttPath) : VoiceApi.Join(o.SttBaseUrl, o.SttPath);
+            var baseMime = (mime ?? "audio/webm").Split(';')[0];
+            var file = new ByteArrayContent(audio);
+            file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(baseMime);
+            var form = new MultipartFormDataContent { { file, "file", VoiceApi.FileNameFor(baseMime) }, { new StringContent(o.SttModel), "model" }, { new StringContent("json"), "response_format" } };
+            if (!string.IsNullOrWhiteSpace(o.SttLanguage)) form.Add(new StringContent(o.SttLanguage.Trim()), "language");
+            if (!string.IsNullOrWhiteSpace(o.SttPrompt)) form.Add(new StringContent(o.SttPrompt), "prompt");
+            using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
+            var key = cfg != null ? cfg.ApiKey : o.SttKey;
+            if (!string.IsNullOrWhiteSpace(key)) req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key.Trim());
+            if (cfg != null) ProviderHttp.Customize(req, cfg);
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            using var resp = await _http.SendAsync(req, cts.Token);
+            var body = await resp.Content.ReadAsStringAsync(cts.Token);
+            if (!resp.IsSuccessStatusCode) throw new HttpRequestException($"{(int)resp.StatusCode}: {ProviderHttp.ExtractError(body)}");
+            var text = VoiceApi.ParseTranscript(body);
+            if (text.Length == 0) { SetNotice(L["صدایی تشخیص داده نشد."]); return null; }
+            return text;
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("Speech to text failed: " + ex.Message);
+            SetNotice(L["تبدیل گفتار به متن ناموفق بود: "] + ex.Message);
+            return null;
+        }
+        finally
+        {
+            Transcribing = false;
+            Notify();
+        }
+    }
+
     // ------------------------------------------------------------ two models in one chat (arena)
     string? _draftArenaProvider;
     string _draftArenaModel = "";
@@ -948,6 +1141,14 @@ public class ChatState
 
     /// <summary>Runs one turn: the normal answer, and (in a two-model chat) the second model's answer at the same time.</summary>
     async Task RunTurnAsync(Conversation conv, ChatMessage reply, ProviderConfig provider, string model)
+    {
+        await RunTurnCoreAsync(conv, reply, provider, model);
+        if (VoiceOpts is { Enabled: true, AutoRead: true } && ReferenceEquals(conv, Active) && conv.Messages.Contains(reply) &&
+            !string.IsNullOrEmpty(reply.Content) && reply.ErrorText == null)
+            _ = SpeakAsync(reply);
+    }
+
+    async Task RunTurnCoreAsync(Conversation conv, ChatMessage reply, ProviderConfig provider, string model)
     {
         var pb = !provider.IsGenerator && !string.IsNullOrEmpty(conv.ArenaModel)
             ? Providers.FirstOrDefault(p => p.Id == conv.ArenaProviderId) : null;
@@ -2781,6 +2982,7 @@ public class ChatState
         var err = ValidateSend();
         if (err != null) { SetNotice(err); return; }
 
+        StopSpeak();
         var provider = CurrentProvider!;
         Notice = null;
 
@@ -2840,7 +3042,7 @@ public class ChatState
     /// <summary>Progress line of a running async job (e.g. "running · 42% · 0:35"), shown in the waiting bubble.</summary>
     public string? GenStatus { get; private set; }
 
-    public void Stop() { _cts?.Cancel(); _pairCts?.Cancel(); }
+    public void Stop() { _cts?.Cancel(); _pairCts?.Cancel(); StopSpeak(); }
 
     static bool LooksLikeImageRejection(string error)
     {
