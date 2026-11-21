@@ -640,3 +640,40 @@ window.chat.gotoSetting = function (id) {
         } catch (e) { return false; }
     };
 })();
+
+// ---------------------------------------------------------------- video controls
+window.chat = window.chat || {};
+window.chat.mediaSkip = function (el, s) { if (el) el.currentTime = Math.max(0, Math.min(el.duration || 1e9, el.currentTime + s)); };
+window.chat.mediaRate = function (el, r) { if (el) el.playbackRate = r; };
+window.chat.mediaLoop = function (el, on) { if (el) el.loop = !!on; };
+window.chat.mediaPip = async function (el) {
+    try {
+        if (!el) return;
+        if (document.pictureInPictureElement) await document.exitPictureInPicture();
+        else if (document.pictureInPictureEnabled) await el.requestPictureInPicture();
+    } catch (e) { }
+};
+window.chat.mediaFull = function (el) {
+    try { if (el.requestFullscreen) el.requestFullscreen(); else if (el.webkitEnterFullscreen) el.webkitEnterFullscreen(); } catch (e) { }
+};
+window.chat.mediaFrame = function (el) {
+    try {
+        if (!el || !el.videoWidth) return null;
+        const c = document.createElement('canvas');
+        c.width = el.videoWidth; c.height = el.videoHeight;
+        c.getContext('2d').drawImage(el, 0, 0);
+        return c.toDataURL('image/png').split(',')[1];
+    } catch (e) { return null; }
+};
+// keyboard on a focused video: space, arrows, F, M, L, < >
+document.addEventListener('keydown', (e) => {
+    const v = document.activeElement;
+    if (!v || v.tagName !== 'VIDEO') return;
+    if (e.key === 'ArrowRight') { v.currentTime += 5; e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { v.currentTime -= 5; e.preventDefault(); }
+    else if (e.key === 'f' || e.key === 'F') { window.chat.mediaFull(v); e.preventDefault(); }
+    else if (e.key === 'm' || e.key === 'M') { v.muted = !v.muted; e.preventDefault(); }
+    else if (e.key === 'l' || e.key === 'L') { v.loop = !v.loop; e.preventDefault(); }
+    else if (e.key === '>' ) { v.playbackRate = Math.min(4, v.playbackRate + 0.25); }
+    else if (e.key === '<' ) { v.playbackRate = Math.max(0.25, v.playbackRate - 0.25); }
+});

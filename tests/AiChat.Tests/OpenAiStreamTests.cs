@@ -38,4 +38,17 @@ public class OpenAiStreamTests
         // the reasoning is also the answer (some DeepSeek versions leave the answer empty)
         Assert.Equal("<think>only thoughts</think>\n\nonly thoughts", all);
     }
+
+    [Fact]
+    public async Task Answer_labelled_as_reasoning_after_blank_content_becomes_the_answer()
+    {
+        var all = await Stream(
+            "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"thought\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{\"content\":\"\\n\\n\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"Real answer\"}}]}\n\ndata: [DONE]\n\n");
+        Assert.EndsWith("Real answer", all);
+        var html = MarkdownRenderer.ToHtml(all);
+        Assert.Contains("thought", html);
+        Assert.Equal(1, html.Split("Real answer").Length - 1);
+    }
 }

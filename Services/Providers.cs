@@ -636,6 +636,7 @@ public class OpenAiCompatibleProvider : IChatProvider
             {
                 var inReason = false;
                 var reasonAll = new StringBuilder();
+                var reasonParts = new List<StringBuilder>();   // each time the thinking box is opened again, a new part
                 await foreach (var (_, data) in ProviderHttp.ReadSseAsync(resp, ct))
                 {
                     if (data == "[DONE]") break;
@@ -687,8 +688,9 @@ public class OpenAiCompatibleProvider : IChatProvider
 
                     if (!string.IsNullOrEmpty(reason))
                     {
-                        if (!inReason) { yield return "<think>"; inReason = true; }
+                        if (!inReason) { yield return "<think>"; inReason = true; reasonParts.Add(new StringBuilder()); }
                         reasonAll.Append(reason);
+                        reasonParts[^1].Append(reason);
                         yield return reason;
                     }
                     if (!string.IsNullOrEmpty(text))
@@ -702,10 +704,13 @@ public class OpenAiCompatibleProvider : IChatProvider
 
                 // some models (e.g. certain DeepSeek versions) write the whole answer as "reasoning" and leave the answer empty:
                 // then the reasoning IS the answer (the thinking box is hidden when it equals the answer)
-                if (said.Length == 0 && calls.Count == 0 && reasonAll.ToString().Trim() is { Length: > 0 } onlyReason)
+                if (said.ToString().Trim().Length == 0 && calls.Count == 0 && reasonAll.ToString().Trim() is { Length: > 0 } onlyReason)
                 {
-                    said.Append(onlyReason);
-                    yield return onlyReason;
+                    // when the reasoning came in several parts (thoughts, a blank answer, then the real answer labelled as reasoning), the last part is the answer
+                    var answer = reasonParts.Count >= 2 ? reasonParts[^1].ToString().Trim() : onlyReason;
+                    if (answer.Length == 0) answer = onlyReason;
+                    said.Append(answer);
+                    yield return answer;
                 }
             }
 

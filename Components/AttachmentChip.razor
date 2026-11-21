@@ -37,6 +37,18 @@ else if (Attachment.Kind is "video" or "audio")
         else if (Attachment.Kind == "video")
         {
             <video @ref="_media" controls preload="metadata" playsinline></video>
+            @if (!Removable)
+            {
+                <div class="att-vctl">
+                    <button class="btn sm" type="button" title="@L["۱۰ ثانیه عقب"]" @onclick="() => Skip(-10)">⏪ 10</button>
+                    <button class="btn sm" type="button" title="@L["۱۰ ثانیه جلو"]" @onclick="() => Skip(10)">10 ⏩</button>
+                    <button class="btn sm" type="button" title="@L["سرعت پخش"]" @onclick="CycleRate">@(_rate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))×</button>
+                    <button class="btn sm @(_loop ? "on" : "")" type="button" title="@L["تکرار"]" @onclick="ToggleLoop">🔁</button>
+                    <button class="btn sm" type="button" title="@L["گرفتن این فریم به‌صورت عکس"]" @onclick="CaptureFrame">📷</button>
+                    <button class="btn sm" type="button" title="@L["تصویر در تصویر"]" @onclick="Pip">⧉</button>
+                    <button class="btn sm" type="button" title="@L["تمام‌صفحه"]" @onclick="Fullscreen">⛶</button>
+                </div>
+            }
         }
         else
         {
@@ -73,6 +85,47 @@ else
     [Parameter] public bool CanReuse { get; set; }
 
     Task Reuse() => State.UseAsInputAsync(Attachment);
+
+    // ---- video controls
+    static readonly double[] Rates = { 0.5, 0.75, 1, 1.25, 1.5, 2 };
+    double _rate = 1;
+    bool _loop;
+
+    async Task Js(string fn, params object?[] args)
+    {
+        try { await JS.InvokeVoidAsync(fn, args); } catch { }
+    }
+
+    Task Skip(int seconds) => Js("chat.mediaSkip", _media, seconds);
+    Task Pip() => Js("chat.mediaPip", _media);
+    Task Fullscreen() => Js("chat.mediaFull", _media);
+
+    async Task CycleRate()
+    {
+        var i = Array.FindIndex(Rates, r => Math.Abs(r - _rate) < 0.001);
+        _rate = Rates[(i + 1) % Rates.Length];
+        await Js("chat.mediaRate", _media, _rate);
+    }
+
+    async Task ToggleLoop()
+    {
+        _loop = !_loop;
+        await Js("chat.mediaLoop", _media, _loop);
+    }
+
+    /// <summary>The picture at the current time becomes an image attachment of the next message (to ask about it, edit it, ...).</summary>
+    async Task CaptureFrame()
+    {
+        try
+        {
+            var b64 = await JS.InvokeAsync<string?>("chat.mediaFrame", _media);
+            if (string.IsNullOrEmpty(b64)) { State.SetNotice(L["گرفتن فریم ممکن نشد."]); return; }
+            using var stream = new MemoryStream(Convert.FromBase64String(b64));
+            var err = await State.AddAttachmentAsync("frame-" + DateTime.Now.ToString("HHmmss") + ".png", stream);
+            if (err != null) State.SetNotice(err); else State.ViewerToast(L["فریم به پیام بعدی اضافه شد ✓"]);
+        }
+        catch (Exception ex) { State.SetNotice(ex.Message); }
+    }
     Task UseSeed() => State.UseSeedAsync(Attachment);
     [Parameter] public EventCallback OnRemove { get; set; }
 

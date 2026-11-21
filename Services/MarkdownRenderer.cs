@@ -69,6 +69,22 @@ public static class MarkdownRenderer
     }
 
     /// <summary>
+    /// A server that labels the answer as "reasoning" gives the same text twice (once in the last thinking block, once as the answer):
+    /// the copy inside the thinking box is removed.
+    /// </summary>
+    static string DropAnswerCopyInThinking(string text)
+    {
+        if (!text.Contains("</think>", StringComparison.Ordinal) || text.Contains("> 🔧", StringComparison.Ordinal)) return text;
+        var all = Think.Matches(text);
+        if (all.Count < 2) return text;
+        var last = all[^1];
+        if (!last.Groups[0].Value.EndsWith("</think>", StringComparison.Ordinal)) return text;
+        var answer = Think.Replace(text, "").Trim();
+        if (answer.Length == 0 || last.Groups[1].Value.Trim() != answer) return text;
+        return text.Remove(last.Index, last.Length);
+    }
+
+    /// <summary>
     /// Some servers leave out the opening tag (the chat template already wrote it into the prompt) and only send
     /// "reasoning&lt;/think&gt;answer": everything before the first closing tag is then thinking.
     /// </summary>
@@ -94,6 +110,7 @@ public static class MarkdownRenderer
     {
         if (string.IsNullOrEmpty(markdown)) return "";
         markdown = OpenStrayThink(markdown);
+        markdown = DropAnswerCopyInThinking(markdown);
         var hasThink = markdown.Contains("<think>", StringComparison.Ordinal);
         var hasTools = markdown.Contains("> 🔧", StringComparison.Ordinal);
         if (!hasThink && !hasTools) return Render(markdown);
