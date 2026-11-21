@@ -507,3 +507,136 @@ window.chat.gotoSetting = function (id) {
         setTimeout(function () { el.classList.remove('set-flash'); }, 2200);
     });
 };
+
+// ---------------------------------------------------------------- image viewer: zoom, pan, pinch, rotate, copy
+(function () {
+    const v = { scale: 1, x: 0, y: 0, rot: 0, fit: 1, pts: new Map(), pinch0: 0, scale0: 1, dotnet: null, bound: null };
+
+    function els() { return { stage: document.getElementById('viewer-stage'), img: document.getElementById('viewer-img') }; }
+
+    function apply() {
+        const { img } = els();
+        if (!img) return;
+        img.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.scale + ') rotate(' + v.rot + 'deg)';
+        const z = document.getElementById('viewer-zoom');
+        if (z) z.textContent = Math.round(v.scale * 100) + '%';
+        const { stage } = els();
+        if (stage) stage.classList.toggle('zoomed', v.scale > 1.01);
+    }
+
+    function clamp() {
+        const { stage, img } = els();
+        if (!stage || !img) return;
+        if (v.scale <= 1.001) { v.x = 0; v.y = 0; return; }
+        const rotated = (v.rot / 90) % 2 !== 0;
+        const w = (rotated ? img.offsetHeight : img.offsetWidth) * v.scale;
+        const h = (rotated ? img.offsetWidth : img.offsetHeight) * v.scale;
+        const mx = Math.max(0, (w - stage.clientWidth) / 2) + 60;
+        const my = Math.max(0, (h - stage.clientHeight) / 2) + 60;
+        v.x = Math.max(-mx, Math.min(mx, v.x));
+        v.y = Math.max(-my, Math.min(my, v.y));
+    }
+
+    function zoomAt(factor, cx, cy) {
+        const { stage } = els();
+        if (!stage) return;
+        const r = stage.getBoundingClientRect();
+        const px = (cx === undefined ? r.left + r.width / 2 : cx) - (r.left + r.width / 2);
+        const py = (cy === undefined ? r.top + r.height / 2 : cy) - (r.top + r.height / 2);
+        const ns = Math.max(1, Math.min(12, v.scale * factor));
+        const k = ns / v.scale;
+        v.x = px - (px - v.x) * k;
+        v.y = py - (py - v.y) * k;
+        v.scale = ns;
+        clamp();
+        apply();
+    }
+
+    function reset() { v.scale = 1; v.x = 0; v.y = 0; v.rot = 0; apply(); }
+
+    function bind(stage) {
+        if (v.bound === stage) return;
+        v.bound = stage;
+        stage.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY);
+        }, { passive: false });
+        stage.addEventListener('pointerdown', (e) => {
+            stage.setPointerCapture(e.pointerId);
+            v.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (v.pts.size === 2) {
+                const [a, b] = [...v.pts.values()];
+                v.pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
+                v.scale0 = v.scale;
+            }
+        });
+        stage.addEventListener('pointermove', (e) => {
+            const p = v.pts.get(e.pointerId);
+            if (!p) return;
+            if (v.pts.size === 2) {
+                v.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                const [a, b] = [...v.pts.values()];
+                const d = Math.hypot(a.x - b.x, a.y - b.y);
+                if (v.pinch0 > 0) zoomAt((v.scale0 * d / v.pinch0) / v.scale, (a.x + b.x) / 2, (a.y + b.y) / 2);
+            } else if (v.scale > 1.001) {
+                v.x += e.clientX - p.x;
+                v.y += e.clientY - p.y;
+                v.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                clamp();
+                apply();
+            }
+        });
+        const up = (e) => { v.pts.delete(e.pointerId); v.pinch0 = 0; };
+        stage.addEventListener('pointerup', up);
+        stage.addEventListener('pointercancel', up);
+        stage.addEventListener('dblclick', (e) => {
+            if (v.scale > 1.01) reset(); else zoomAt(2.5, e.clientX, e.clientY);
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (!document.getElementById('viewer-stage')) return;
+        if (e.key === '+' || e.key === '=') zoomAt(1.25);
+        else if (e.key === '-') zoomAt(0.8);
+        else if (e.key === '0') reset();
+        else if (e.key === 'r' || e.key === 'R') { v.rot = (v.rot + 90) % 360; clamp(); apply(); }
+        else if ((e.key === 'Escape' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') && v.dotnet) {
+            e.preventDefault();
+            v.dotnet.invokeMethodAsync('OnViewerKey', e.key);
+        }
+    });
+
+    window.chat = window.chat || {};
+    window.chat.viewerInit = function (dotnet) {
+        v.dotnet = dotnet;
+        const { stage, img } = els();
+        if (!stage) return;
+        bind(stage);
+        reset();
+        const info = () => {
+            const el = document.getElementById('viewer-info');
+            if (el && img.naturalWidth) el.textContent = img.naturalWidth + '×' + img.naturalHeight;
+        };
+        if (img.complete) info(); else img.addEventListener('load', info, { once: true });
+    };
+    window.chat.viewerZoom = function (f) { zoomAt(f); };
+    window.chat.viewerToggle = function () { if (v.scale > 1.01 || v.rot) reset(); else zoomAt(2.5); };
+    window.chat.viewerRotate = function () { v.rot = (v.rot + 90) % 360; clamp(); apply(); };
+    window.chat.viewerCopy = async function () {
+        try {
+            const { img } = els();
+            if (!img || !navigator.clipboard || !window.ClipboardItem) return false;
+            const blob = await (await fetch(img.src)).blob();
+            // the clipboard accepts PNG: convert other types through a canvas
+            let out = blob;
+            if (blob.type !== 'image/png') {
+                const c = document.createElement('canvas');
+                c.width = img.naturalWidth; c.height = img.naturalHeight;
+                c.getContext('2d').drawImage(img, 0, 0);
+                out = await new Promise((r) => c.toBlob(r, 'image/png'));
+            }
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': out })]);
+            return true;
+        } catch (e) { return false; }
+    };
+})();

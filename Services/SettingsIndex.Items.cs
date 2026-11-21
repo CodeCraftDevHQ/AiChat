@@ -140,5 +140,6 @@ public static partial class SettingsIndex
         ("set133", "prompts", "توضیح کوتاه"),
         ("set134", "prompts", "متن پرامپت"),
         ("set135", "prompts", "ویرایش پیشرفته (JSON)"),
+        ("set94b", "data", "ثبت پاسخ خام مدل‌ها در لاگ (برای عیب‌یابی)"),
     };
 }

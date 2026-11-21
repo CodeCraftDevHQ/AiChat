@@ -263,13 +263,37 @@
     {
         <div class="viewer" @onclick="State.CloseViewer">
             <div class="viewer-bar" @onclick:stopPropagation="true">
-                <span class="viewer-name" dir="auto">@State.Viewer.Name</span>
+                <span class="viewer-name" dir="auto">@State.Viewer.Name@(State.ViewerCount > 1 ? $"  ({State.ViewerIndex + 1}/{State.ViewerCount})" : "")</span>
+                <span class="viewer-info" id="viewer-info"></span>
+                <button class="icon-btn" title="@L["کوچک‌تر"]" @onclick="VZoomOut">−</button>
+                <button class="viewer-zoom" id="viewer-zoom" title="@L["اندازه‌ی واقعی / جا شدن در صفحه"]" @onclick="VToggle">100%</button>
+                <button class="icon-btn" title="@L["بزرگ‌تر"]" @onclick="VZoomIn">+</button>
+                <button class="icon-btn" title="@L["چرخاندن"]" @onclick="VRotate">⟳</button>
+                <button class="icon-btn" title="@L["کپی عکس"]" @onclick="CopyViewerImage">⧉</button>
+                @if (State.Viewer.Att?.Seed != null)
+                {
+                    <button class="icon-btn" title="@L["استفاده‌ی دوباره از seed"]" @onclick="() => State.UseSeedAsync(State.Viewer.Att)">🎲</button>
+                }
                 <button class="btn" @onclick="State.SaveViewerAsync">@L["ذخیره / دانلود"]</button>
                 <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseViewer">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
                 </button>
             </div>
-            <img class="viewer-img" src="@State.Viewer.Src" alt="@State.Viewer.Name" @onclick:stopPropagation="true" />
+            <div class="viewer-stage" id="viewer-stage" @onclick:stopPropagation="true">
+                <img id="viewer-img" class="viewer-img" src="@State.Viewer.Src" alt="@State.Viewer.Name" draggable="false" />
+            </div>
+            @if (State.ViewerCount > 1)
+            {
+                @if (State.ViewerIndex > 0)
+                {
+                    <button class="viewer-nav prev" title="@L["قبلی"]" @onclick="() => State.ViewerStepAsync(-1)" @onclick:stopPropagation="true">‹</button>
+                }
+                @if (State.ViewerIndex < State.ViewerCount - 1)
+                {
+                    <button class="viewer-nav next" title="@L["بعدی"]" @onclick="() => State.ViewerStepAsync(1)" @onclick:stopPropagation="true">›</button>
+                }
+            }
+            <div class="viewer-hint" @onclick:stopPropagation="true">@L["چرخ ماوس / دو انگشت: زوم · کشیدن: جابه‌جایی · دابل‌کلیک: بزرگ‌نمایی"]</div>
         </div>
     }
 
@@ -452,8 +476,43 @@
     [JSInvokable]
     public async Task<string> OnPasteRequest() => await Clipboard.Default.GetTextAsync() ?? "";
 
+    object? _viewerShown;
+
+    async Task ViewerJs(string fn, params object[] args)
+    {
+        try { await JS.InvokeVoidAsync(fn, args); } catch { }
+    }
+
+    Task VZoomOut() => ViewerJs("chat.viewerZoom", 0.8);
+    Task VZoomIn() => ViewerJs("chat.viewerZoom", 1.25);
+    Task VToggle() => ViewerJs("chat.viewerToggle");
+    Task VRotate() => ViewerJs("chat.viewerRotate");
+
+    async Task CopyViewerImage()
+    {
+        var ok = false;
+        try { ok = await JS.InvokeAsync<bool>("chat.viewerCopy"); } catch { }
+        State.ViewerToast(ok ? L["عکس کپی شد ✓"] : L["کپی عکس در این دستگاه ممکن نیست؛ از «ذخیره» استفاده کنید."]);
+    }
+
+    [JSInvokable]
+    public Task OnViewerKey(string key) => InvokeAsync(async () =>
+    {
+        if (State.Viewer == null) return;
+        if (key == "Escape") State.CloseViewer();
+        else if (key == "ArrowLeft") await State.ViewerStepAsync((L.Language == "fa") ? 1 : -1);
+        else if (key == "ArrowRight") await State.ViewerStepAsync((L.Language == "fa") ? -1 : 1);
+    });
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!ReferenceEquals(_viewerShown, State.Viewer))
+        {
+            _viewerShown = State.Viewer;
+            if (State.Viewer != null && _self != null)
+                try { await JS.InvokeVoidAsync("chat.viewerInit", _self); } catch { }
+        }
+
         if (!firstRender && _ctxLang != null && _ctxLang != L.Language)
         {
             _ctxLang = L.Language;

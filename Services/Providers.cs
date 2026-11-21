@@ -425,9 +425,14 @@ static class ProviderHttp
     }
 
     /// <summary>Reads a Server-Sent-Events body and yields (eventName, data) pairs.</summary>
+    /// <summary>Debug: write the first lines of every streamed model response to the app log (switched on in the settings, until the app is closed).</summary>
+    public static bool RawLogOn;
+    public static Action<string>? RawLog;
+
     public static async IAsyncEnumerable<(string? Event, string Data)> ReadSseAsync(
         HttpResponseMessage resp, [EnumeratorCancellation] CancellationToken ct)
     {
+        var rawCount = 0;
         var stream = await resp.Content.ReadAsStreamAsync(ct);
         var reader = new StreamReader(stream, Encoding.UTF8);
         try
@@ -453,6 +458,7 @@ static class ProviderHttp
                 else if (line.StartsWith("data:", StringComparison.Ordinal))
                 {
                     gotData = true;
+                    if (RawLogOn && rawCount++ < 60) RawLog?.Invoke("RAW " + (line.Length > 400 ? line[..400] + "…" : line));
                     yield return (ev, line[5..].Trim());
                 }
             }

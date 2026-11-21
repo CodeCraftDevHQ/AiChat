@@ -62,8 +62,23 @@ public static class MarkdownRenderer
     static readonly Regex Think = new(@"<think>(.*?)(?:</think>|\z)", RegexOptions.Singleline | RegexOptions.Compiled);
 
     /// <summary>Removes the thinking blocks (used before the text is sent back to a model).</summary>
-    public static string StripThink(string text) =>
-        text.Contains("<think>", StringComparison.Ordinal) ? Think.Replace(text, "").TrimStart() : text;
+    public static string StripThink(string text)
+    {
+        text = OpenStrayThink(text);
+        return text.Contains("<think>", StringComparison.Ordinal) ? Think.Replace(text, "").TrimStart() : text;
+    }
+
+    /// <summary>
+    /// Some servers leave out the opening tag (the chat template already wrote it into the prompt) and only send
+    /// "reasoning&lt;/think&gt;answer": everything before the first closing tag is then thinking.
+    /// </summary>
+    public static string OpenStrayThink(string text)
+    {
+        var close = text.IndexOf("</think>", StringComparison.Ordinal);
+        if (close < 0) return text;
+        var open = text.IndexOf("<think>", StringComparison.Ordinal);
+        return open >= 0 && open < close ? text : "<think>" + text;
+    }
 
     public static void SetToolsLabel(string label)
     {
@@ -78,6 +93,7 @@ public static class MarkdownRenderer
     public static string ToHtml(string? markdown)
     {
         if (string.IsNullOrEmpty(markdown)) return "";
+        markdown = OpenStrayThink(markdown);
         var hasThink = markdown.Contains("<think>", StringComparison.Ordinal);
         var hasTools = markdown.Contains("> 🔧", StringComparison.Ordinal);
         if (!hasThink && !hasTools) return Render(markdown);

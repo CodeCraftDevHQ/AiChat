@@ -625,6 +625,8 @@
                             <label id="set94" class="lbl first">@L["لاگ برنامه"]</label>
                             <p class="muted small">@L["اگر برنامه خطا داد، لاگ را کپی کنید و بفرستید. کلید API و متن پیام‌ها در لاگ نمی‌آید."]</p>
                             <button class="btn" @onclick="State.OpenLogs">@L["مشاهده لاگ‌ها"]</button>
+                            <label id="set94b" class="check" style="margin-top:8px"><input type="checkbox" checked="@ProviderHttp.RawLogOn" @onchange="e => ProviderHttp.RawLogOn = e.Value is true" /> @L["ثبت پاسخ خام مدل‌ها در لاگ (برای عیب‌یابی)"]</label>
+                            <p class="muted small">@L["فقط تا بسته شدن برنامه روشن می‌ماند. متن پاسخ‌ها در لاگ می‌آید؛ قبل از فرستادن لاگ به کسی آن را بخوانید."]</p>
 
                             <label id="set95" class="lbl">@L["نسخه پشتیبان"]</label>
                             <p class="muted small">@L["همه گفتگوها، پروژه‌ها، API ها، الگوها و فایل‌های پیوست در یک فایل zip ذخیره می‌شود."]</p>

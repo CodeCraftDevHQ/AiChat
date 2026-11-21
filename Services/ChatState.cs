@@ -29,6 +29,7 @@ public class ChatState
         _export = export;
         _http = http;
         _log = log;
+        ProviderHttp.RawLog = m => _log.Info(m);
         L = loc;
     }
 
@@ -103,17 +104,53 @@ public class ChatState
     public ViewerImage? Viewer { get; private set; }
     public string? Toast { get; private set; }
 
+    /// <summary>The images of the open chat that can be flipped through in the viewer.</summary>
+    List<Attachment> _viewerList = new();
+    public int ViewerCount => _viewerList.Count;
+    public int ViewerIndex { get; private set; } = -1;
+    public bool ViewerLoading { get; private set; }
+
     public void OpenViewer(string src, string name, Attachment? att = null)
     {
         Viewer = new ViewerImage(src, name, att);
+        _viewerList = Active?.Messages.SelectMany(m => m.Attachments).Where(a => a.Kind == "image").ToList() ?? new();
+        ViewerIndex = att == null ? -1 : _viewerList.FindIndex(a => a.Id == att.Id);
+        if (ViewerIndex < 0) _viewerList = new();
         Notify();
     }
 
     public void CloseViewer()
     {
         Viewer = null;
+        _viewerList = new();
+        ViewerIndex = -1;
         Notify();
     }
+
+    /// <summary>Previous (-1) / next (+1) image of the chat.</summary>
+    public async Task ViewerStepAsync(int delta)
+    {
+        if (Viewer == null || ViewerLoading || _viewerList.Count < 2) return;
+        var i = ViewerIndex + delta;
+        if (i < 0 || i >= _viewerList.Count) return;
+        var a = _viewerList[i];
+        ViewerLoading = true;
+        try
+        {
+            if (a.DataUri == null)
+            {
+                var bytes = await _storage.ReadAttachmentAsync(a);
+                if (bytes == null) { SetNotice(L["فایل دیگر در دسترس نیست."]); return; }
+                a.DataUri = $"data:{a.MimeType};base64,{Convert.ToBase64String(bytes)}";
+            }
+            ViewerIndex = i;
+            Viewer = new ViewerImage(a.DataUri, a.Name, a);
+        }
+        finally { ViewerLoading = false; Notify(); }
+    }
+
+    /// <summary>Tells the user about something that happened in the viewer (e.g. "copied").</summary>
+    public void ViewerToast(string text) => ShowToast(text);
 
     async void ShowToast(string text)
     {

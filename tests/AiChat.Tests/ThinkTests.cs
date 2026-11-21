@@ -119,4 +119,15 @@ public class ThinkTests
         // real thinking plus a different answer keeps the box
         Assert.Contains("<details", MarkdownRenderer.ToHtml("<think>hmm</think>\n\nAnswer"));
     }
+
+    [Fact]
+    public void Missing_opening_tag_is_handled()
+    {
+        var html = MarkdownRenderer.ToHtml("The user said hi.</think>\n\nHello there");
+        Assert.Contains("<details", html);
+        Assert.Contains("Hello there", html);
+        Assert.Equal("Hello there", MarkdownRenderer.StripThink("The user said hi.</think>\n\nHello there"));
+        // normal blocks are untouched
+        Assert.Equal("<think>a</think>b", MarkdownRenderer.OpenStrayThink("<think>a</think>b"));
+    }
 }
