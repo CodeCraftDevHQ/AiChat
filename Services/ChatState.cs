@@ -891,6 +891,114 @@ public class ChatState
     }
 
     public MemorySuggestState? MemorySuggest { get; private set; }
+
+    // ------------------------------------------------------------ export of a chat / an answer
+    public class ExportState
+    {
+        public Conversation Conv = null!;
+        public ChatMessage? Msg;
+        public bool Busy;
+    }
+
+    public ExportState? Export { get; private set; }
+
+    public ExportOptions ExportOpts { get; private set; } = LoadExportOpts();
+
+    static ExportOptions LoadExportOpts()
+    {
+        try { return System.Text.Json.JsonSerializer.Deserialize<ExportOptions>(Preferences.Default.Get("export_opts", "")) ?? new(); }
+        catch { return new(); }
+    }
+
+    public void SetExportOpts(Action<ExportOptions> change)
+    {
+        change(ExportOpts);
+        Preferences.Default.Set("export_opts", System.Text.Json.JsonSerializer.Serialize(ExportOpts));
+        Notify();
+    }
+
+    /// <summary>Opens the export dialog for a whole chat, or (with <paramref name="msg"/>) for one message.</summary>
+    public void OpenExport(Conversation conv, ChatMessage? msg = null)
+    {
+        Export = new ExportState { Conv = conv, Msg = msg };
+        Notify();
+    }
+
+    public void CloseExport() { Export = null; Notify(); }
+
+    ExportOptions ExportOptsWithLabels()
+    {
+        var o = System.Text.Json.JsonSerializer.Deserialize<ExportOptions>(System.Text.Json.JsonSerializer.Serialize(ExportOpts)) ?? new();
+        o.UserLabel = L["شما"];
+        o.AssistantLabel = L["دستیار"];
+        return o;
+    }
+
+    string ExportTitle(ExportState st) =>
+        st.Msg != null ? (string.IsNullOrWhiteSpace(st.Conv.Title) ? "answer" : st.Conv.Title) : st.Conv.Title;
+
+    IEnumerable<ChatMessage> ExportMessages(ExportState st) => st.Msg != null ? new[] { st.Msg } : st.Conv.Messages;
+
+    /// <summary>The Markdown of what will be exported (also used for the PDF / HTML / Word files).</summary>
+    public string BuildExportMarkdown()
+    {
+        var st = Export;
+        if (st == null) return "";
+        var o = ExportOptsWithLabels();
+        if (st.Msg != null) o.Roles = false;
+        return ChatExport.BuildMarkdown(ExportTitle(st), ExportMessages(st), o, withTitle: st.Msg == null);
+    }
+
+    /// <summary>The HTML page for the PDF export (print dialog) and the HTML file; images are embedded.</summary>
+    public async Task<string> BuildExportHtmlAsync()
+    {
+        var st = Export!;
+        var images = new Dictionary<string, string>();
+        if (ExportOpts.Attachments)
+            foreach (var a in ExportMessages(st).SelectMany(m => m.Attachments).Where(a => a.Kind == "image" && a.Size < 8 * 1024 * 1024).Take(30))
+            {
+                var bytes = await _storage.ReadAttachmentAsync(a);
+                if (bytes != null) images[a.Name] = $"data:{a.MimeType};base64,{Convert.ToBase64String(bytes)}";
+            }
+        return ChatExport.BuildHtml(ExportTitle(st), BuildExportMarkdown(), images);
+    }
+
+    /// <summary>Saves the export as a file (every format except PDF, which uses the print dialog of the window).</summary>
+    public async Task ExportToFileAsync()
+    {
+        var st = Export;
+        if (st == null || st.Busy) return;
+        st.Busy = true;
+        Notify();
+        try
+        {
+            var title = ExportTitle(st);
+            var safe = string.Concat(title.Where(c => !Path.GetInvalidFileNameChars().Contains(c))).Trim();
+            if (safe.Length == 0) safe = "chat";
+            if (safe.Length > 60) safe = safe[..60];
+            var md = BuildExportMarkdown();
+            switch (ExportOpts.Format)
+            {
+                case "docx": await SaveBytesAsync(safe + ".docx", ChatExport.BuildDocx(title, md)); break;
+                case "html":
+                case "pdf": await SaveBytesAsync(safe + ".html", System.Text.Encoding.UTF8.GetBytes(await BuildExportHtmlAsync())); break;
+                case "txt": await SaveTextAsync(safe + ".txt", ChatExport.BuildText(title, ExportMessages(st), ExportOptsWithLabels())); break;
+                case "json":
+                    var data = ExportMessages(st).Select(m => new { m.Role, m.Model, Content = ChatExport.BodyOf(m, ExportOptsWithLabels()), Attachments = m.Attachments.Select(a => a.Name) });
+                    await SaveTextAsync(safe + ".json", System.Text.Json.JsonSerializer.Serialize(new { Title = title, Messages = data },
+                        new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+                    break;
+                default: await SaveTextAsync(safe + ".md", md); break;
+            }
+            Export = null;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Export failed", ex);
+            SetNotice(L["خروجی گرفتن ناموفق بود: "] + ex.Message);
+        }
+        finally { st.Busy = false; Notify(); }
+    }
     CancellationTokenSource? _suggestCts;
 
     public async Task StartMemorySuggestAsync(Conversation conv)
@@ -1985,6 +2093,7 @@ public class ChatState
             return true;
         }
         if (PdfPrompt != null) { ChoosePdfMode("text"); return true; }
+        if (Export != null) { CloseExport(); return true; }
         if (MemorySuggest != null) { CloseMemorySuggest(); return true; }
         if (PromptsOpen) { ClosePrompts(); return true; }
         if (Picker != null) { ClosePicker(); return true; }

@@ -677,3 +677,18 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === '>' ) { v.playbackRate = Math.min(4, v.playbackRate + 0.25); }
     else if (e.key === '<' ) { v.playbackRate = Math.max(0.25, v.playbackRate - 0.25); }
 });
+
+// export to PDF: the HTML page is printed from a hidden frame (the system print dialog offers "Save as PDF")
+window.chat = window.chat || {};
+window.chat.printHtml = function (html) {
+    return new Promise((resolve) => {
+        const f = document.createElement('iframe');
+        f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+        f.srcdoc = html;
+        f.onload = () => {
+            try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { }
+            setTimeout(() => { f.remove(); resolve(true); }, 2000);
+        };
+        document.body.appendChild(f);
+    });
+};

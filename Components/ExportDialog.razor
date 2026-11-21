@@ -1,0 +1,82 @@
+@inherits StateComponent
+@inject IJSRuntime JS
+
+@if (State.Export is { } st)
+{
+    var o = State.ExportOpts;
+    <div class="modal-backdrop" @onclick="State.CloseExport">
+        <div class="modal tool-ask" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>@(st.Msg == null ? L["خروجی گرفتن از گفتگو"] : L["خروجی گرفتن از این پاسخ"])</h2>
+                <button class="icon-btn" title="@L["بستن"]" @onclick="State.CloseExport">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+            </div>
+            <div class="p-body">
+                <p class="muted small" dir="auto">@(st.Msg == null ? st.Conv.Title : L["فقط همین پاسخ"])</p>
+
+                <label class="lbl first">@L["قالب فایل"]</label>
+                <div class="exp-formats">
+                    @foreach (var (key, name, hint) in Formats())
+                    {
+                        var k = key;
+                        <button class="exp-fmt @(o.Format == k ? "on" : "")" @onclick="() => State.SetExportOpts(x => x.Format = k)">
+                            <b>@name</b><small>@hint</small>
+                        </button>
+                    }
+                </div>
+
+                <label class="lbl">@L["چه چیزهایی در فایل باشد"]</label>
+                <label class="chk"><input type="checkbox" checked="@o.Thinking" @onchange="e => State.SetExportOpts(x => x.Thinking = e.Value is true)" /> @L["فکر کردن مدل"]</label>
+                <label class="chk"><input type="checkbox" checked="@o.Tools" @onchange="e => State.SetExportOpts(x => x.Tools = e.Value is true)" /> @L["فراخوانی ابزارها"]</label>
+                <label class="chk"><input type="checkbox" checked="@o.Attachments" @onchange="e => State.SetExportOpts(x => x.Attachments = e.Value is true)" /> @L["نام فایل‌های پیوست (در HTML / PDF عکس‌ها هم می‌آید)"]</label>
+                @if (st.Msg == null)
+                {
+                    <label class="chk"><input type="checkbox" checked="@o.Roles" @onchange="e => State.SetExportOpts(x => x.Roles = e.Value is true)" /> @L["نام گوینده پیش از هر پیام"]</label>
+                }
+
+                @if (o.Format == "pdf" && !CanPrint)
+                {
+                    <p class="muted small">@L["چاپ PDF فقط در ویندوز ممکن است؛ در این دستگاه یک فایل HTML ذخیره می‌شود که با مرورگر می‌توانید آن را به PDF تبدیل کنید."]</p>
+                }
+            </div>
+            <div class="modal-foot">
+                <button class="btn" @onclick="State.CloseExport">@L["انصراف"]</button>
+                <button class="btn primary" disabled="@st.Busy" @onclick="Run">@(st.Busy ? L["در حال ساخت…"] : L["خروجی بگیر"])</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    static bool CanPrint => DeviceInfo.Platform == DevicePlatform.WinUI;
+
+    IEnumerable<(string Key, string Name, string Hint)> Formats()
+    {
+        yield return ("md", "Markdown", ".md");
+        yield return ("docx", "Word", ".docx");
+        yield return ("pdf", "PDF", CanPrint ? L["پنجره‌ی چاپ"] : ".html");
+        yield return ("html", "HTML", ".html");
+        yield return ("txt", L["متن ساده"], ".txt");
+        yield return ("json", "JSON", ".json");
+    }
+
+    async Task Run()
+    {
+        if (State.Export is not { } st || st.Busy) return;
+        if (State.ExportOpts.Format == "pdf" && CanPrint)
+        {
+            try
+            {
+                st.Busy = true;
+                var html = await State.BuildExportHtmlAsync();
+                await JS.InvokeVoidAsync("chat.printHtml", html);
+                State.CloseExport();
+            }
+            catch (Exception ex) { State.SetNotice(L["خروجی گرفتن ناموفق بود: "] + ex.Message); }
+            finally { st.Busy = false; }
+            return;
+        }
+        await State.ExportToFileAsync();
+    }
+}

@@ -106,7 +106,7 @@
                         }
                         @if (!string.IsNullOrEmpty(Message.Content))
                         {
-                            <button class="icon-btn sm" title="@L["ذخیره پاسخ به‌صورت فایل (.md)"]" @onclick="SaveAnswer">
+                            <button class="icon-btn sm" title="@L["خروجی گرفتن از این پاسخ (Markdown، Word، PDF، ...)"]" @onclick="SaveAnswer">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11" /><path d="m7 11 5 5 5-5" /><path d="M5 20h14" /></svg>
                             </button>
                         }
@@ -159,7 +159,10 @@
 
     Task Switch(int delta) => State.SwitchVersionAsync(Message, delta);
 
-    Task SaveAnswer() => State.SaveTextAsync("answer.md", Message.Content);
+    void SaveAnswer()
+    {
+        if (State.Active != null) State.OpenExport(State.Active, Message);
+    }
 
     async Task CopyAsync()
     {
