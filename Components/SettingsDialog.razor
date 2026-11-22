@@ -554,6 +554,10 @@
                             <VoiceSettings />
                             break;
 
+                        case "localserver":
+                            <LocalServerSettings />
+                            break;
+
                         case "cost":
                             <label id="set86" class="lbl first">@L["توکن و هزینه"]</label>
                             <p class="muted small">@L["تعداد توکن و هزینه فقط تخمین است. قیمت‌ها را خودتان از سایت سرویس‌دهنده وارد کنید."]</p>
@@ -905,6 +909,7 @@ else if (_dlg == 2)
         new SectionItem("mcp", L["سرورهای MCP"]),
         new SectionItem("customtools", L["ابزارهای من"]),
         new SectionItem("voice", L["صدا"]),
+        new SectionItem("localserver", L["سرور محلی (API و MCP)"]),
         new SectionItem("cost", L["توکن و هزینه"]),
         new SectionItem("security", L["امنیت و حریم خصوصی"]),
         new SectionItem("data", L["داده‌ها و لاگ"]),

@@ -639,6 +639,7 @@ public partial class ChatState
         SearchKey = await _storage.LoadSearchKeyAsync();
         VoiceOpts.TtsKey = await _storage.LoadVoiceKeyAsync("tts");
         VoiceOpts.SttKey = await _storage.LoadVoiceKeyAsync("stt");
+        await InitLocalServerAsync();
         Locked = HasPin;
         // first run: show the language page (people who already used the app are not asked)
         if (!Preferences.Default.ContainsKey("lang_chosen") &&

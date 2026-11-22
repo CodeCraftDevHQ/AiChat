@@ -893,3 +893,7 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .kb-docs { max-height: 220px; overflow-y: auto; border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 4px; }
 .kb-doc { display: flex; align-items: center; gap: 8px; padding: 3px 6px; }
 .kb-doc .kb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* local server */
+.ls-box { background: var(--code-bg, rgba(127,127,127,.12)); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; overflow-x: auto; white-space: pre; margin: 6px 0; }
+.status.ok { color: #2e9e5b; }

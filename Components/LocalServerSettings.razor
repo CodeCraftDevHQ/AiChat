@@ -1,0 +1,94 @@
+@inherits StateComponent
+@using Microsoft.Maui.ApplicationModel.DataTransfer
+
+@{
+    var o = State.LocalOpts;
+    var baseUrl = $"http://127.0.0.1:{o.Port}";
+}
+
+<p class="muted small">@L["AiChat می‌تواند برای برنامه‌های دیگر روی همین کامپیوتر یک سرور باشد: (۱) API سازگار با OpenAI تا ابزارهایی مثل VS Code، Cursor، Continue یا اسکریپت‌های شما از API و مدل‌های AiChat استفاده کنند؛ (۲) سرور MCP تا برنامه‌های دیگر (مثل Claude Desktop یا Visual Studio) از AiChat ابزار بگیرند. سرور فقط روی 127.0.0.1 گوش می‌دهد (از شبکه یا اینترنت در دسترس نیست) و هر درخواست توکن لازم دارد. به‌صورت پیش‌فرض خاموش است."]</p>
+
+<label id="set250" class="chk"><input type="checkbox" checked="@o.Enabled" @onchange="e => Save(() => o.Enabled = e.Value is true, true)" /> @L["روشن کردن سرور محلی"]</label>
+
+@if (o.Enabled)
+{
+    @if (State.LocalRunning)
+    {
+        <p class="status ok" dir="ltr">● @baseUrl</p>
+    }
+    else if (State.LocalError != null)
+    {
+        <p class="status" dir="auto">⚠ @L["سرور شروع نشد: "] @State.LocalError</p>
+    }
+}
+
+<label id="set251" class="lbl">@L["پورت"]</label>
+<input class="inp" type="number" min="1024" max="65535" value="@o.Port" @onchange="e => Save(() => o.Port = Int(e, 8765), true)" />
+
+<label id="set252" class="lbl">@L["توکن دسترسی"]</label>
+<div class="row-btns">
+    <input class="inp" dir="ltr" readonly type="@InputType" value="@o.Token" />
+    <button class="btn sm" @onclick="() => _show = !_show">@(_show ? L["پنهان"] : L["نمایش"])</button>
+    <button class="btn sm" @onclick="@(() => Copy(o.Token))">@L["کپی"]</button>
+    <button class="btn sm" @onclick="State.RegenerateLocalTokenAsync">@L["توکن جدید"]</button>
+</div>
+<p class="muted small">@L["هر برنامه‌ای که این توکن را داشته باشد می‌تواند از مدل‌های شما (و هزینه‌ی آن‌ها) استفاده کند. توکن را فقط به برنامه‌هایی بدهید که به آن‌ها اعتماد دارید. با «توکن جدید» توکن قبلی از کار می‌افتد."]</p>
+
+<label id="set253" class="lbl">@L["API سازگار با OpenAI"]</label>
+<label class="chk"><input type="checkbox" checked="@o.Api" @onchange="e => Save(() => o.Api = e.Value is true)" /> @L["فعال (/v1/chat/completions و /v1/models)"]</label>
+<label id="set254" class="chk"><input type="checkbox" checked="@o.StripThinking" @onchange="e => Save(() => o.StripThinking = e.Value is true)" /> @L["بخش «فکر کردن» مدل از پاسخ حذف شود"]</label>
+<label class="lbl">@L["مدل پیش‌فرض (وقتی برنامه مدل نفرستد؛ مثل Name/model)"]</label>
+<input class="inp" dir="ltr" placeholder="OpenAI/gpt-4o-mini" value="@o.DefaultModel" @onchange="e => Save(() => o.DefaultModel = Str(e))" />
+
+@if (o.Api)
+{
+    <p class="muted small" dir="auto">@L["در برنامه‌ی دیگر: Base URL و کلید API را اینطور بگذارید. نام مدل به شکل «نام اتصال/مدل» است (فهرستش را GET /v1/models می‌دهد)."]</p>
+    <pre class="ls-box" dir="ltr">Base URL: @baseUrl/v1
+API key:  (@L["توکن بالا"])</pre>
+    <button class="btn sm" @onclick="@(() => Copy(baseUrl + "/v1"))">@L["کپی Base URL"]</button>
+    <button class="btn sm" @onclick="@(() => Copy(Curl(baseUrl, o.Token)))">@L["کپی نمونه‌ی curl"]</button>
+}
+
+<label id="set255" class="lbl">@L["سرور MCP"]</label>
+<label class="chk"><input type="checkbox" checked="@o.Mcp" @onchange="e => Save(() => o.Mcp = e.Value is true)" /> @L["فعال (/mcp)"]</label>
+@if (o.Mcp)
+{
+    <p class="muted small">@L["ابزارهایی که به برنامه‌های دیگر داده می‌شود:"]</p>
+    <label id="set256" class="chk"><input type="checkbox" checked="@o.ToolAsk" @onchange="e => Save(() => o.ToolAsk = e.Value is true)" /> @L["ask_ai: پرسیدن از یکی از مدل‌های AiChat"]</label>
+    <label id="set257" class="chk"><input type="checkbox" checked="@o.ToolModels" @onchange="e => Save(() => o.ToolModels = e.Value is true)" /> @L["list_models: فهرست مدل‌ها"]</label>
+    <label id="set258" class="chk"><input type="checkbox" checked="@o.ToolChats" @onchange="e => Save(() => o.ToolChats = e.Value is true)" /> @L["خواندن گفتگوهای ذخیره‌شده (خصوصی؛ پیش‌فرض خاموش)"]</label>
+    <label id="set259" class="chk"><input type="checkbox" checked="@o.ToolProjects" @onchange="e => Save(() => o.ToolProjects = e.Value is true)" /> @L["پروژه‌ها و جستجو در پایگاه دانش آن‌ها"]</label>
+    <p class="muted small" dir="auto">@L["در Claude Desktop، Visual Studio یا هر برنامه‌ی MCP دیگر این تنظیم را اضافه کنید (آدرس HTTP):"]</p>
+    <pre class="ls-box" dir="ltr">@McpJson(baseUrl, o.Token)</pre>
+    <button class="btn sm" @onclick="@(() => Copy(McpJson(baseUrl, o.Token)))">@L["کپی تنظیم MCP"]</button>
+}
+
+<label id="set260" class="chk" style="margin-top:12px"><input type="checkbox" checked="@o.LogRequests" @onchange="e => Save(() => o.LogRequests = e.Value is true)" /> @L["ثبت درخواست‌ها در لاگ"]</label>
+<p class="muted small">@L["اندروید: سرور فقط وقتی برنامه باز است کار می‌کند."]</p>
+
+@code {
+    bool _show;
+    string InputType => _show ? "text" : "password";
+
+    static string Str(ChangeEventArgs e) => e.Value?.ToString()?.Trim() ?? "";
+    static int Int(ChangeEventArgs e, int def) => int.TryParse(e.Value?.ToString(), out var n) ? n : def;
+
+    void Save(Action change, bool restart = false)
+    {
+        change();
+        State.SaveLocalOpts(restart);
+    }
+
+    async Task Copy(string text)
+    {
+        await Clipboard.Default.SetTextAsync(text);
+        State.ViewerToast(L["کپی شد"]);
+    }
+
+    static string McpJson(string baseUrl, string token) =>
+        "{\n  \"mcpServers\": {\n    \"aichat\": {\n      \"url\": \"" + baseUrl + "/mcp\",\n      \"headers\": { \"Authorization\": \"Bearer " + token + "\" }\n    }\n  }\n}";
+
+    static string Curl(string baseUrl, string token) =>
+        "curl " + baseUrl + "/v1/chat/completions -H \"Authorization: Bearer " + token + "\" -H \"Content-Type: application/json\" " +
+        "-d \"{\\\"model\\\":\\\"default\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"Hello\\\"}]}\"";
+}

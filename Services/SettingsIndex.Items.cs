@@ -174,6 +174,17 @@ public static partial class SettingsIndex
         ("set239", "customtools", "قالب (متنی که به مدل برمی‌گردد؛ {{name}} پر می‌شود)"),
         ("set240", "customtools", "اجازه و محدودیت"),
         ("set241", "customtools", "آزمایش"),
+        ("set250", "localserver", "روشن کردن سرور محلی"),
+        ("set251", "localserver", "پورت"),
+        ("set252", "localserver", "توکن دسترسی"),
+        ("set253", "localserver", "API سازگار با OpenAI"),
+        ("set254", "localserver", "بخش «فکر کردن» مدل از پاسخ حذف شود"),
+        ("set255", "localserver", "سرور MCP"),
+        ("set256", "localserver", "ask_ai: پرسیدن از یکی از مدل‌های AiChat"),
+        ("set257", "localserver", "list_models: فهرست مدل‌ها"),
+        ("set258", "localserver", "خواندن گفتگوهای ذخیره‌شده (خصوصی؛ پیش‌فرض خاموش)"),
+        ("set259", "localserver", "پروژه‌ها و جستجو در پایگاه دانش آن‌ها"),
+        ("set260", "localserver", "ثبت درخواست‌ها در لاگ"),
         ("set94b", "data", "ثبت پاسخ خام مدل‌ها در لاگ (برای عیب‌یابی)"),
     };
 }
