@@ -94,7 +94,9 @@ static class HistoryHelper
                 }
                 else if (a.Kind is "video" or "audio" or "file")
                 {
-                    text += $"\n\n[Generated {a.Kind}: {a.Name}]";
+                    text += m.Role == "user"
+                        ? $"\n\n[Attached {a.Kind} \"{a.Name}\": this model cannot read it; it is only used by API connectors]"
+                        : $"\n\n[Generated {a.Kind}: {a.Name}]";
                 }
                 else if (a.Kind == "image")
                 {

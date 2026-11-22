@@ -47,6 +47,8 @@ PLACEHOLDERS (inside any string of request / headers / path / query)
 {{prompt}} = the user's message; {{model}} = chosen model; {{key}} = API key; {{seed}} = random integer; {{system}} = system prompt;
 {{input.ID}} = value of an input field; {{job}} = job id (poll requests);
 {{image1_base64}}, {{image2_base64}}, ... = images attached to the message (raw base64), {{imageN_dataurl}}, {{imageN_mime}};
+{{file1_base64}}, {{video1_base64}}, {{audio1_base64}}, ... = any attached file / the first video / audio (also _mime, _name, _dataurl, and _text = the content of a text or JSON file);
+{{prompt|http}} = the message, but only when it is a web address (otherwise the field is removed);
 {{messages}} / {{messages_with_system}} / {{messages_vision}} = chat history as OpenAI-style [{role, content}] (chat connectors);
 inside urlTemplate: {{item}} and {{item.field}} = the selected result node; add |url to URL-encode, e.g. {{item.name|url}}.
 
@@ -54,7 +56,8 @@ RULES
 - A value that is exactly one placeholder keeps its type: "steps": "{{input.steps}}" becomes a number when the input is type number or slider.
 - A field whose placeholder has no value (for example no image attached) is removed from the request automatically.
 - An object or array item with "$if": "{{input.x}}" is removed when x is empty / false / missing.
-- Multipart file field: "image": { "file": "{{image1_base64}}", "mime": "{{image1_mime}}", "filename": "image.png" }.
+- Multipart file field: "image": { "file": "{{image1_base64}}", "mime": "{{image1_mime}}", "filename": "image.png" }; for a video: "motion_video": { "file": "{{video1_base64}}", "mime": "{{video1_mime}}", "filename": "{{video1_name}}" }.
+- A result rule may have "ext": "fbx" (or "{{input.format}}") to set the file extension of generic files.
 - JSON paths: $.a.b, $.list[0].x, $.list[*], $.*.outputs.*, $['odd-name'] (no filters).
 - "response.type": "binary" saves the raw response body (image / video / audio / model file); the content type decides the file type.
 - "as": "url" downloads the URL (relative URLs use the Base URL; the key is only sent to the API's own host); "base64" accepts raw base64 or a data: URI.

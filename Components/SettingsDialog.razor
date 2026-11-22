@@ -309,6 +309,7 @@
                                 <label>@L["عکس"] <input class="inp" type="number" min="1" max="500" value="@State.LimitImageMb" @onchange="e => State.SetLimits(imageMb: ToInt(e))" /></label>
                                 <label>@L["PDF"] <input class="inp" type="number" min="1" max="500" value="@State.LimitPdfMb" @onchange="e => State.SetLimits(pdfMb: ToInt(e))" /></label>
                                 <label>@L["متن و کد"] <input class="inp" type="number" min="1" max="100" value="@State.LimitTextMb" @onchange="e => State.SetLimits(textMb: ToInt(e))" /></label>
+                                <label>@L["ویدیو، صدا و فایل‌های دیگر"] <input class="inp" type="number" min="1" max="1000" value="@State.LimitFileMb" @onchange="e => State.SetLimits(fileMb: ToInt(e))" /></label>
                             </div>
                             <label id="set36" class="chk"><input type="checkbox" checked="@State.ShrinkImages" @onchange="e => State.SetLimits(shrink: (bool)(e.Value ?? false))" /> @L["کوچک‌کردن خودکار عکس‌های بزرگ (بیش از ۳ مگابایت)"]</label>
                             <p class="muted small">@L["بعضی سرویس‌ها (مثل Claude) عکس بزرگ‌تر از ۵ مگابایت را نمی‌پذیرند؛ کوچک‌کردن خودکار آن را به حدود ۲۰۴۸ پیکسل (JPEG) می‌رساند."]</p>

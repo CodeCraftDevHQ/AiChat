@@ -791,5 +791,9 @@ public static class Translations
         ["JSON معتبر نیست: "] = "The JSON is not valid: ",
         ["افزوده شد: "] = "Added: ",
         ["آرگومان‌ها JSON معتبر نیستند: "] = "The arguments are not valid JSON: ",
+        ["ویدیو، صدا و فایل‌های دیگر"] = "Video, audio and other files",
+        ["Viggle: ویدیو ← انیمیشن سه\u200cبعدی (FBX / GLB)"] = "Viggle: video → 3D animation (FBX / GLB)",
+        ["Viggle: ویدیو ← انیمیشن سه‌بعدی (FBX / GLB)"] = "Viggle: video → 3D animation (FBX / GLB)",
+        ["ارسال فایل (ویدیو / صدا / JSON / هر فایل) به API"] = "Upload a file (video / audio / JSON / any file) to an API",
     };
 }

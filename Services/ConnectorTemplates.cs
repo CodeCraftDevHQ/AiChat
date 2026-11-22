@@ -1038,6 +1038,70 @@ public static class ConnectorTemplates
   }
 }
 """),
+        new("Viggle: ویدیو ← انیمیشن سه‌بعدی (FBX / GLB)", "https://apis.viggle.ai/v1", """
+{
+  "kind": "file",
+  "_help": "Extracts a 3D skeleton animation (FBX or GLB) from a video. Attach the video file (mp4 / mov / webm) to your message, or write a public direct link to the video as the message. Result: Mixamo, MetaHuman body and MetaHuman full rigs. Costs credits per second of video.",
+  "auth": { "type": "bearer" },
+  "allowEmptyPrompt": true,
+  "inputs": [
+    { "id": "format", "label": "File format", "type": "select", "options": ["fbx", "glb"], "default": "fbx" },
+    { "id": "smoothing", "label": "Smooth the motion", "type": "bool", "default": "false" },
+    { "id": "fps", "label": "Frames per second", "type": "number", "default": "25" }
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/motions",
+    "bodyType": "multipart",
+    "body": {
+      "motion_video": { "file": "{{video1_base64}}", "mime": "{{video1_mime}}", "filename": "{{video1_name}}" },
+      "motion_video_url": "{{prompt|http}}",
+      "type": "glb",
+      "enable_smoothing": "{{input.smoothing}}",
+      "target_fps": "{{input.fps}}"
+    }
+  },
+  "job": {
+    "id": "$.id",
+    "poll": {
+      "method": "GET",
+      "path": "/motions/{{job}}/export?download_type={{input.format}}",
+      "intervalSec": 5,
+      "timeoutSec": 900,
+      "statusPath": "$.status",
+      "done": ["ready"],
+      "failed": ["failed", "cancelled"],
+      "errorPath": "$.error.message"
+    },
+    "response": {
+      "type": "json",
+      "results": [
+        { "from": "$.mixamo_url", "as": "url", "mime": "application/octet-stream", "ext": "{{input.format}}" },
+        { "from": "$.metahuman_body_url", "as": "url", "mime": "application/octet-stream", "ext": "{{input.format}}" },
+        { "from": "$.metahuman_url", "as": "url", "mime": "application/octet-stream", "ext": "{{input.format}}" }
+      ]
+    }
+  }
+}
+"""),
+        new("ارسال فایل (ویدیو / صدا / JSON / هر فایل) به API", "https://api.example.com/v1", """
+{
+  "kind": "file",
+  "_help": "Template for APIs that take a file upload. Attach any file (video, audio, JSON, zip, ...) to the message. {{file1_*}} = first attached file, {{video1_*}} = first video, {{audio1_*}} = first audio; _base64, _mime, _name, _dataurl and _text (the content of a text / JSON file) are available.",
+  "auth": { "type": "bearer" },
+  "allowEmptyPrompt": true,
+  "request": {
+    "method": "POST",
+    "path": "/upload",
+    "bodyType": "multipart",
+    "body": {
+      "file": { "file": "{{file1_base64}}", "mime": "{{file1_mime}}", "filename": "{{file1_name}}" },
+      "note": "{{prompt}}"
+    }
+  },
+  "response": { "type": "json", "text": "$.message", "results": [ { "from": "$.url", "as": "url" } ] }
+}
+"""),
         new("کار ناهمزمان عمومی (ویدیو / سه‌بعدی)", "https://api.example.com/v1", """
 {
   "kind": "video",

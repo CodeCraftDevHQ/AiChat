@@ -348,6 +348,8 @@ public class ConnectorProvider : IChatProvider
 sealed class ConnectorRun
 {
     static readonly Regex ImgRef = new(@"^image(\d*)_(base64|dataurl|mime)$", RegexOptions.Compiled);
+    /// <summary>{{file1_base64}}, {{video_mime}}, {{audio2_name}}, {{file1_text}} ... (file = any attachment; video / audio = only that kind).</summary>
+    static readonly Regex FileRef = new(@"^(file|video|audio)(\d*)_(base64|dataurl|mime|name|text)$", RegexOptions.Compiled);
 
     readonly HttpClient _http;
     readonly ProviderConfig _cfg;
@@ -357,6 +359,7 @@ sealed class ConnectorRun
 
     readonly string _prompt, _model, _system;
     readonly List<(string B64, string Mime)> _imgs = new();
+    readonly List<(string Kind, string Name, string Mime, byte[] Bytes)> _files = new();
     readonly IReadOnlyList<ChatMessage> _history;
     bool _inReason;
     readonly int _seed = Random.Shared.Next();
@@ -388,6 +391,9 @@ sealed class ConnectorRun
         foreach (var img in last?.Attachments.Where(a => a.Kind == "image" && !a.Excluded) ?? Enumerable.Empty<Attachment>())
             if (StorageService.ReadAttachmentSync(img) is { } bytes)
                 _imgs.Add((Convert.ToBase64String(bytes), img.MimeType));
+        foreach (var f in last?.Attachments.Where(a => !a.Excluded) ?? Enumerable.Empty<Attachment>())
+            if (StorageService.ReadAttachmentSync(f) is { } fb)
+                _files.Add((f.Kind, f.Name, f.MimeType, fb));
     }
 
     public bool IsChat => JPath.Text(_spec["kind"]) == "chat";
@@ -523,12 +529,36 @@ sealed class ConnectorRun
                 v = im.Groups[2].Value switch { "base64" => b64, "mime" => mime, _ => $"data:{mime};base64,{b64}" };
             }
         }
+        if (v == null && FileRef.Match(name) is { Success: true } fm)
+        {
+            var wanted = fm.Groups[1].Value;
+            var list = _files.Where(x => wanted == "file" || x.Kind == wanted).ToList();
+            var idx = fm.Groups[2].Value.Length == 0 ? 1 : int.Parse(fm.Groups[2].Value);
+            if (idx >= 1 && idx <= list.Count)
+            {
+                var file = list[idx - 1];
+                v = fm.Groups[3].Value switch
+                {
+                    "base64" => Convert.ToBase64String(file.Bytes),
+                    "mime" => file.Mime,
+                    "name" => file.Name,
+                    "text" => Encoding.UTF8.GetString(file.Bytes),
+                    _ => $"data:{file.Mime};base64,{Convert.ToBase64String(file.Bytes)}"
+                };
+            }
+        }
         if (v == null && name.StartsWith("input.")) v = InputValue(name[6..]);
         if (v == null && name.StartsWith("item.") && _item != null)
             v = JPath.Select(_item, "$." + name[5..]).FirstOrDefault()?.DeepClone();
 
         if (v != null && parts.Skip(1).Any(f => f.Trim() == "url"))
             v = Uri.EscapeDataString(JPath.Text(v));
+        // |http = only when the text is a web address (so a prompt that is not a link is not sent as one)
+        if (v != null && parts.Skip(1).Any(f => f.Trim() == "http") &&
+            !JPath.Text(v).Trim().StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            v = null;
+        else if (v != null && parts.Skip(1).Any(f => f.Trim() == "http"))
+            v = JPath.Text(v).Trim();
         return v;
     }
 
@@ -663,7 +693,7 @@ sealed class ConnectorRun
     {
         if (_spec["request"] is not JsonObject request) throw new InvalidOperationException("Missing \"request\" in the connector.");
         if (IsChat) throw new InvalidOperationException("Chat connectors are streamed.");
-        if (string.IsNullOrWhiteSpace(_prompt) && _spec["allowEmptyPrompt"]?.GetValue<bool>() != true &&
+        if (string.IsNullOrWhiteSpace(_prompt) && _files.Count == 0 && _spec["allowEmptyPrompt"]?.GetValue<bool>() != true &&
             JsonUsesPrompt(_spec))
             throw new InvalidOperationException("Write a message first (it is used as the prompt).");
 
@@ -815,6 +845,7 @@ sealed class ConnectorRun
             var from = JPath.Text(rule["from"]);
             var how = JPath.Text(rule["as"]);
             var ruleMime = JPath.Text(rule["mime"]);
+            _ruleExt = ExpandText(JPath.Text(rule["ext"])).Trim().TrimStart('.');
             foreach (var node in JPath.Select(json, from.Length > 0 ? from : "$"))
             {
                 _curSeed = emitted < seeds.Count && seeds[emitted].Length > 0 && seeds[emitted] != "-1" ? seeds[emitted] : null;
@@ -873,17 +904,32 @@ sealed class ConnectorRun
         var bytes = await resp.Content.ReadAsByteArrayAsync(_ct);
         var ct = resp.Content.Headers.ContentType?.MediaType ?? "";
         var mime = ruleMime.Length > 0 ? ruleMime : Normalize(ct, bytes, full);
-        await EmitAsync(mime, bytes);
+        await EmitAsync(mime, bytes, ExtOfUrl(full));
     }
 
     int UseSeed() { _seedUsed = true; return _seed; }
 
-    async Task EmitAsync(string mime, byte[] bytes)
+    string _ruleExt = "";
+
+    async Task EmitAsync(string mime, byte[] bytes, string? urlExt = null)
     {
         if (_onImage == null) throw new InvalidOperationException("Results cannot be shown here.");
         var seed = _curSeed ?? (_seedUsed ? _seed.ToString() : null);
-        await _onImage(MimeMeta.Add(mime, "seed", seed), bytes);
+        // a file name extension for generic files (fbx, bvh, ...): the rule's "ext", else the one in the address
+        var ext = _ruleExt.Length > 0 ? _ruleExt : mime == "application/octet-stream" ? urlExt : null;
+        await _onImage(MimeMeta.Add(MimeMeta.Add(mime, "seed", seed), "ext", ext), bytes);
         _outputs++;
+    }
+
+    static string? ExtOfUrl(string url)
+    {
+        try
+        {
+            var path = Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.AbsolutePath : url.Split('?')[0];
+            var e = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+            return e.Length is >= 2 and <= 5 && e.All(char.IsLetterOrDigit) ? e : null;
+        }
+        catch { return null; }
     }
 
     // ------------------------------------------------------------ helpers
@@ -916,8 +962,10 @@ sealed class ConnectorRun
         var byExt = ext switch
         {
             ".png" => "image/png", ".jpg" or ".jpeg" => "image/jpeg", ".webp" => "image/webp", ".gif" => "image/gif",
-            ".mp4" => "video/mp4", ".webm" => "video/webm", ".mov" => "video/quicktime",
+            ".mp4" or ".m4v" => "video/mp4", ".webm" => "video/webm", ".mov" => "video/quicktime",
+            ".mkv" => "video/x-matroska", ".avi" => "video/x-msvideo",
             ".mp3" => "audio/mpeg", ".wav" => "audio/wav", ".ogg" => "audio/ogg", ".flac" => "audio/flac",
+            ".m4a" => "audio/mp4", ".aac" => "audio/aac",
             ".glb" => "model/gltf-binary", ".gltf" => "model/gltf+json", ".obj" => "model/obj", ".zip" => "application/zip",
             _ => ""
         };

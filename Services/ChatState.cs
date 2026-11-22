@@ -245,16 +245,23 @@ public class ChatState
     public int LimitImageMb { get; private set; } = 25;
     public int LimitTextMb { get; private set; } = 2;
     public int LimitPdfMb { get; private set; } = 50;
+    /// <summary>Video, audio and other binary files (for connectors of video / 3D / audio APIs).</summary>
+    public int LimitFileMb { get; private set; } = 100;
     public bool ShrinkImages { get; private set; } = true;
 
-    public void SetLimits(int? imageMb = null, int? textMb = null, int? pdfMb = null, bool? shrink = null)
+    public void SetLimits(int? imageMb = null, int? textMb = null, int? pdfMb = null, bool? shrink = null, int? fileMb = null)
     {
         if (imageMb is int i) { LimitImageMb = Math.Clamp(i, 1, 500); Preferences.Default.Set("limit_image_mb", LimitImageMb); }
         if (textMb is int t) { LimitTextMb = Math.Clamp(t, 1, 100); Preferences.Default.Set("limit_text_mb", LimitTextMb); }
         if (pdfMb is int p) { LimitPdfMb = Math.Clamp(p, 1, 500); Preferences.Default.Set("limit_pdf_mb", LimitPdfMb); }
+        if (fileMb is int fm) { LimitFileMb = Math.Clamp(fm, 1, 1000); Preferences.Default.Set("limit_file_mb", LimitFileMb); }
         if (shrink is bool s) { ShrinkImages = s; Preferences.Default.Set("shrink_images", s); }
         Notify();
     }
+
+    static readonly HashSet<string> VideoExts = new() { ".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi" };
+    static readonly HashSet<string> AudioExts = new() { ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac" };
+    static readonly HashSet<string> BinaryExts = new() { ".fbx", ".glb", ".stl", ".vrm", ".usdz", ".zip", ".7z", ".rar", ".docx", ".xlsx", ".pptx", ".bin" };
 
     static readonly Dictionary<string, string> ImageMimes = new()
     {
@@ -325,7 +332,10 @@ public class ChatState
         var ext = Path.GetExtension(name).ToLowerInvariant();
         var isImage = ImageMimes.TryGetValue(ext, out var mime);
         var isPdf = ext == ".pdf";
-        var limitMb = isImage ? LimitImageMb : isPdf ? LimitPdfMb : LimitTextMb;
+        var isVideo = VideoExts.Contains(ext);
+        var isAudio = AudioExts.Contains(ext);
+        var isMedia = isVideo || isAudio || BinaryExts.Contains(ext);
+        var limitMb = isImage ? LimitImageMb : isPdf ? LimitPdfMb : isMedia ? LimitFileMb : LimitTextMb;
         var limit = (long)limitMb * 1024 * 1024;
 
         using var ms = new MemoryStream();
@@ -363,11 +373,19 @@ public class ChatState
 
         if (!isImage)
         {
-            // anything with NUL bytes is binary (pdf, zip, docx, ...)
+            // video, audio and other binary files (anything with NUL bytes) are kept as files: chat models do not read them,
+            // but connectors of video / audio / 3D APIs can send them ({{file1_base64}}, {{video1_base64}} ...)
+            var binary = isMedia;
             var head = Math.Min(data.Length, 8192);
-            for (var i = 0; i < head; i++)
-                if (data[i] == 0)
-                    return (null, L.F("«{0}»: فقط عکس (png, jpg, gif, webp)، PDF و فایل‌های متنی/کد پشتیبانی می‌شوند.", name));
+            for (var i = 0; i < head && !binary; i++)
+                if (data[i] == 0) binary = true;
+            if (binary)
+            {
+                var fileMime = ConnectorRun.Normalize("", data, name);
+                var fileKind = fileMime.StartsWith("video/") ? "video" : fileMime.StartsWith("audio/") ? "audio" : "file";
+                var file = await _storage.SaveAttachmentAsync(name, fileMime, fileKind, data);
+                return (file, null);
+            }
             mime = "text/plain";
         }
 
@@ -584,6 +602,7 @@ public class ChatState
         LimitImageMb = Preferences.Default.Get("limit_image_mb", 25);
         LimitTextMb = Preferences.Default.Get("limit_text_mb", 2);
         LimitPdfMb = Preferences.Default.Get("limit_pdf_mb", 50);
+        LimitFileMb = Preferences.Default.Get("limit_file_mb", 100);
         ShrinkImages = Preferences.Default.Get("shrink_images", true);
         UserPresets = await _storage.LoadUserPresetsAsync();
         LockAfterMin = Preferences.Default.Get("lock_after_min", 0);
@@ -3214,7 +3233,7 @@ public class ChatState
                     : mime.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? "video"
                     : mime.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ? "audio" : "file";
                 var att = await _storage.SaveAttachmentAsync(
-                    $"{kind}-{n}{FileExportService.ExtensionFromMime(mime)}", mime, kind, data);
+                    $"{kind}-{n}{(meta.TryGetValue("ext", out var gx) ? "." + gx : FileExportService.ExtensionFromMime(mime))}", mime, kind, data);
                 if (meta.TryGetValue("seed", out var sd)) att.Seed = sd;
                 reply.Attachments.Add(att);
                 Notify();
