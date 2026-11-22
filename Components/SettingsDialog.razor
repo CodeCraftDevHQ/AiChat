@@ -545,6 +545,10 @@
                             <button class="btn sm" style="margin-top:10px" @onclick="State.ResetToolOpts">@L["بازنشانی"]</button>
                             break;
 
+                        case "customtools":
+                            <CustomToolsSettings />
+                            break;
+
                         case "voice":
                             <VoiceSettings />
                             break;
@@ -898,6 +902,7 @@ else if (_dlg == 2)
         new SectionItem("prompts", L["کتابخانه‌ی پرامپت"]),
         new SectionItem("tools", L["ابزارها"]),
         new SectionItem("mcp", L["سرورهای MCP"]),
+        new SectionItem("customtools", L["ابزارهای من"]),
         new SectionItem("voice", L["صدا"]),
         new SectionItem("cost", L["توکن و هزینه"]),
         new SectionItem("security", L["امنیت و حریم خصوصی"]),

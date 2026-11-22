@@ -40,6 +40,7 @@
 		<Compile Include="..\..\Services\Summary.cs" Link="App\Summary.cs" />
 		<Compile Include="..\..\Services\Compare.cs" Link="App\Compare.cs" />
 		<Compile Include="..\..\Services\Voice.cs" Link="App\Voice.cs" />
+		<Compile Include="..\..\Services\CustomTools.cs" Link="App\CustomTools.cs" />
 		<Compile Include="..\..\Services\CodeRun.cs" Link="App\CodeRun.cs" />
 		<Compile Include="..\..\Services\Export.cs" Link="App\Export.cs" />
 		<Compile Include="..\..\Services\SearchText.cs" Link="App\SearchText.cs" />

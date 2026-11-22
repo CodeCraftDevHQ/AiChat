@@ -25,6 +25,8 @@ public class ToolDef
     public Func<JsonObject, bool>? AskFor;
     /// <summary>"" = built in, "mcp" = from an MCP server.</summary>
     public string Source = "";
+    /// <summary>Text shown in the permission question instead of the plain argument list.</summary>
+    public Func<JsonObject, string>? Preview;
 }
 
 /// <summary>The tools offered to the model for one request, with the limits.</summary>
@@ -149,6 +151,8 @@ public class ToolOptions
     public bool ReadPage { get; set; } = true;
     /// <summary>The model may run code (JavaScript in a sandbox by default; it asks before every run).</summary>
     public bool CodeRun { get; set; } = true;
+    /// <summary>Use the tools the user made (Settings > My tools).</summary>
+    public bool CustomEnabled { get; set; } = true;
     /// <summary>The languages the model may use; each one has its own switch, question and settings.</summary>
     public List<CodeLanguage> CodeLanguages { get; set; } = CodeLanguage.Defaults();
     public CodeLimits Code { get; set; } = new();

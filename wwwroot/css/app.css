@@ -877,3 +877,14 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .icon-btn.rec { color: #e5484d; }
 .icon-btn.mic.rec { animation: micpulse 1.2s ease-in-out infinite; }
 @keyframes micpulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* my tools */
+.ct-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.ct-info { flex: 1; min-width: 0; cursor: pointer; }
+.ct-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.ct-bad { color: #e5484d; }
+.ct-edit .inp.code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; }
+.ct-param { display: grid; grid-template-columns: 1fr 110px 1.4fr auto auto; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ct-result { white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+@media (max-width: 760px) { .ct-param { grid-template-columns: 1fr 1fr; } }

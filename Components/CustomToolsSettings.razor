@@ -1,0 +1,266 @@
+@inherits StateComponent
+
+<p class="muted small">@L["ابزارهایی که خودتان می‌سازید و مدل می‌تواند صدا بزند: کد جاوااسکریپت، درخواست HTTP/وب‌هوک، برنامه‌ی خط فرمان (ویندوز) یا یک قالب پرامپت."]</p>
+
+<label id="set230" class="chk"><input type="checkbox" checked="@State.ToolOpts.CustomEnabled" @onchange="OnEnabled" /> @L["استفاده از ابزارهای من (وقتی ابزارها روشن‌اند)"]</label>
+
+@if (_edit == null)
+{
+    @foreach (var t in State.CustomTools)
+    {
+        var tool = t;
+        <div class="ct-row">
+            <label class="chk"><input type="checkbox" checked="@tool.Enabled" @onchange="e => Toggle(tool, e.Value is true)" /></label>
+            <div class="ct-info" @onclick="() => Edit(tool)">
+                <b dir="ltr">@tool.Name</b> <span class="ct-badge">@TypeName(tool.Type)</span>
+                @if (CustomToolCheck.Validate(tool).Count > 0) { <span class="ct-bad" title="@L["این ابزار ناقص است و به مدل داده نمی‌شود"]">⚠</span> }
+                <div class="muted small ct-desc" dir="auto">@tool.Description</div>
+            </div>
+            <button class="icon-btn sm" title="@L["ویرایش"]" @onclick="() => Edit(tool)">✎</button>
+            <button class="icon-btn sm" title="@L["کپی"]" @onclick="() => Duplicate(tool)">⧉</button>
+            <button class="icon-btn sm" title="@L["حذف"]" @onclick="() => Delete(tool)">🗑</button>
+        </div>
+    }
+    @if (State.CustomTools.Count == 0)
+    {
+        <p class="muted small">@L["هنوز ابزاری نساخته‌اید."]</p>
+    }
+
+    <label id="set231" class="lbl">@L["ابزار جدید"]</label>
+    <div class="row-btns">
+        <button class="btn sm" @onclick='() => New("js")'>JavaScript</button>
+        <button class="btn sm" @onclick='() => New("http")'>HTTP / Webhook</button>
+        @if (CodeRunner.ExternalAllowed)
+        {
+            <button class="btn sm" @onclick='() => New("command")'>@L["برنامه‌ی خط فرمان"]</button>
+        }
+        <button class="btn sm" @onclick='() => New("prompt")'>@L["قالب پرامپت"]</button>
+    </div>
+    <div class="row-btns" style="margin-top:8px">
+        <button id="set232" class="btn sm" @onclick="AddExamples">@L["افزودن ابزارهای نمونه"]</button>
+    </div>
+
+    <details class="adv-search" id="set233">
+        <summary>@L["درون‌ریزی / برون‌بری (JSON)"]</summary>
+        <div class="row-btns" style="margin-top:8px">
+            <button class="btn sm" @onclick="DoExport">@L["ساخت JSON از ابزارهای من"]</button>
+            <button class="btn sm" disabled="@(string.IsNullOrWhiteSpace(_json))" @onclick="DoImport">@L["افزودن از JSON"]</button>
+        </div>
+        <textarea class="inp" rows="8" dir="ltr" style="margin-top:6px" placeholder="@L["JSON ابزارها را اینجا بچسبانید"]" value="@_json" @oninput="e => _json = e.Value?.ToString() ?? string.Empty"></textarea>
+        @if (_ioMsg != null) { <p class="muted small">@_ioMsg</p> }
+    </details>
+}
+else
+{
+    var t = _edit;
+    <div class="ct-edit">
+        <div class="muted small">@TypeName(t.Type)@(_isNew ? "" : " · " + t.Name)</div>
+
+        <label id="set234" class="lbl">@L["نام (برای مدل، فقط حروف انگلیسی، عدد، _ و -)"]</label>
+        <input class="inp" dir="ltr" value="@t.Name" @oninput="e => { t.Name = e.Value?.ToString() ?? string.Empty; }" />
+        <label class="lbl">@L["عنوان نمایشی (اختیاری)"]</label>
+        <input class="inp" dir="auto" value="@t.Label" @oninput="e => { t.Label = e.Value?.ToString() ?? string.Empty; }" />
+        <label class="lbl">@L["توضیح برای مدل: ابزار چه می‌کند و کی باید استفاده شود (بهتر است انگلیسی)"]</label>
+        <textarea class="inp" rows="3" dir="auto" value="@t.Description" @oninput="e => { t.Description = e.Value?.ToString() ?? string.Empty; }"></textarea>
+
+        <label id="set235" class="lbl">@L["آرگومان‌ها"]</label>
+        @foreach (var p in t.Params)
+        {
+            var par = p;
+            <div class="ct-param">
+                <input class="inp" dir="ltr" placeholder="name" value="@par.Name" @oninput="e => { par.Name = e.Value?.ToString() ?? string.Empty; }" />
+                <select class="inp" @onchange="e => { par.Type = e.Value?.ToString() ?? string.Empty; }">
+                    @foreach (var ty in new[] { "string", "number", "integer", "boolean" })
+                    {
+                        <option value="@ty" selected="@(par.Type == ty)">@ty</option>
+                    }
+                </select>
+                <input class="inp" dir="auto" placeholder="@L["توضیح"]" value="@par.Description" @oninput="e => { par.Description = e.Value?.ToString() ?? string.Empty; }" />
+                <label class="chk"><input type="checkbox" checked="@par.Required" @onchange="e => { par.Required = e.Value is true; }" /> @L["الزامی"]</label>
+                <button class="icon-btn sm" @onclick="() => { t.Params.Remove(par); }">✕</button>
+            </div>
+        }
+        <button class="btn sm" @onclick="() => { t.Params.Add(new CustomToolParam { Name = NextParam(t) }); }">+ @L["آرگومان"]</button>
+
+        @if (t.Type == "js")
+        {
+            <label id="set236" class="lbl">@L["کد جاوااسکریپت (آرگومان‌ها در شیء args هستند؛ نتیجه را با console.log چاپ کنید)"]</label>
+            <textarea class="inp code" rows="10" dir="ltr" spellcheck="false" value="@t.Code" @oninput="e => { t.Code = e.Value?.ToString() ?? string.Empty; }"></textarea>
+        }
+        else if (t.Type == "http")
+        {
+            <label id="set237" class="lbl">@L["درخواست HTTP"]</label>
+            <div class="row-btns">
+                <select class="inp" style="max-width:110px" @onchange="e => { t.Method = e.Value?.ToString() ?? string.Empty; }">
+                    @foreach (var m in new[] { "GET", "POST", "PUT", "PATCH", "DELETE" })
+                    {
+                        <option value="@m" selected="@(t.Method.Equals(m, StringComparison.OrdinalIgnoreCase))">@m</option>
+                    }
+                </select>
+                <input class="inp" dir="ltr" placeholder="https://api.example.com/search?q={{q}}" value="@t.Url" @oninput="e => { t.Url = e.Value?.ToString() ?? string.Empty; }" />
+            </div>
+            <p class="muted small">@L["در آدرس، {{name}} خودکار URL-encode می‌شود؛ در هدر و بدنه همان متن است. {{json:name}} = رشته‌ی JSON، {{raw:name}} = بدون تغییر."]</p>
+            <label class="lbl">@L["هدرها (هر خط: Name: value)"]</label>
+            <textarea class="inp" rows="3" dir="ltr" placeholder="Authorization: Bearer ..." value="@t.Headers" @oninput="e => { t.Headers = e.Value?.ToString() ?? string.Empty; }"></textarea>
+            <label class="lbl">@L["بدنه (برای POST و ...)"]</label>
+            <textarea class="inp" rows="4" dir="ltr" value="@t.Body" @oninput="e => { t.Body = e.Value?.ToString() ?? string.Empty; }"></textarea>
+            <label class="lbl">@L["بخشی از پاسخ JSON که برگردد (مثل data.items[0].name؛ خالی = همه)"]</label>
+            <input class="inp" dir="ltr" value="@t.ResponsePath" @oninput="e => { t.ResponsePath = e.Value?.ToString() ?? string.Empty; }" />
+        }
+        else if (t.Type == "command")
+        {
+            <label id="set238" class="lbl">@L["برنامه و آرگومان‌ها (ویندوز)"]</label>
+            <input class="inp" dir="ltr" placeholder="C:\Tools\my.exe" value="@t.Command" @oninput="e => { t.Command = e.Value?.ToString() ?? string.Empty; }" />
+            <label class="lbl">@L["آرگومان‌های برنامه (هر خط یک آرگومان؛ {{name}} مجاز است)"]</label>
+            <textarea class="inp code" rows="4" dir="ltr" spellcheck="false" value="@t.Args" @oninput="e => { t.Args = e.Value?.ToString() ?? string.Empty; }"></textarea>
+            <p class="muted small">@L["بدون shell اجرا می‌شود: مقدار هر آرگومان همیشه یک آرگومان می‌ماند و نمی‌تواند دستور دیگری اضافه کند."]</p>
+            <label class="lbl">@L["پوشه‌ی کار (خالی = پوشه‌ی موقت)"]</label>
+            <input class="inp" dir="ltr" value="@t.WorkDir" @oninput="e => { t.WorkDir = e.Value?.ToString() ?? string.Empty; }" />
+            <label class="chk"><input type="checkbox" checked="@t.CleanEnv" @onchange="e => { t.CleanEnv = e.Value is true; }" /> @L["اجرا بدون متغیرهای محیطی برنامه (کلیدها دیده نشوند)"]</label>
+        }
+        else
+        {
+            <label id="set239" class="lbl">@L["قالب (متنی که به مدل برمی‌گردد؛ {{name}} پر می‌شود)"]</label>
+            <textarea class="inp" rows="8" dir="auto" value="@t.Template" @oninput="e => { t.Template = e.Value?.ToString() ?? string.Empty; }"></textarea>
+        }
+
+        <label id="set240" class="lbl">@L["اجازه و محدودیت"]</label>
+        <label class="chk"><input type="checkbox" checked="@t.Ask" @onchange="e => { t.Ask = e.Value is true; }" /> @L["قبل از هر اجرا از من بپرس"]</label>
+        <div class="row-btns">
+            <div><label class="lbl">@L["زمان‌سنج (ثانیه)"]</label><input class="inp" type="number" min="1" max="600" value="@t.TimeoutSec" @onchange="e => { t.TimeoutSec = Math.Clamp(int.TryParse(e.Value?.ToString(), out var n) ? n : 20, 1, 600); }" /></div>
+            <div><label class="lbl">@L["حداکثر طول نتیجه (0 = پیش‌فرض)"]</label><input class="inp" type="number" min="0" max="50000" value="@t.MaxChars" @onchange="e => { t.MaxChars = Math.Clamp(int.TryParse(e.Value?.ToString(), out var n) ? n : 0, 0, 50000); }" /></div>
+        </div>
+
+        <label id="set241" class="lbl">@L["آزمایش"]</label>
+        <textarea class="inp code" rows="3" dir="ltr" spellcheck="false" placeholder="@L["آرگومان‌ها به‌صورت JSON"]" value="@_testArgs" @oninput="e => _testArgs = e.Value?.ToString() ?? string.Empty"></textarea>
+        <div class="row-btns" style="margin-top:6px">
+            <button class="btn sm" disabled="@_testing" @onclick="RunTest">▶ @L["اجرای آزمایشی"]</button>
+            <button class="btn sm" @onclick="FillSample">@L["پر کردن نمونه‌ی آرگومان"]</button>
+        </div>
+        @if (_testing) { <p class="muted small">…</p> }
+        @if (_testResult != null) { <pre class="ct-result" dir="auto">@_testResult</pre> }
+
+        @if (_problems.Count > 0)
+        {
+            <p class="ct-bad small">@L["مشکلات:"] @string.Join("، ", _problems.Select(ProblemText))</p>
+        }
+        <div class="row-btns" style="margin-top:10px">
+            <button class="btn primary" @onclick="Save">@L["ذخیره"]</button>
+            <button class="btn" @onclick="Cancel">@L["انصراف"]</button>
+        </div>
+    </div>
+}
+
+@code {
+    CustomTool? _edit;
+    bool _isNew;
+    string _json = "";
+    string? _ioMsg;
+    string _testArgs = "";
+    string? _testResult;
+    bool _testing;
+    List<string> _problems = new();
+
+    string TypeName(string type) => type switch
+    {
+        "js" => "JavaScript",
+        "http" => "HTTP",
+        "command" => L["برنامه‌ی خط فرمان"],
+        "prompt" => L["قالب پرامپت"],
+        _ => type
+    };
+
+    string ProblemText(string p) => p switch
+    {
+        "name" => L["نام نامعتبر است"],
+        "description" => L["توضیح خالی است"],
+        "param-name" => L["نام آرگومان نامعتبر است"],
+        "param-duplicate" => L["نام آرگومان تکراری است"],
+        "code" => L["کد خالی است"],
+        "url" => L["آدرس http(s) معتبر نیست"],
+        "command" => L["برنامه مشخص نشده"],
+        "template" => L["قالب خالی است"],
+        _ => p
+    };
+
+    void OnEnabled(ChangeEventArgs e) { State.ToolOpts.CustomEnabled = e.Value is true; State.SaveToolOpts(); }
+
+    void Toggle(CustomTool t, bool on) { t.Enabled = on; State.SaveCustomTools(); }
+    void Delete(CustomTool t) => State.DeleteCustomTool(t.Id);
+
+    void Duplicate(CustomTool t)
+    {
+        var c = t.Clone();
+        c.Id = Guid.NewGuid().ToString("N")[..10];
+        c.Name = t.Name + "_copy";
+        State.UpsertCustomTool(c);
+    }
+
+    void Edit(CustomTool t)
+    {
+        _edit = t.Clone();
+        _isNew = false;
+        ResetTest();
+    }
+
+    void New(string type)
+    {
+        _edit = new CustomTool { Type = type, Ask = type != "prompt", Name = "my_tool", Method = "GET" };
+        if (type == "js") _edit.Code = "// args = the arguments the model passes\nconsole.log('hello ' + args.name);";
+        if (type == "js" || type == "prompt") _edit.Params.Add(new CustomToolParam { Name = "name", Description = "A name" });
+        _isNew = true;
+        ResetTest();
+    }
+
+    void ResetTest() { _testArgs = ""; _testResult = null; _problems = new(); FillSample(); }
+
+    static string NextParam(CustomTool t)
+    {
+        for (var i = 1; ; i++) { var n = "arg" + i; if (!t.Params.Any(p => p.Name == n)) return n; }
+    }
+
+    void FillSample()
+    {
+        if (_edit == null) return;
+        var o = new System.Text.Json.Nodes.JsonObject();
+        foreach (var p in _edit.Params.Where(p => p.Name.Length > 0))
+            o[p.Name] = p.Type switch { "number" => 1.5, "integer" => 1, "boolean" => true, _ => "sample" };
+        _testArgs = o.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+    }
+
+    async Task RunTest()
+    {
+        if (_edit == null) return;
+        _testing = true; _testResult = null;
+        StateHasChanged();
+        _testResult = await State.TestCustomToolAsync(_edit, _testArgs);
+        _testing = false;
+    }
+
+    void Save()
+    {
+        if (_edit == null) return;
+        _problems = CustomToolCheck.Validate(_edit);
+        if (_problems.Count > 0) return;
+        State.UpsertCustomTool(_edit);
+        _edit = null;
+    }
+
+    void Cancel() { _edit = null; }
+
+    void AddExamples()
+    {
+        foreach (var ex in CustomToolIo.Examples())
+            if (!State.CustomTools.Any(x => x.Name == ex.Name)) State.UpsertCustomTool(ex);
+    }
+
+    void DoExport() { _json = CustomToolIo.Export(State.CustomTools); _ioMsg = null; }
+
+    void DoImport()
+    {
+        var (list, err) = CustomToolIo.Import(_json);
+        if (err != null) { _ioMsg = L["JSON معتبر نیست: "] + err; return; }
+        foreach (var t in list) State.UpsertCustomTool(t);
+        _ioMsg = L["افزوده شد: "] + list.Count;
+    }
+}

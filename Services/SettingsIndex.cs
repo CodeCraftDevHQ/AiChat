@@ -25,6 +25,7 @@ public static partial class SettingsIndex
         ("prompts", "کتابخانه‌ی پرامپت", "prompt library shortcuts slash command قالب دستور میانبر"),
         ("tools", "ابزارها", "tools function calling plugin javascript python code run calculator اجرای کد ماشین حساب تاریخ"),
         ("mcp", "سرورهای MCP", "model context protocol server stdio connector github filesystem"),
+        ("customtools", "ابزارهای من", "custom tools my tools javascript http webhook command prompt template ابزار دلخواه ابزارهای من وب هوک خط فرمان قالب"),
         ("voice", "صدا", "voice speech tts stt read aloud microphone whisper text to speech صدا خواندن میکروفون گفتار تبدیل"),
         ("cost", "توکن و هزینه", "token cost price usage قیمت هزینه مصرف"),
         ("security", "امنیت و حریم خصوصی", "pin lock password privacy security قفل رمز پین امنیت حریم"),

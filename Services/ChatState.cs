@@ -601,6 +601,7 @@ public class ChatState
         LoadMemoryOpts();
         LoadSummaryOpts();
         LoadVoiceOpts();
+        LoadCustomTools();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
         if (!Preferences.Default.ContainsKey("tools_default_v89"))
@@ -894,6 +895,42 @@ public class ChatState
     }
 
     public MemorySuggestState? MemorySuggest { get; private set; }
+
+    // ------------------------------------------------------------ tools made by the user
+    public List<CustomTool> CustomTools { get; private set; } = new();
+
+    void LoadCustomTools()
+    {
+        try { CustomTools = System.Text.Json.JsonSerializer.Deserialize<List<CustomTool>>(Preferences.Default.Get("custom_tools", "[]")) ?? new(); }
+        catch { CustomTools = new(); }
+    }
+
+    public void SaveCustomTools()
+    {
+        Preferences.Default.Set("custom_tools", System.Text.Json.JsonSerializer.Serialize(CustomTools));
+        Notify();
+    }
+
+    public void UpsertCustomTool(CustomTool t)
+    {
+        var i = CustomTools.FindIndex(x => x.Id == t.Id);
+        if (i >= 0) CustomTools[i] = t; else CustomTools.Add(t);
+        SaveCustomTools();
+    }
+
+    public void DeleteCustomTool(string id) { CustomTools.RemoveAll(x => x.Id == id); SaveCustomTools(); }
+
+    /// <summary>Runs a tool once with the given arguments (JSON) for the "Test" button; no permission question.</summary>
+    public async Task<string> TestCustomToolAsync(CustomTool t, string argsJson)
+    {
+        System.Text.Json.Nodes.JsonObject args;
+        try { args = System.Text.Json.Nodes.JsonNode.Parse(string.IsNullOrWhiteSpace(argsJson) ? "{}" : argsJson) as System.Text.Json.Nodes.JsonObject ?? new(); }
+        catch (Exception ex) { return L["آرگومان‌ها JSON معتبر نیستند: "] + ex.Message; }
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(t.TimeoutSec, 1, 600) + 15));
+        try { return await CustomToolRunner.RunAsync(t, args, ToolOpts.Code, _http, cts.Token); }
+        catch (OperationCanceledException) { return "Error: timeout"; }
+        catch (Exception ex) { return "Error: " + ex.Message; }
+    }
 
     // ------------------------------------------------------------ voice: read aloud / speech to text
     public VoiceOptions VoiceOpts { get; private set; } = new();
@@ -1762,7 +1799,8 @@ public class ChatState
             if (mode == 1 && tool.Name is not ("web_search" or "read_page")) return true;
         }
 
-        var detail = string.Join("\n", args.Select(kv => kv.Key + ": " + (kv.Value is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : kv.Value?.ToJsonString())));
+        var detail = tool.Preview != null ? tool.Preview(args)
+            : string.Join("\n", args.Select(kv => kv.Key + ": " + (kv.Value is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : kv.Value?.ToJsonString())));
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _toolAskTcs = tcs;
         string? code = null, sub = null;
@@ -3115,6 +3153,8 @@ public class ChatState
             provider.Tools.Log = m => _log.Warn(m);
             if (ToolOpts.McpEnabled && McpServers.Count > 0)
                 provider.Tools.Tools.AddRange(await BuildMcpToolsAsync(ct));
+            if (ToolOpts.CustomEnabled && CustomTools.Count > 0)
+                provider.Tools.Tools.AddRange(CustomToolBuilder.BuildAll(CustomTools, ToolOpts.Code, _http, provider.Tools.Tools.Select(x => x.Name).ToHashSet()));
             if (provider.Tools.Tools.Count == 0) provider.Tools = null;
             else if (!string.IsNullOrWhiteSpace(ToolOpts.ExtraPrompt))
                 system = string.Join("\n\n", new[] { system, ToolOpts.ExtraPrompt }.Where(x => !string.IsNullOrWhiteSpace(x)));
