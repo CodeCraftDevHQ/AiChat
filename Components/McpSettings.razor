@@ -98,11 +98,69 @@ else
 
     <div class="row">
         <button class="primary" @onclick="New">+ @L["سرور جدید"]</button>
+        <button class="btn" @onclick="() => { _catalog = !_catalog; _pick = null; }">📦 @L["کاتالوگ برنامه‌ها"]</button>
     </div>
     @if (_status != null)
     {
         <p class="status" dir="auto">@_status</p>
     }
+
+    @if (_catalog)
+    {
+        <div class="persona-edit" id="set270">
+            <p class="muted small">@L["برنامه‌ی دلخواه را انتخاب کنید تا مدل بتواند آن را کنترل کند. هر مورد یک سرور MCP آماده است؛ مقدارهای لازم را بدهید و «افزودن» را بزنید. مواردی که فایل یا برنامه را تغییر می‌دهند به‌طور پیش‌فرض قبل از هر اجرا از شما می‌پرسند."]</p>
+            @if (_pick == null)
+            {
+                @foreach (var a in AppCatalog.All.Where(x => x.Transport != "stdio" || McpProcess.Supported))
+                {
+                    var app = a;
+                    <div class="persona-row">
+                        <span class="persona-ico">@app.Icon</span>
+                        <div class="persona-info">
+                            <strong dir="ltr">@app.Name</strong>
+                            <small class="muted" dir="auto">@L[app.Description]</small>
+                        </div>
+                        <button class="btn sm" @onclick="() => Pick(app)">@L["افزودن"]</button>
+                    </div>
+                }
+            }
+            else
+            {
+                <strong dir="ltr">@_pick.Icon @_pick.Name</strong>
+                <p class="muted small" dir="auto">@L[_pick.Description]</p>
+                @if (_pick.Setup.Length > 0)
+                {
+                    <p class="muted small warn" dir="ltr">@L["قبل از استفاده نصب کنید:"] @_pick.Setup</p>
+                }
+                @foreach (var f in _pick.FieldList)
+                {
+                    var fld = f;
+                    <label class="lbl">@L[fld.Label]</label>
+                    <input class="inp" dir="ltr" type="@InType(fld)" autocapitalize="off" spellcheck="false" placeholder="@fld.Placeholder"
+                           value="@Val(fld.Key)" @oninput="e => SetVal(fld.Key, e)" />
+                }
+                @if (_pick.Transport == "stdio")
+                {
+                    <p class="muted small warn">⚠ @L["این گزینه یک برنامه را روی این کامپیوتر با دسترسی‌های شما اجرا می‌کند. فقط برنامه‌هایی را اضافه کنید که به آن‌ها اعتماد دارید."]</p>
+                }
+                <div class="row">
+                    <button class="primary" disabled="@_busy" @onclick="() => AddPicked(false)">@L["افزودن"]</button>
+                    <button class="btn" disabled="@_busy" @onclick="() => AddPicked(true)">@(_busy ? L["در حال اتصال…"] : L["افزودن و تست"])</button>
+                    <button class="btn" @onclick="() => _pick = null">@L["انصراف"]</button>
+                </div>
+            }
+        </div>
+    }
+
+    <details class="adv" style="margin-top:14px">
+        <summary id="set271">@L["برون‌بری JSON (برای برنامه‌های دیگر)"]</summary>
+        <p class="muted small">@L["همه‌ی سرورها در قالب mcpServers؛ برای Claude Desktop، Cursor، Visual Studio و … قابل استفاده است. کلیدها و توکن‌ها جایگزین می‌شوند، مگر اینکه گزینه‌ی زیر را بزنید."]</p>
+        <label class="chk"><input type="checkbox" checked="@_exportSecrets" @onchange="e => _exportSecrets = e.Value is true" /> @L["شامل کلیدها و توکن‌ها"]</label>
+        <textarea class="inp code" rows="8" dir="ltr" readonly value="@AppCatalog.ToMcpJson(State.McpServers, _exportSecrets)"></textarea>
+        <div class="row">
+            <button class="btn" type="button" @onclick="CopyExport">@L["کپی"]</button>
+        </div>
+    </details>
 
     <details class="adv" style="margin-top:14px">
         <summary id="set128">@L["وارد کردن از JSON (قالب mcpServers)"]</summary>
@@ -121,6 +179,35 @@ else
     bool _busy;
     string? _status;
     string _json = "";
+    bool _catalog, _exportSecrets;
+    AppEntry? _pick;
+    readonly Dictionary<string, string> _vals = new();
+
+    static string InType(AppField f) => f.Secret ? "password" : "text";
+    void Pick(AppEntry a) { _pick = a; _vals.Clear(); _status = null; }
+    string Val(string k) => _vals.TryGetValue(k, out var v) ? v : "";
+    void SetVal(string k, ChangeEventArgs e) => _vals[k] = e.Value?.ToString() ?? "";
+
+    async Task AddPicked(bool test)
+    {
+        if (_pick == null) return;
+        var (cfg, err) = AppCatalog.Build(_pick, _vals, State.McpServers.Select(x => x.Name));
+        if (cfg == null) { _status = L["این مقدار را وارد کنید: "] + L[err ?? ""]; return; }
+        await State.SaveMcpServerAsync(cfg);
+        _catalog = false;
+        _pick = null;
+        if (!test) { _status = L.F("«{0}» اضافه شد.", cfg.Name); return; }
+        _busy = true;
+        var e = await State.RefreshMcpAsync(cfg);
+        _busy = false;
+        _status = e == null ? L.F("«{0}» اضافه شد و اتصال برقرار شد ✓", cfg.Name) : L.F("«{0}» اضافه شد ولی اتصال ناموفق بود: ", cfg.Name) + e;
+    }
+
+    async Task CopyExport()
+    {
+        await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.SetTextAsync(AppCatalog.ToMcpJson(State.McpServers, _exportSecrets));
+        _status = L["کپی شد"];
+    }
 
     static string Short(string s)
     {
