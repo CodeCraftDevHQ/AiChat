@@ -888,3 +888,8 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .ct-param { display: grid; grid-template-columns: 1fr 110px 1.4fr auto auto; gap: 6px; align-items: center; margin-bottom: 6px; }
 .ct-result { white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
 @media (max-width: 760px) { .ct-param { grid-template-columns: 1fr 1fr; } }
+
+/* project knowledge */
+.kb-docs { max-height: 220px; overflow-y: auto; border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 4px; }
+.kb-doc { display: flex; align-items: center; gap: 8px; padding: 3px 6px; }
+.kb-doc .kb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

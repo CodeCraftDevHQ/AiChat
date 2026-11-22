@@ -291,12 +291,16 @@ public class Project
     /// <summary>Reference files that are sent with the first message of every conversation in this project.</summary>
     public List<Attachment> Files { get; set; } = new();
 
+    /// <summary>Settings of the project's knowledge base (documents searched for every question). The index itself is a separate file.</summary>
+    public KnowledgeOptions Knowledge { get; set; } = new();
+
     public Project Clone() => new()
     {
         Id = Id,
         Name = Name,
         Instructions = Instructions,
-        Files = new List<Attachment>(Files)
+        Files = new List<Attachment>(Files),
+        Knowledge = Knowledge.Clone()
     };
 }
 

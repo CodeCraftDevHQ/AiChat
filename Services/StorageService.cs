@@ -110,6 +110,46 @@ public class StorageService
     public Task SaveProjectsAsync(List<Project> list) =>
         WriteAsync("projects.json", JsonSerializer.Serialize(list, Json));
 
+    // ---- project knowledge (one index file per project; it can be rebuilt, so it is not part of the backup) ----
+
+    static string KnowledgePath(string projectId) => PathOf($"knowledge-{new string(projectId.Where(char.IsLetterOrDigit).ToArray())}.json");
+
+    public async Task<KnowledgeIndex> LoadKnowledgeAsync(string projectId)
+    {
+        try
+        {
+            var path = KnowledgePath(projectId);
+            if (!File.Exists(path)) return new KnowledgeIndex();
+            await using var fs = File.OpenRead(path);
+            return await JsonSerializer.DeserializeAsync<KnowledgeIndex>(fs) ?? new KnowledgeIndex();
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Could not read the knowledge index", ex);
+            return new KnowledgeIndex();
+        }
+    }
+
+    public async Task SaveKnowledgeAsync(string projectId, KnowledgeIndex idx)
+    {
+        var json = JsonSerializer.Serialize(idx);
+        var path = KnowledgePath(projectId);
+        await _lock.WaitAsync();
+        try
+        {
+            var tmp = path + ".tmp";
+            await File.WriteAllTextAsync(tmp, json);
+            File.Move(tmp, path, true);
+        }
+        catch (Exception ex) { _log.Error("Could not save the knowledge index", ex); }
+        finally { _lock.Release(); }
+    }
+
+    public void DeleteKnowledge(string projectId)
+    {
+        try { File.Delete(KnowledgePath(projectId)); } catch { }
+    }
+
     // ---- model test results ----
 
     public Task<Dictionary<string, ModelTestResult>?> LoadModelTestsAsync() =>

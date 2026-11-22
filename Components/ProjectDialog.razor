@@ -37,6 +37,8 @@
                 <button class="btn" disabled="@(_project.Files.Count >= ChatState.MaxProjectFiles)" @onclick="AddFiles">@L["+ افزودن فایل"]</button>
             </div>
 
+            <KnowledgeSettings Proj="_project" />
+
             @if (_status != null)
             {
                 <p class="status" dir="auto">@_status</p>
@@ -146,6 +148,7 @@
 
     void Cancel()
     {
+        if (_isNew) _ = State.ClearKnowledgeAsync(_project);
         State.DeleteAttachmentFiles(_added);
         State.CloseProjectDialog();
     }

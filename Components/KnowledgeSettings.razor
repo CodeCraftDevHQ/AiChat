@@ -1,0 +1,187 @@
+@inherits StateComponent
+@using Microsoft.Maui.Storage
+
+@code {
+    [Parameter] public Project Proj { get; set; } = default!;
+
+    KnowledgeIndex? _idx;
+    string? _msg;
+    string? _embedTest;
+    const string Mode_Auto = "auto";
+    const string Mode_Tool = "tool";
+    const string Mode_Off = "off";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await Reload();
+    }
+
+    async Task Reload() => _idx = await State.GetKnowledgeIndexAsync(Proj.Id);
+
+    KnowledgeOptions O => Proj.Knowledge;
+
+    static string Str(ChangeEventArgs e) => e.Value?.ToString()?.Trim() ?? "";
+    static int Int(ChangeEventArgs e, int def, int min, int max) => int.TryParse(e.Value?.ToString(), out var n) ? Math.Clamp(n, min, max) : def;
+
+    async Task AddDocs()
+    {
+        try
+        {
+            var picked = await FilePicker.Default.PickMultipleAsync(new PickOptions { PickerTitle = L["اسناد پایگاه دانش"] });
+            if (picked == null) return;
+            var errs = new List<string>();
+            foreach (var f in picked)
+            {
+                await using var s = await f.OpenReadAsync();
+                using var ms = new MemoryStream();
+                await s.CopyToAsync(ms);
+                var err = await State.AddKnowledgeUploadAsync(Proj, f.FileName, ms.ToArray());
+                if (err != null) errs.Add(err);
+            }
+            _msg = errs.Count > 0 ? string.Join(" ", errs) : null;
+            await Reload();
+        }
+        catch (Exception ex) { _msg = L["خطا در انتخاب فایل: "] + ex.Message; }
+    }
+
+    async Task Index(bool rebuild)
+    {
+        _msg = await State.IndexKnowledgeAsync(Proj, rebuild);
+        await Reload();
+    }
+
+    async Task Remove(int i)
+    {
+        await State.RemoveKnowledgeDocAsync(Proj, i);
+        await Reload();
+    }
+
+    async Task Clear()
+    {
+        await State.ClearKnowledgeAsync(Proj);
+        _msg = null;
+        await Reload();
+    }
+
+    async Task TestEmbed()
+    {
+        _embedTest = L["در حال آزمایش…"];
+        _embedTest = await State.TestEmbeddingsAsync(O);
+    }
+
+    AppSelect.SelectOption[] ProviderOptions() =>
+        new[] { new AppSelect.SelectOption("", L["— انتخاب کنید —"]) }
+            .Concat(State.Providers.Where(p => !p.IsGenerator).Select(p => new AppSelect.SelectOption(p.Id, p.Name))).ToArray();
+
+    static string Size(long b) => b >= 1048576 ? (b / 1048576.0).ToString("0.0") + " MB" : Math.Max(1, b / 1024) + " KB";
+}
+
+<label class="lbl">@L["پایگاه دانش (جستجو در اسناد)"]</label>
+<p class="muted small">@L["اسناد زیر نمایه می‌شوند و برای هر سؤال فقط تکه‌های مرتبط برای مدل فرستاده می‌شوند (برخلاف «فایل‌های پروژه» که کامل فرستاده می‌شوند). منبع پاسخ زیر آن نشان داده می‌شود."]</p>
+
+<AppSelect Title="@L["روش استفاده"]" Value="@O.Mode" ValueChanged="v => O.Mode = v"
+           Options="@(new AppSelect.SelectOption[] { new(Mode_Auto, L["خودکار: بهترین تکه‌ها به هر سؤال اضافه شود"]), new(Mode_Tool, L["ابزار: خود مدل هر وقت لازم داشت جستجو کند"]), new(Mode_Off, L["خاموش"]) })" />
+
+@if (O.Mode == Mode_Tool)
+{
+    <p class="muted small">@L["حالت ابزار فقط وقتی کار می‌کند که ابزارها برای مدل فعال باشند."]</p>
+}
+
+<div class="row" style="margin-top:8px">
+    <button class="btn" @onclick="AddDocs">@L["+ افزودن سند"]</button>
+    <span class="muted small">@L["متن، کد، md، csv، json، html و docx"]</span>
+</div>
+
+<label class="lbl">@L["پوشه روی کامپیوتر (اختیاری)"]</label>
+<input class="inp" dir="ltr" placeholder="C:\Docs\MyProject" value="@O.Folder" @onchange="e => O.Folder = Str(e)" />
+<label class="chk"><input type="checkbox" checked="@O.Subfolders" @onchange="e => O.Subfolders = e.Value is true" /> @L["زیرپوشه‌ها هم خوانده شوند"]</label>
+
+<details class="adv-search">
+    <summary>@L["پیشرفته"]</summary>
+    <label class="lbl first">@L["پسوند فایل‌ها"]</label>
+    <input class="inp" dir="ltr" value="@O.Extensions" @onchange="e => O.Extensions = Str(e)" />
+    <div class="row-btns">
+        <div>
+            <label class="lbl">@L["حداکثر فایل"]</label>
+            <input class="inp" type="number" min="1" max="20000" value="@O.MaxFiles" @onchange="e => O.MaxFiles = Int(e, 3000, 1, 20000)" />
+        </div>
+        <div>
+            <label class="lbl">@L["حداکثر حجم هر فایل (KB)"]</label>
+            <input class="inp" type="number" min="1" max="51200" value="@O.MaxFileKb" @onchange="e => O.MaxFileKb = Int(e, 4096, 1, 51200)" />
+        </div>
+    </div>
+    <div class="row-btns">
+        <div>
+            <label class="lbl">@L["تعداد تکه‌ها برای هر سؤال"]</label>
+            <input class="inp" type="number" min="1" max="20" value="@O.TopK" @onchange="e => O.TopK = Int(e, 5, 1, 20)" />
+        </div>
+        <div>
+            <label class="lbl">@L["حداکثر نویسه‌ی اضافه به هر سؤال"]</label>
+            <input class="inp" type="number" min="500" max="60000" step="500" value="@O.MaxContextChars" @onchange="e => O.MaxContextChars = Int(e, 6000, 500, 60000)" />
+        </div>
+    </div>
+    <div class="row-btns">
+        <div>
+            <label class="lbl">@L["اندازه‌ی هر تکه (نویسه)"]</label>
+            <input class="inp" type="number" min="200" max="8000" step="100" value="@O.ChunkChars" @onchange="e => O.ChunkChars = Int(e, 1200, 200, 8000)" />
+        </div>
+        <div>
+            <label class="lbl">@L["هم‌پوشانی تکه‌ها"]</label>
+            <input class="inp" type="number" min="0" max="2000" step="50" value="@O.Overlap" @onchange="e => O.Overlap = Int(e, 150, 0, 2000)" />
+        </div>
+    </div>
+    <p class="muted small">@L["با تغییر اندازه‌ی تکه‌ها، «ساخت دوباره» را بزنید."]</p>
+    <label class="chk"><input type="checkbox" checked="@O.ShowSources" @onchange="e => O.ShowSources = e.Value is true" /> @L["نمایش منابع زیر پاسخ"]</label>
+</details>
+
+<label class="lbl">@L["جستجوی معنایی (Embeddings)"]</label>
+<label class="chk"><input type="checkbox" checked="@O.UseEmbeddings" @onchange="e => O.UseEmbeddings = e.Value is true" /> @L["علاوه بر کلمه‌ها، بر اساس معنی هم جستجو شود"]</label>
+@if (O.UseEmbeddings)
+{
+    <p class="muted small">@L["متن تکه‌ها برای ساخت بردار به API انتخاب‌شده فرستاده می‌شود. اگر نمی‌خواهید، این گزینه را خاموش بگذارید؛ جستجوی کلمه‌ای کاملاً محلی است."]</p>
+    <AppSelect Title="API" Value="@O.EmbedProviderId" ValueChanged="v => O.EmbedProviderId = v" Options="ProviderOptions()" />
+    <input class="inp" dir="ltr" placeholder="text-embedding-3-small" value="@O.EmbedModel" @onchange="e => O.EmbedModel = Str(e)" />
+    <div class="row" style="margin-top:6px">
+        <button class="btn sm" @onclick="TestEmbed">@L["آزمایش"]</button>
+        @if (_embedTest != null) { <span class="small" dir="auto">@_embedTest</span> }
+    </div>
+}
+
+<div class="row-btns" style="margin-top:12px">
+    <button class="btn" disabled="@State.KnowledgeBusy" @onclick="() => Index(false)">@L["نمایه‌سازی / به‌روزرسانی"]</button>
+    <button class="btn" disabled="@State.KnowledgeBusy" @onclick="() => Index(true)">@L["ساخت دوباره"]</button>
+    <button class="btn" disabled="@State.KnowledgeBusy" @onclick="Clear">@L["پاک کردن نمایه"]</button>
+</div>
+<p class="muted small">@L["تنظیمات بالا با «ذخیره»ی پروژه ذخیره می‌شوند؛ ولی نمایه همان لحظه ساخته می‌شود."]</p>
+
+@if (State.KnowledgeBusy || State.KnowledgeStatus != null)
+{
+    <p class="status" dir="auto">@State.KnowledgeStatus</p>
+}
+@if (_msg != null && _msg != State.KnowledgeStatus)
+{
+    <p class="status" dir="auto">@_msg</p>
+}
+
+@if (_idx is { Docs.Count: > 0 })
+{
+    <p class="muted small">@L.F("{0} سند، {1} تکه ({2} با بردار)", _idx.Docs.Count, _idx.Chunks.Count, _idx.Chunks.Count(c => c.V != null))</p>
+    <div class="kb-docs">
+        @for (var i = 0; i < _idx.Docs.Count && i < 200; i++)
+        {
+            var n = i;
+            var d = _idx.Docs[i];
+            <div class="kb-doc">
+                <span class="kb-ico">@(d.Source == "folder" ? "📁" : "📄")</span>
+                <span class="kb-name" dir="auto" title="@d.Path">@d.Name</span>
+                <span class="muted small">@Size(d.Size)</span>
+                <button class="icon-btn" title="@L["حذف"]" @onclick="() => Remove(n)">×</button>
+            </div>
+        }
+        @if (_idx.Docs.Count > 200)
+        {
+            <p class="muted small">@L.F("… و {0} سند دیگر", _idx.Docs.Count - 200)</p>
+        }
+    </div>
+}
