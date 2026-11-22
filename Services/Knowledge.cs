@@ -19,10 +19,17 @@ public class KnowledgeOptions
     public int MaxContextChars { get; set; } = 6000;
     public bool ShowSources { get; set; } = true;
 
+    /// <summary>The model may list / search / read the other chats of this project (tools).</summary>
+    public bool ChatTools { get; set; } = true;
+    /// <summary>Automatic mode also adds matching passages of the other chats of this project.</summary>
+    public bool IncludeChats { get; set; }
+    /// <summary>The model may list and read files of the project folder (read-only, only inside that folder).</summary>
+    public bool FolderTools { get; set; } = true;
+
     /// <summary>A folder on this computer (Windows) that is indexed with all its files.</summary>
     public string Folder { get; set; } = "";
     public bool Subfolders { get; set; } = true;
-    public string Extensions { get; set; } = "txt,md,markdown,csv,json,xml,html,htm,yaml,yml,ini,log,cs,razor,css,js,ts,tsx,jsx,py,java,c,cpp,h,go,rs,sql,docx";
+    public string Extensions { get; set; } = "txt,md,markdown,csv,json,xml,html,htm,yaml,yml,ini,log,cs,razor,css,js,ts,tsx,jsx,py,java,c,cpp,h,go,rs,sql,docx,pdf,pptx,xlsx";
     public int MaxFiles { get; set; } = 3000;
     public int MaxFileKb { get; set; } = 4096;
 
@@ -80,15 +87,34 @@ public static class KnowledgeText
         var ext = Path.GetExtension(name).ToLowerInvariant();
         string? text;
         if (ext == ".docx") text = Docx(bytes);
+        else if (ext == ".pptx") text = Pptx(bytes);
+        else if (ext == ".xlsx") text = Xlsx(bytes);
+        else if (ext == ".pdf" || PdfHelper.LooksLikePdf(bytes)) text = PdfHelper.ExtractText(bytes, null, 5_000_000);
         else
         {
-            var head = Math.Min(bytes.Length, 8192);
-            for (var i = 0; i < head; i++) if (bytes[i] == 0) return null;
-            text = Encoding.UTF8.GetString(bytes).TrimStart('﻿');
+            text = DecodeText(bytes);
+            if (text == null) return null;
             if (ext is ".html" or ".htm") text = Html(text);
         }
         text = text?.Replace("\r\n", "\n").Replace('\r', '\n');
         return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    /// <summary>UTF-8 / UTF-16 (with BOM) / Windows-1256 (old Persian files). Null = binary.</summary>
+    public static string? DecodeText(byte[] bytes)
+    {
+        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
+        var head = Math.Min(bytes.Length, 8192);
+        for (var i = 0; i < head; i++) if (bytes[i] == 0) return null;
+        var utf8 = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
+        if (!utf8.Contains('\uFFFD')) return utf8;
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(1256).GetString(bytes);
+        }
+        catch { return utf8; }
     }
 
     public static string Html(string html)
@@ -127,6 +153,34 @@ public static class KnowledgeText
         }
         catch (Exception ex) when (ex is InvalidDataException or System.Xml.XmlException) { return null; }
     }
+
+    static string? OfficeXml(byte[] bytes, Func<string, bool> pick, string textName, string paraName)
+    {
+        try
+        {
+            using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+            var sb = new StringBuilder();
+            foreach (var e in zip.Entries.Where(e => pick(e.FullName)).OrderBy(e => e.FullName, StringComparer.Ordinal))
+            {
+                using var s = e.Open();
+                var doc = System.Xml.Linq.XDocument.Load(s);
+                foreach (var el in doc.Descendants())
+                {
+                    if (el.Name.LocalName == textName) sb.Append(el.Value).Append(' ');
+                    else if (el.Name.LocalName == paraName) sb.Append('\n');
+                }
+                sb.Append("\n\n");
+            }
+            return sb.ToString();
+        }
+        catch (Exception ex) when (ex is InvalidDataException or System.Xml.XmlException) { return null; }
+    }
+
+    static string? Pptx(byte[] bytes) =>
+        OfficeXml(bytes, n => n.StartsWith("ppt/slides/slide", StringComparison.Ordinal) && n.EndsWith(".xml", StringComparison.Ordinal), "t", "p");
+
+    static string? Xlsx(byte[] bytes) =>
+        OfficeXml(bytes, n => n == "xl/sharedStrings.xml", "t", "si");
 
     /// <summary>Cuts a text into passages of about <paramref name="size"/> characters (at paragraph / line ends when possible) that overlap a little.</summary>
     public static List<string> Chunk(string text, int size, int overlap)
@@ -431,5 +485,95 @@ public static class KnowledgeEmbed
         var data = root["data"] as JsonArray ?? throw new JsonException("no data");
         return data.OrderBy(d => (int?)d?["index"] ?? 0)
             .Select(d => d!["embedding"]!.AsArray().Select(x => (float)x!.GetValue<double>()).ToArray()).ToList();
+    }
+}
+
+/// <summary>Read-only access to the files of ONE folder: nothing outside of it can be reached.</summary>
+public static class FolderJail
+{
+    /// <summary>Full path of <paramref name="sub"/> inside <paramref name="root"/>; null when it would leave the folder.</summary>
+    public static string? Resolve(string root, string? sub)
+    {
+        if (string.IsNullOrWhiteSpace(root)) return null;
+        var rootFull = Path.GetFullPath(root).TrimEnd('\\', '/');
+        var s = (sub ?? "").Trim().Trim('"');
+        if (s.Length > 0 && Path.IsPathRooted(s))
+        {
+            // an absolute path is accepted only when it is already inside the folder
+            var abs = Path.GetFullPath(s);
+            return Inside(rootFull, abs) ? abs : null;
+        }
+        var full = Path.GetFullPath(Path.Combine(rootFull, s));
+        return Inside(rootFull, full) ? full : null;
+    }
+
+    static bool Inside(string rootFull, string full)
+    {
+        if (full.Equals(rootFull, StringComparison.OrdinalIgnoreCase)) return true;
+        return full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               full.StartsWith(rootFull + "/", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+/// <summary>Helpers for reading the other chats of a project.</summary>
+public static class KnowledgeChats
+{
+    public static string MessageText(AiChat.Models.ChatMessage m)
+    {
+        var t = m.Content ?? "";
+        if (m.Attachments.Count > 0) t += (t.Length > 0 ? "\n" : "") + "[attachments: " + string.Join(", ", m.Attachments.Select(a => a.Name)) + "]";
+        return t.Trim();
+    }
+
+    /// <summary>Whole chat as plain text ("User:" / "Assistant:" lines).</summary>
+    public static string FullText(AiChat.Models.Conversation c) =>
+        string.Join("\n\n", c.Messages.Select(m => (m.Role == "user" ? "User: " : "Assistant: ") + MessageText(m)).Where(x => x.Length > 12));
+
+    /// <summary>Messages from <paramref name="from"/> (1-based; negative = the last N) as text of at most <paramref name="limit"/> characters.</summary>
+    public static (string Text, int First, int Last, int Total) Render(AiChat.Models.Conversation c, int from, int limit)
+    {
+        var msgs = c.Messages;
+        var total = msgs.Count;
+        var start = from < 0 ? Math.Max(0, total + from) : Math.Max(0, from - 1);
+        var sb = new StringBuilder();
+        var i = start;
+        for (; i < total; i++)
+        {
+            var line = (msgs[i].Role == "user" ? "User: " : "Assistant: ") + MessageText(msgs[i]);
+            if (sb.Length > 0 && sb.Length + line.Length > limit) break;
+            if (line.Length > limit) line = line[..limit] + "…";
+            sb.Append(line).Append("\n\n");
+        }
+        return (sb.ToString().TrimEnd(), start + 1, i, total);
+    }
+
+    /// <summary>The chat with this title (or id): exact title first, then a title that contains the words. Error text when none / several.</summary>
+    public static (AiChat.Models.Conversation? Chat, string? Error) Find(IReadOnlyList<AiChat.Models.Conversation> chats, string query)
+    {
+        var q = SearchText.NormalizeQuery(query);
+        if (q.Length == 0) return (null, "Give the title of the chat.");
+        var byId = chats.FirstOrDefault(c => c.Id == query.Trim());
+        if (byId != null) return (byId, null);
+        var exact = chats.Where(c => SearchText.NormalizeQuery(c.Title) == q).OrderByDescending(c => c.Updated).FirstOrDefault();
+        if (exact != null) return (exact, null);
+        var part = chats.Where(c => SearchText.NormalizeQuery(c.Title).Contains(q)).OrderByDescending(c => c.Updated).ToList();
+        if (part.Count == 1) return (part[0], null);
+        if (part.Count > 1) return (null, "Several chats match: " + string.Join(" | ", part.Take(8).Select(c => c.Title)) + ". Use the exact title.");
+        return (null, "No chat with this title in the project. Call list_project_chats to see the titles.");
+    }
+
+    /// <summary>A search index over the chats (document name = chat title).</summary>
+    public static KnowledgeIndex BuildIndex(IEnumerable<AiChat.Models.Conversation> chats, KnowledgeOptions o)
+    {
+        var idx = new KnowledgeIndex();
+        foreach (var c in chats)
+        {
+            var text = FullText(c);
+            if (text.Length == 0) continue;
+            idx.Docs.Add(new KnowledgeDoc { Name = "💬 " + c.Title, Source = "chat", Path = c.Id });
+            var d = idx.Docs.Count - 1;
+            foreach (var ch in KnowledgeText.Chunk(text, o.ChunkChars, o.Overlap)) idx.Chunks.Add(new KnowledgeChunk { D = d, T = ch });
+        }
+        return idx;
     }
 }

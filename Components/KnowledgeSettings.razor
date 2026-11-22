@@ -6,6 +6,7 @@
 
     KnowledgeIndex? _idx;
     string? _msg;
+    string? _addMsg;
     string? _embedTest;
     const string Mode_Auto = "auto";
     const string Mode_Tool = "tool";
@@ -39,10 +40,10 @@
                 var err = await State.AddKnowledgeUploadAsync(Proj, f.FileName, ms.ToArray());
                 if (err != null) errs.Add(err);
             }
-            _msg = errs.Count > 0 ? string.Join(" ", errs) : null;
+            _addMsg = errs.Count > 0 ? string.Join(" ", errs) : (picked.Any() ? L.F("{0} سند اضافه شد ✓", picked.Count()) : null);
             await Reload();
         }
-        catch (Exception ex) { _msg = L["خطا در انتخاب فایل: "] + ex.Message; }
+        catch (Exception ex) { _addMsg = L["خطا در انتخاب فایل: "] + ex.Message; }
     }
 
     async Task Index(bool rebuild)
@@ -90,8 +91,17 @@
 
 <div class="row" style="margin-top:8px">
     <button class="btn" @onclick="AddDocs">@L["+ افزودن سند"]</button>
-    <span class="muted small">@L["متن، کد، md، csv، json، html و docx"]</span>
+    <span class="muted small">@L["متن، کد، md، csv، json، html، docx، pdf، pptx و xlsx"]</span>
 </div>
+@if (_addMsg != null)
+{
+    <p class="status" dir="auto">@_addMsg</p>
+}
+
+<label class="lbl">@L["گفتگوهای دیگر و پوشه"]</label>
+<label class="chk"><input type="checkbox" checked="@O.ChatTools" @onchange="e => O.ChatTools = e.Value is true" /> @L["مدل بتواند گفتگوهای دیگر این پروژه را فهرست، جستجو و بخواند (ابزار)"]</label>
+<label class="chk"><input type="checkbox" checked="@O.IncludeChats" @onchange="e => O.IncludeChats = e.Value is true" /> @L["در حالت خودکار، تکه‌های مرتبط گفتگوهای دیگر هم اضافه شود"]</label>
+<label class="chk"><input type="checkbox" checked="@O.FolderTools" @onchange="e => O.FolderTools = e.Value is true" /> @L["مدل بتواند فایل‌های پوشه را (فقط‌خواندنی و فقط داخل همان پوشه) بخواند"]</label>
 
 <label class="lbl">@L["پوشه روی کامپیوتر (اختیاری)"]</label>
 <input class="inp" dir="ltr" placeholder="C:\Docs\MyProject" value="@O.Folder" @onchange="e => O.Folder = Str(e)" />

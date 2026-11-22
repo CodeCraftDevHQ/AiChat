@@ -221,3 +221,93 @@ public class KnowledgeTests
         Assert.Equal("auto", new KnowledgeOptions().Mode);
     }
 }
+
+public class KnowledgeExtraTests
+{
+    [Fact]
+    public void Utf16_and_old_persian_files_are_read()
+    {
+        var utf16 = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("سلام دنیا")).ToArray();
+        Assert.Equal("سلام دنیا", KnowledgeText.Extract("a.txt", utf16));
+        Assert.Equal("hello", KnowledgeText.Extract("b.txt", Encoding.UTF8.GetBytes("hello")));
+    }
+
+    [Fact]
+    public void Pptx_and_xlsx_text_is_read()
+    {
+        static byte[] Zip(string entry, string xml)
+        {
+            using var ms = new MemoryStream();
+            using (var z = new ZipArchive(ms, ZipArchiveMode.Create, true))
+            {
+                using var w = new StreamWriter(z.CreateEntry(entry).Open(), new UTF8Encoding(false));
+                w.Write(xml);
+            }
+            return ms.ToArray();
+        }
+        var pptx = Zip("ppt/slides/slide1.xml", "<p:sld xmlns:p=\"p\" xmlns:a=\"a\"><a:p><a:r><a:t>Slide title</a:t></a:r></a:p></p:sld>");
+        Assert.Contains("Slide title", KnowledgeText.Extract("s.pptx", pptx));
+        var xlsx = Zip("xl/sharedStrings.xml", "<sst xmlns=\"x\"><si><t>Cell one</t></si><si><t>Cell two</t></si></sst>");
+        var t = KnowledgeText.Extract("s.xlsx", xlsx);
+        Assert.Contains("Cell one", t);
+        Assert.Contains("Cell two", t);
+    }
+
+    [Fact]
+    public void Pdf_without_text_is_refused()
+    {
+        Assert.Null(KnowledgeText.Extract("x.pdf", Encoding.ASCII.GetBytes("%PDF-1.4 broken")));
+    }
+
+    [Fact]
+    public void Folder_jail_blocks_escapes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "kbjail");
+        Assert.NotNull(FolderJail.Resolve(root, ""));
+        Assert.NotNull(FolderJail.Resolve(root, "sub/file.txt"));
+        Assert.Null(FolderJail.Resolve(root, "../outside.txt"));
+        Assert.Null(FolderJail.Resolve(root, "sub/../../x"));
+        Assert.Null(FolderJail.Resolve(root, Path.GetTempPath()));
+        Assert.NotNull(FolderJail.Resolve(root, Path.Combine(root, "in.txt")));
+        Assert.Null(FolderJail.Resolve(root + "x", Path.Combine(root, "in.txt")));
+    }
+
+    static AiChat.Models.Conversation Chat(string title, params string[] lines)
+    {
+        var c = new AiChat.Models.Conversation { Title = title };
+        for (var i = 0; i < lines.Length; i++)
+            c.Messages.Add(new AiChat.Models.ChatMessage { Role = i % 2 == 0 ? "user" : "assistant", Content = lines[i] });
+        return c;
+    }
+
+    [Fact]
+    public void Chats_are_found_by_title_and_paged()
+    {
+        var a = Chat("Database design", "How to model orders?", "Use two tables.", "And invoices?", "A third table.");
+        var b = Chat("Database migration", "Plan the migration", "Step one");
+        var list = new[] { a, b };
+
+        Assert.Same(a, KnowledgeChats.Find(list, "database design").Chat);
+        Assert.Same(b, KnowledgeChats.Find(list, "migration").Chat);
+        Assert.Null(KnowledgeChats.Find(list, "database").Chat);
+        Assert.Contains("Several", KnowledgeChats.Find(list, "database").Error);
+        Assert.Contains("No chat", KnowledgeChats.Find(list, "zzz").Error);
+
+        var all = KnowledgeChats.Render(a, 1, 10000);
+        Assert.Equal((1, 4, 4), (all.First, all.Last, all.Total));
+        var tail = KnowledgeChats.Render(a, -2, 10000);
+        Assert.Equal(3, tail.First);
+        Assert.StartsWith("User: And invoices?", tail.Text);
+        var part = KnowledgeChats.Render(a, 1, 40);
+        Assert.True(part.Last < 4);
+    }
+
+    [Fact]
+    public void Chat_index_searches_other_chats()
+    {
+        var chats = new[] { Chat("Cooking", "How long to boil pasta for dinner?", "About nine minutes."), Chat("Taxes", "When is the tax filing deadline this year?", "Check the official calendar.") };
+        var s = new KnowledgeSearcher(KnowledgeChats.BuildIndex(chats, new KnowledgeOptions()));
+        var hits = s.Search("pasta boil", 2);
+        Assert.Equal("💬 Cooking", hits[0].Doc);
+    }
+}

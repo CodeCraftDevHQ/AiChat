@@ -3178,6 +3178,17 @@ public partial class ChatState
                 provider.Tools.Tools.AddRange(CustomToolBuilder.BuildAll(CustomTools, ToolOpts.Code, _http, provider.Tools.Tools.Select(x => x.Name).ToHashSet()));
             if (project != null && project.Knowledge.Mode == "tool" && await HasKnowledgeAsync(project))
                 provider.Tools.Tools.Add(KnowledgeTool(project, kbToolHits));
+            if (project != null && project.Knowledge.ChatTools)
+                provider.Tools.Tools.AddRange(ChatTools(project, conv, kbToolHits));
+            if (project != null && project.Knowledge.FolderTools)
+            {
+                var ft = FolderTools(project).ToList();
+                if (ft.Count > 0)
+                {
+                    provider.Tools.Tools.AddRange(ft);
+                    system = string.Join("\n\n", new[] { system, "The project has a folder of documents. Read its files only with list_project_folder / read_project_file; do not use code execution to reach files outside of what the user asked." }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                }
+            }
             if (provider.Tools.Tools.Count == 0) provider.Tools = null;
             else if (!string.IsNullOrWhiteSpace(ToolOpts.ExtraPrompt))
                 system = string.Join("\n\n", new[] { system, ToolOpts.ExtraPrompt }.Where(x => !string.IsNullOrWhiteSpace(x)));
@@ -3230,7 +3241,8 @@ public partial class ChatState
 
             // project knowledge: the best passages of the project's documents go with the question
             List<KnowledgeHit>? kbHits = null;
-            if (project != null && !provider.IsGenerator && project.Knowledge.Mode != "off" && await HasKnowledgeAsync(project))
+            var kbDocs = project != null && await HasKnowledgeAsync(project);
+            if (project != null && !provider.IsGenerator && project.Knowledge.Mode != "off" && (kbDocs || project.Knowledge.IncludeChats))
             {
                 if (project.Knowledge.Mode == "auto" &&
                     history.LastOrDefault(m => m.Role == "user")?.Content?.Trim() is { Length: > 0 } kq)
@@ -3241,7 +3253,9 @@ public partial class ChatState
                     {
                         var prev = history.Where(m => m.Role == "user").Reverse().Skip(1).FirstOrDefault()?.Content;
                         var qtext = kq.Length < 40 && !string.IsNullOrWhiteSpace(prev) ? prev.Trim() + "\n" + kq : kq;
-                        kbHits = await SearchKnowledgeAsync(project, qtext, project.Knowledge.TopK, ct);
+                        kbHits = kbDocs ? await SearchKnowledgeAsync(project, qtext, project.Knowledge.TopK, ct) : new List<KnowledgeHit>();
+                        if (project.Knowledge.IncludeChats)
+                            kbHits.AddRange(SearchChats(project, conv, qtext, Math.Max(2, project.Knowledge.TopK / 2)));
                     }
                     catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
                     catch (Exception ex) when (ex is not OperationCanceledException)

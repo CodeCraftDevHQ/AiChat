@@ -14,7 +14,7 @@ public static class PdfHelper
         data.Length > 4 && data[0] == '%' && data[1] == 'P' && data[2] == 'D' && data[3] == 'F';
 
     /// <summary>Returns the text of the PDF ("" when it has none). Cached per attachment id.</summary>
-    public static string ExtractText(byte[] data, string? cacheKey = null)
+    public static string ExtractText(byte[] data, string? cacheKey = null, int maxChars = MaxChars)
     {
         if (cacheKey != null && Cache.TryGetValue(cacheKey, out var hit)) return hit;
 
@@ -27,9 +27,9 @@ public static class PdfHelper
                 var text = page.Text;
                 if (string.IsNullOrWhiteSpace(text)) continue;
                 sb.Append("\n[Page ").Append(page.Number).Append("]\n").Append(text.Trim()).Append('\n');
-                if (sb.Length > MaxChars)
+                if (sb.Length > maxChars)
                 {
-                    sb.Length = MaxChars;
+                    sb.Length = maxChars;
                     sb.Append("\n[... text truncated ...]");
                     break;
                 }

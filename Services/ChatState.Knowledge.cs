@@ -45,6 +45,7 @@ public partial class ChatState
         var list = new List<FoundFile>();
         if (string.IsNullOrWhiteSpace(o.Folder) || !Directory.Exists(o.Folder)) return list;
         var exts = KnowledgeIndexer.ExtSet(o.Extensions);
+        if (exts.Contains(".docx")) exts.UnionWith(new[] { ".pdf", ".pptx", ".xlsx" }); // projects made before these formats existed
         var maxBytes = Math.Max(1, o.MaxFileKb) * 1024L;
 
         void Walk(string dir)
@@ -137,7 +138,7 @@ public partial class ChatState
             Notify();
             return warn;
         }
-        catch (Exception ex) { return ex.Message; }
+        catch (Exception ex) { _log.Warn($"Adding '{name}' to the knowledge base failed: " + ex.Message); return ex.Message; }
         finally { _kbLock.Release(); }
     }
 
@@ -273,4 +274,155 @@ public partial class ChatState
             return KnowledgePrompt.Context(hits, p.Knowledge.MaxContextChars);
         }
     };
+
+    // ------------------------------------------------------------ other chats of the project
+
+    List<Conversation> OtherChats(Project p, Conversation? current) =>
+        Conversations.Where(c => c.ProjectId == p.Id && !ReferenceEquals(c, current) && c.Messages.Count > 0).OrderByDescending(c => c.Updated).ToList();
+
+    (string Sig, KnowledgeSearcher S)? _chatIdx;
+
+    /// <summary>Search over the other chats (index is rebuilt only when a chat changed).</summary>
+    List<KnowledgeHit> SearchChats(Project p, Conversation? current, string query, int k)
+    {
+        var chats = OtherChats(p, current);
+        if (chats.Count == 0) return new();
+        var sig = p.Id + "|" + p.Knowledge.ChunkChars + "|" + string.Join(",", chats.Select(c => c.Id + ":" + c.Messages.Count + ":" + c.Updated.Ticks));
+        if (_chatIdx is not { } cur || cur.Sig != sig)
+            _chatIdx = (sig, new KnowledgeSearcher(KnowledgeChats.BuildIndex(chats, p.Knowledge)));
+        return _chatIdx.Value.S.Search(query, k);
+    }
+
+    IEnumerable<ToolDef> ChatTools(Project p, Conversation conv, List<KnowledgeHit> sink)
+    {
+        if (OtherChats(p, conv).Count == 0) yield break;
+        var limit = Math.Clamp(ToolOpts.ResultChars, 1500, 50000) - 400;
+
+        yield return new ToolDef
+        {
+            Name = "list_project_chats",
+            Label = "Project chats",
+            Description = $"Lists the other chats of the project \"{p.Name}\" (title, date, number of messages). Use it when the user refers to another chat of this project.",
+            Parameters = new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
+            Run = (_, _) => Task.FromResult(string.Join("\n", OtherChats(p, conv).Take(60)
+                .Select((c, i) => $"{i + 1}. {c.Title} — {c.Updated.ToLocalTime():yyyy-MM-dd HH:mm}, {c.Messages.Count} messages")))
+        };
+        yield return new ToolDef
+        {
+            Name = "read_project_chat",
+            Label = "Read chat",
+            Description = "Reads another chat of this project by its title (as in list_project_chats). Starts from the first message; pass from_message=N to continue where the previous part ended, " +
+                          "or a negative number (e.g. -10) to read only the last messages. Use it when the user asks to look at, summarize or continue another chat.",
+            Parameters = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["title"] = new JsonObject { ["type"] = "string", ["description"] = "Title of the chat (or a distinctive part of it)" },
+                    ["from_message"] = new JsonObject { ["type"] = "integer", ["description"] = "1-based message number to start from; negative = the last N messages. Default 1." }
+                },
+                ["required"] = new JsonArray("title")
+            },
+            Run = (a, _) =>
+            {
+                var (chat, err) = KnowledgeChats.Find(OtherChats(p, conv), a["title"]?.ToString() ?? "");
+                if (chat == null) return Task.FromResult(err ?? "Not found.");
+                var from = a["from_message"] is JsonNode n && int.TryParse(n.ToString(), out var f) ? f : 1;
+                var r = KnowledgeChats.Render(chat, from, limit);
+                var head = $"Chat \"{chat.Title}\": messages {r.First}-{r.Last} of {r.Total}." + (r.Last < r.Total ? $" Call again with from_message={r.Last + 1} for the rest." : " (end of the chat)");
+                return Task.FromResult(head + "\n\n" + r.Text);
+            }
+        };
+        yield return new ToolDef
+        {
+            Name = "search_project_chats",
+            Label = "Search chats",
+            Description = "Searches the text of the other chats of this project and returns matching passages with the chat title. Use it to find where something was discussed.",
+            Parameters = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject { ["query"] = new JsonObject { ["type"] = "string", ["description"] = "What to look for" } },
+                ["required"] = new JsonArray("query")
+            },
+            Run = (a, _) =>
+            {
+                var hits = SearchChats(p, conv, a["query"]?.ToString() ?? "", p.Knowledge.TopK);
+                if (hits.Count == 0) return Task.FromResult("No matching passages in the other chats.");
+                foreach (var h in hits) if (!sink.Any(x => x.Text == h.Text)) sink.Add(h);
+                return Task.FromResult(KnowledgePrompt.Context(hits, p.Knowledge.MaxContextChars));
+            }
+        };
+    }
+
+    // ------------------------------------------------------------ the project folder (read-only, nothing outside of it)
+
+    IEnumerable<ToolDef> FolderTools(Project p)
+    {
+        var root = p.Knowledge.Folder?.Trim() ?? "";
+        if (root.Length == 0 || !Directory.Exists(root)) yield break;
+        var limit = Math.Clamp(ToolOpts.ResultChars, 1500, 50000) - 400;
+
+        yield return new ToolDef
+        {
+            Name = "list_project_folder",
+            Label = "Project folder",
+            Description = $"Lists files and sub-folders of the project's folder ({root}) or of a sub-folder of it. Read-only; paths outside this folder are refused.",
+            Parameters = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject { ["path"] = new JsonObject { ["type"] = "string", ["description"] = "Sub-folder relative to the project folder (empty = the folder itself)" } }
+            },
+            Run = (a, _) =>
+            {
+                var full = FolderJail.Resolve(root, a["path"]?.ToString());
+                if (full == null) return Task.FromResult("Refused: the path is outside the project folder.");
+                if (!Directory.Exists(full)) return Task.FromResult("Folder not found.");
+                try
+                {
+                    var rootFull = Path.GetFullPath(root);
+                    var lines = new List<string>();
+                    foreach (var d in Directory.EnumerateDirectories(full).Take(200)) lines.Add("[dir]  " + Path.GetRelativePath(rootFull, d));
+                    foreach (var f in Directory.EnumerateFiles(full).Take(300)) lines.Add($"{Path.GetRelativePath(rootFull, f)}  ({new FileInfo(f).Length / 1024 + 1} KB)");
+                    return Task.FromResult(lines.Count == 0 ? "(empty)" : string.Join("\n", lines));
+                }
+                catch (Exception ex) { return Task.FromResult("Error: " + ex.Message); }
+            }
+        };
+        yield return new ToolDef
+        {
+            Name = "read_project_file",
+            Label = "Read file",
+            Description = "Reads the text of one file inside the project's folder (text, code, pdf, docx, pptx, xlsx). Read-only; paths outside the folder are refused. " +
+                          "For long files pass offset (characters) to continue.",
+            Parameters = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["path"] = new JsonObject { ["type"] = "string", ["description"] = "File path relative to the project folder" },
+                    ["offset"] = new JsonObject { ["type"] = "integer", ["description"] = "Start character (default 0)" }
+                },
+                ["required"] = new JsonArray("path")
+            },
+            Run = (a, _) =>
+            {
+                var full = FolderJail.Resolve(root, a["path"]?.ToString());
+                if (full == null) return Task.FromResult("Refused: the path is outside the project folder.");
+                if (!File.Exists(full)) return Task.FromResult("File not found.");
+                try
+                {
+                    var fi = new FileInfo(full);
+                    if (fi.Length > 50L * 1024 * 1024) return Task.FromResult("File too large.");
+                    var text = KnowledgeText.Extract(fi.Name, File.ReadAllBytes(full));
+                    if (text == null) return Task.FromResult("This file has no readable text.");
+                    var off = a["offset"] is JsonNode n && int.TryParse(n.ToString(), out var o) ? Math.Clamp(o, 0, text.Length) : 0;
+                    var part = text.Substring(off, Math.Min(limit, text.Length - off));
+                    var end = off + part.Length;
+                    var head = $"{fi.Name}: characters {off}-{end} of {text.Length}." + (end < text.Length ? $" Call again with offset={end} for the rest." : " (end of file)");
+                    return Task.FromResult(head + "\n\n" + part);
+                }
+                catch (Exception ex) { return Task.FromResult("Error: " + ex.Message); }
+            }
+        };
+    }
 }

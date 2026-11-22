@@ -846,5 +846,11 @@ public static class Translations
         ["📚 در حال جستجو در اسناد پروژه..."] = "📚 Searching the project's documents...",
         ["جستجو در اسناد پروژه ناموفق بود: "] = "Searching the project's documents failed: ",
         ["منابع اسناد پروژه"] = "Project document sources",
+        ["متن، کد، md، csv، json، html، docx، pdf، pptx و xlsx"] = "Text, code, md, csv, json, html, docx, pdf, pptx and xlsx",
+        ["{0} سند اضافه شد ✓"] = "{0} document(s) added ✓",
+        ["گفتگوهای دیگر و پوشه"] = "Other chats and the folder",
+        ["مدل بتواند گفتگوهای دیگر این پروژه را فهرست، جستجو و بخواند (ابزار)"] = "The model may list, search and read the other chats of this project (tool)",
+        ["در حالت خودکار، تکه‌های مرتبط گفتگوهای دیگر هم اضافه شود"] = "In automatic mode, also add matching passages of the other chats",
+        ["مدل بتواند فایل‌های پوشه را (فقط‌خواندنی و فقط داخل همان پوشه) بخواند"] = "The model may read the files of the folder (read-only, only inside that folder)",
     };
 }
