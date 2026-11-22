@@ -553,13 +553,13 @@ public partial class ChatState
         Notify();
     }
 
-    public void ResetUi() => SetUi(16, 768, 160, "default");
+    public void ResetUi() { ResetStyle(); SetUi(16, 768, 160, "default"); }
 
     public string Theme { get; private set; } = "system";
 
     public void SetTheme(string theme)
     {
-        Theme = theme is "light" or "dark" ? theme : "system";
+        Theme = UiStyleHelper.NormalizeTheme(theme);
         Preferences.Default.Set("theme", Theme);
         Notify();
     }
@@ -621,6 +621,7 @@ public partial class ChatState
         LoadMemoryOpts();
         LoadSummaryOpts();
         LoadVoiceOpts();
+        LoadStyleAndKeys();
         LoadCustomTools();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }

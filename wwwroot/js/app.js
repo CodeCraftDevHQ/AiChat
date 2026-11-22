@@ -33,10 +33,27 @@ window.chat = {
         document.documentElement.setAttribute('lang', lang || 'fa');
     },
 
+    // look: CSS variables (accent colour, bubbles, spacing); a null value removes the variable
+    setStyle(json) {
+        const v = JSON.parse(json);
+        const s = document.documentElement.style;
+        for (const k in v) { if (v[k] === null) s.removeProperty(k); else s.setProperty(k, v[k]); }
+    },
+
+    // keyboard shortcuts: { action: "Ctrl+Shift+O", ... }
+    setKeys(json) {
+        const map = {};
+        const v = JSON.parse(json);
+        for (const a in v) if (v[a]) map[v[a]] = a;
+        window.chat.keyMap = map;
+    },
+
+    focusEl(el) { if (el) el.focus(); },
+
     isDark() {
         const t = document.documentElement.getAttribute('data-theme');
-        if (t === 'dark') return true;
-        if (t === 'light') return false;
+        if (t === 'dark' || t === 'amoled' || t === 'midnight' || t === 'nord') return true;
+        if (t === 'light' || t === 'sepia') return false;
         return window.matchMedia('(prefers-color-scheme: dark)').matches;
     },
 
@@ -759,3 +776,39 @@ window.chat.appendValue = function (el, text) {
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
 };
+
+
+// ---- configurable keyboard shortcuts (same rules as KeyBindings.FromEvent in C#)
+(function () {
+    const CODES = { Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`' };
+    const NAMES = ['Escape', 'Delete', 'Enter', 'Tab', 'Backspace', 'Home', 'End', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Insert'];
+    function combo(e) {
+        const code = e.code || '';
+        let k;
+        if (/^Key[A-Z]$/.test(code)) k = code[3];
+        else if (/^Digit[0-9]$/.test(code)) k = code[5];
+        else if (CODES[code]) k = CODES[code];
+        else if (e.key === ' ') k = 'Space';
+        else if (e.key && e.key.length === 1) k = e.key.toUpperCase();
+        else if (/^F([1-9]|1[0-2])$/.test(e.key)) k = e.key;
+        else if (NAMES.indexOf(e.key) >= 0) k = e.key;
+        else return null;
+        const mods = [];
+        const ctrl = e.ctrlKey || e.metaKey;
+        if (ctrl) mods.push('Ctrl');
+        if (e.altKey) mods.push('Alt');
+        if (e.shiftKey) mods.push('Shift');
+        if (!ctrl && !e.altKey && !/^F\d+$/.test(k)) return null;
+        return mods.concat([k]).join('+');
+    }
+    document.addEventListener('keydown', (e) => {
+        const map = window.chat && window.chat.keyMap;
+        if (!map || !window.chat.dotnet) return;
+        if (e.target && e.target.closest && e.target.closest('[data-keyrec]')) return;   // the shortcut recorder
+        const c = combo(e);
+        const a = c && map[c];
+        if (!a) return;
+        e.preventDefault();
+        window.chat.dotnet.invokeMethodAsync('OnShortcut', a);
+    }, true);
+})();

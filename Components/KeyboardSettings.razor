@@ -1,0 +1,49 @@
+@inherits StateComponent
+
+<p class="muted small">@L["برای هر کار یک میانبر بگذارید: روی کادر کلیک کنید و کلیدها را بزنید (مثلاً Ctrl+Shift+O). Backspace میانبر را خاموش می‌کند. میانبر باید Ctrl یا Alt داشته باشد؛ با صفحه‌کلید فارسی هم کار می‌کند."]</p>
+
+@foreach (var a in KeyBindings.Actions)
+{
+    var act = a;
+    var combo = State.Keys.TryGetValue(act.Id, out var c) ? c : "";
+    <div class="key-row">
+        <span class="key-name" dir="auto">@L[act.Label]</span>
+        <input class="inp key-inp @(_rec == act.Id ? "rec" : "")" data-keyrec dir="ltr" readonly
+               value="@(_rec == act.Id ? L["کلیدها را بزنید…"] : (combo.Length > 0 ? combo : L["خاموش"]))"
+               @onfocus="() => { _rec = act.Id; _err = null; }" @onblur="() => _rec = null"
+               @onkeydown="e => OnKey(act.Id, e)" @onkeydown:preventDefault />
+        <button class="icon-btn" title="@L["پیش‌فرض"]" @onclick="() => Default(act)">↺</button>
+    </div>
+}
+
+@if (_err != null)
+{
+    <p class="status" dir="auto">⚠ @_err</p>
+}
+
+<button class="btn" style="margin-top:14px" @onclick="State.ResetKeys">@L["بازنشانی همه‌ی میانبرها"]</button>
+<p class="muted small">@L["Ctrl+F (جستجو در گفتگو) و Esc ثابت‌اند."]</p>
+
+@code {
+    string? _rec;
+    string? _err;
+
+    void OnKey(string id, KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") { _rec = null; return; }
+        if ((e.Key == "Backspace" || e.Key == "Delete") && !e.CtrlKey && !e.AltKey && !e.ShiftKey && !e.MetaKey)
+        {
+            _err = State.SetKey(id, "");
+            return;
+        }
+        var combo = KeyBindings.FromEvent(e.Key, e.Code, e.CtrlKey, e.AltKey, e.ShiftKey, e.MetaKey);
+        if (combo == null)
+        {
+            if (e.Key is not ("Control" or "Alt" or "Shift" or "Meta")) _err = L["این ترکیب قابل استفاده نیست (باید Ctrl یا Alt داشته باشد)."];
+            return;
+        }
+        _err = State.SetKey(id, combo);
+    }
+
+    void Default(KeyAction a) => _err = State.SetKey(a.Id, a.Default);
+}

@@ -27,6 +27,7 @@ public static partial class SettingsIndex
         ("mcp", "سرورهای MCP", "model context protocol server stdio connector github filesystem"),
         ("customtools", "ابزارهای من", "custom tools my tools javascript http webhook command prompt template ابزار دلخواه ابزارهای من وب هوک خط فرمان قالب"),
         ("voice", "صدا", "voice speech tts stt read aloud microphone whisper text to speech صدا خواندن میکروفون گفتار تبدیل"),
+        ("keys", "میانبرهای صفحه‌کلید", "keyboard shortcuts hotkeys keys ctrl alt میانبر صفحه کلید کلید"),
         ("localserver", "سرور محلی (API و MCP)", "local server api openai compatible mcp token localhost port visual studio vscode cursor continue سرور محلی توکن پورت برنامه دیگر اتصال"),
         ("cost", "توکن و هزینه", "token cost price usage قیمت هزینه مصرف"),
         ("security", "امنیت و حریم خصوصی", "pin lock password privacy security قفل رمز پین امنیت حریم"),

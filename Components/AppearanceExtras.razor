@@ -1,0 +1,43 @@
+@inherits StateComponent
+
+@{
+    var st = State.Style;
+}
+
+<label id="set280" class="lbl">@L["رنگ اصلی (دکمه‌ها و تأکیدها)"]</label>
+<div class="swatches">
+    <button type="button" class="swatch none @(st.Accent.Length == 0 ? "on" : "")" title="@L["پیش‌فرض"]" @onclick='() => State.SetStyle(s => s.Accent = "")'></button>
+    @foreach (var p in UiStyleHelper.AccentPresets)
+    {
+        var hex = p.Hex;
+        <button type="button" class="swatch @(st.Accent == hex ? "on" : "")" style="background:@hex" title="@p.Name" @onclick="() => State.SetStyle(s => s.Accent = hex)"></button>
+    }
+</div>
+<div class="row">
+    <input type="color" value="@(st.Accent.Length > 0 ? st.Accent : "#10a37f")" @onchange="e => State.SetStyle(s => s.Accent = e.Value?.ToString() ?? string.Empty)" />
+    <input class="inp" dir="ltr" maxlength="7" placeholder="#10a37f" value="@st.Accent" @onchange="e => State.SetStyle(s => s.Accent = e.Value?.ToString() ?? string.Empty)" />
+</div>
+
+<label id="set281" class="lbl">@L["رنگ حباب پیام‌های شما"]</label>
+<div class="row">
+    <input type="color" value="@(st.UserBubble.Length > 0 ? st.UserBubble : "#2f2f2f")" @onchange="e => State.SetStyle(s => s.UserBubble = e.Value?.ToString() ?? string.Empty)" />
+    <input class="inp" dir="ltr" maxlength="7" placeholder="@L["پیش‌فرض تم"]" value="@st.UserBubble" @onchange="e => State.SetStyle(s => s.UserBubble = e.Value?.ToString() ?? string.Empty)" />
+    <button type="button" class="btn sm" @onclick='() => State.SetStyle(s => s.UserBubble = "")'>@L["پیش‌فرض"]</button>
+</div>
+
+<label id="set282" class="lbl">@L["گردی گوشه‌ی حباب"]: @st.Radius px</label>
+<input type="range" class="range" min="0" max="32" step="1" value="@st.Radius" @oninput="e => State.SetStyle(s => s.Radius = ToInt(e, 22))" />
+
+<label id="set283" class="lbl">@L["فاصله‌ی داخلی حباب"]</label>
+<AppSelect Title="@L["فاصله‌ی داخلی حباب"]" Value="@st.Pad" ValueChanged="v => State.SetStyle(s => s.Pad = v)"
+           Options="@(new AppSelect.SelectOption[] { new("compact", L["فشرده"]), new("normal", L["معمولی"]), new("roomy", L["گشاد"]) })" />
+
+<label id="set284" class="lbl">@L["فاصله‌ی بین پیام‌ها"]: @st.Gap px</label>
+<input type="range" class="range" min="6" max="48" step="2" value="@st.Gap" @oninput="e => State.SetStyle(s => s.Gap = ToInt(e, 18))" />
+
+<label id="set285" class="lbl">@L["حداکثر عرض حباب پیام شما"]: @st.BubbleMax %</label>
+<input type="range" class="range" min="50" max="100" step="5" value="@st.BubbleMax" @oninput="e => State.SetStyle(s => s.BubbleMax = ToInt(e, 85))" />
+
+@code {
+    static int ToInt(ChangeEventArgs e, int def) => int.TryParse(e.Value?.ToString(), out var n) ? n : def;
+}

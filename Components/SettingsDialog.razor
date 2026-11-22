@@ -76,7 +76,7 @@
 
                             <label id="set2" class="lbl">@L["تم برنامه"]</label>
                             <AppSelect Title="@L["تم برنامه"]" Value="@State.Theme" ValueChanged="State.SetTheme"
-                                       Options="@(new AppSelect.SelectOption[] { new("system", L["مطابق سیستم"]), new("dark", L["تاریک"]), new("light", L["روشن"]) })" />
+                                       Options="@(new AppSelect.SelectOption[] { new("system", L["مطابق سیستم"]), new("dark", L["تاریک"]), new("light", L["روشن"]), new("amoled", L["مشکی کامل (AMOLED)"]), new("midnight", L["نیمه‌شب (آبی تیره)"]), new("nord", "Nord"), new("sepia", L["کاغذی (سپیا)"]) })" />
 
                             <label id="set3" class="check" style="margin-top:18px">
                                 <input type="checkbox" checked="@State.IsRtl" @onchange="OnRtlChanged" />
@@ -101,6 +101,8 @@
                             <label id="set8" class="lbl">@L["قلم"]</label>
                             <AppSelect Title="@L["قلم"]" Value="@State.UiFont" ValueChanged="OnFontChosen"
                                        Options="@(new AppSelect.SelectOption[] { new("default", L["پیش‌فرض"]), new("tahoma", "Tahoma"), new("serif", L["سریف"]), new("mono", L["تک‌فاصله"]) })" />
+
+                            <AppearanceExtras />
 
                             <button class="btn" style="margin-top:20px" @onclick="State.ResetUi">@L["بازنشانی ظاهر"]</button>
                             break;
@@ -554,6 +556,10 @@
                             <VoiceSettings />
                             break;
 
+                        case "keys":
+                            <KeyboardSettings />
+                            break;
+
                         case "localserver":
                             <LocalServerSettings />
                             break;
@@ -897,6 +903,7 @@ else if (_dlg == 2)
     {
         new SectionItem("general", L["عمومی"]),
         new SectionItem("appearance", L["ظاهر"]),
+        new SectionItem("keys", L["میانبرهای صفحه‌کلید"]),
         new SectionItem("api", L["API ها"]),
         new SectionItem("chat", L["گفتگو"]),
         new SectionItem("answer", L["پاسخ مدل"]),

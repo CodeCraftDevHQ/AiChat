@@ -618,6 +618,18 @@
             await JS.InvokeVoidAsync("chat.setUi", State.UiFontSize, State.UiWidth, State.UiLineHeight, State.UiFont);
         }
 
+        if (_appliedStyle != State.StyleSignature)
+        {
+            _appliedStyle = State.StyleSignature;
+            await JS.InvokeVoidAsync("chat.setStyle", _appliedStyle);
+        }
+
+        if (_appliedKeys != State.KeysSignature)
+        {
+            _appliedKeys = State.KeysSignature;
+            await JS.InvokeVoidAsync("chat.setKeys", _appliedKeys);
+        }
+
         if (_appliedTheme != State.Theme)
         {
             _appliedTheme = State.Theme;
@@ -632,6 +644,26 @@
         if (State.IsStreaming || force)
             await JS.InvokeVoidAsync("chat.scroll", "messages", force);
     }
+
+    string? _appliedStyle, _appliedKeys;
+
+    [JSInvokable]
+    public Task OnShortcut(string action) => InvokeAsync(async () =>
+    {
+        switch (action)
+        {
+            case "newchat": State.NewChat(); break;
+            case "settings": State.OpenSettings(); break;
+            case "sidebar": State.ToggleSidebar(); break;
+            case "focus": await JS.InvokeVoidAsync("chat.focusEl", _input); break;
+            case "stop": State.Stop(); break;
+            case "regenerate": if (State.Active != null && !State.IsStreaming) await State.RegenerateAsync(); break;
+            case "theme": await ToggleTheme(); break;
+            case "prompts": State.OpenPrompts(); break;
+            case "gallery": State.OpenGallery(); break;
+            case "compare": State.OpenCompare(); break;
+        }
+    });
 
     [JSInvokable]
     public Task OnEnter() => InvokeAsync(SendClick);
