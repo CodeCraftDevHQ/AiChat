@@ -1,0 +1,90 @@
+@inherits StateComponent
+@inject IJSRuntime JS
+
+<div class="model-field">
+    <input class="inp" dir="ltr" placeholder="@Placeholder" value="@Value" @onchange="e => ValueChanged.InvokeAsync(e.Value?.ToString()?.Trim() ?? string.Empty)" />
+    <button type="button" class="icon-btn" title="@L["انتخاب از فهرست"]" disabled="@(Options.Count == 0)" @onclick="Open">▾</button>
+</div>
+
+@if (_open)
+{
+    var items = Filtered();
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="sheet" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>@L["مدل"]</strong>
+                <button type="button" class="icon-btn sm" title="@L["بستن"]" @onclick="Close">✕</button>
+            </div>
+            <input @ref="_inp" class="inp sheet-search" dir="auto" placeholder="@L["جست‌وجو..."]" value="@_filter"
+                   @oninput="e => _filter = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
+            <div class="sheet-list">
+                @if (items.Count == 0)
+                {
+                    <div class="sheet-empty">@L["نتیجه‌ای پیدا نشد"]</div>
+                }
+                @foreach (var m in items)
+                {
+                    var model = m;
+                    <button type="button" class="sheet-item @(model == Value ? "current" : "")" dir="ltr" @onclick="() => Pick(model)">
+                        <span>@model</span>@if (model == Value) { <span>✓</span> }
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<string> Options { get; set; } = Array.Empty<string>();
+    [Parameter] public string? Placeholder { get; set; }
+
+    bool _open, _focus;
+    string _filter = "";
+    ElementReference _inp;
+
+    List<string> Filtered()
+    {
+        var q = _filter.Trim();
+        return q.Length == 0 ? Options.ToList() : Options.Where(o => o.Contains(q, StringComparison.CurrentCultureIgnoreCase)).ToList();
+    }
+
+    void Open()
+    {
+        _open = true; _filter = ""; _focus = true;
+        State.PushBack(CloseFromBack);
+    }
+
+    void CloseFromBack() { _open = false; InvokeAsync(StateHasChanged); }
+
+    void Close() { _open = false; State.RemoveBack(CloseFromBack); }
+
+    async Task Pick(string m)
+    {
+        Close();
+        await ValueChanged.InvokeAsync(m);
+    }
+
+    void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        var first = Filtered().FirstOrDefault();
+        if (first != null) _ = Pick(first);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_open && _focus)
+        {
+            _focus = false;
+            try { await JS.InvokeVoidAsync("chat.focusEl", _inp); } catch { }
+        }
+    }
+
+    public override void Dispose()
+    {
+        State.RemoveBack(CloseFromBack);
+        base.Dispose();
+    }
+}

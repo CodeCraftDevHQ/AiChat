@@ -1007,5 +1007,10 @@ public static class Translations
         ["حذف"] = "Delete",
         ["تغییر نام"] = "Rename",
         ["بستن"] = "Close",
+        ["جست‌وجو..."] = "Search...",
+        ["نوع"] = "Type",
+        ["مدل"] = "Model",
+        ["خطای محدودیت (429)"] = "Rate-limit error (429)",
+        ["انتخاب از فهرست"] = "Pick from list",
     };
 }

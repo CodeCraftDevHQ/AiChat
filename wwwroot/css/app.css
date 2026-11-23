@@ -957,3 +957,13 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .tpl-info { display: flex; flex-direction: column; min-width: 0; }
 .tpl-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-foot { padding: 8px 14px; border-top: 1px solid var(--border); }
+
+/* composer menus open right above their own button */
+.menu-anchor { position: relative; display: flex; align-self: flex-end; margin-inline-start: -10px; }
+.menu-anchor > .attach { margin-inline-start: 0 !important; }
+.menu-anchor > .menu { position: absolute; top: auto; bottom: calc(100% + 10px); inset-inline-start: 0; inset-inline-end: auto; left: auto; right: auto; width: max-content; max-width: min(320px, 86vw); }
+[dir="rtl"] .menu-anchor > .menu, .rtl .menu-anchor > .menu { inset-inline-start: 0; }
+.cmp-pick > * { flex: 1 1 120px; min-width: 0; }
+.select-btn:disabled { opacity: .55; cursor: default; }
+.model-field { display: flex; gap: 4px; align-items: center; }
+.model-field .inp { flex: 1; min-width: 0; }

@@ -122,11 +122,8 @@
                         </label>
                         <label>
                             <span>@L["وقتی خطای محدودیت (429) آمد"]</span>
-                            <select class="inp" value="@State.TestLimitMode" @onchange="OnLimitMode">
-                                <option value="0">@L["فقط همان مدل را ⏳ کن و تست ادامه یابد (پیشنهادی)"]</option>
-                                <option value="1">@L["کل تست صبر کند تا محدودیت تمام شود و ادامه دهد"]</option>
-                                <option value="2">@L["تست متوقف شود"]</option>
-                            </select>
+                            <AppSelect Title="@L["خطای محدودیت (429)"]" Value="@State.TestLimitMode.ToString()" ValueChanged="OnLimitMode" Searchable="false"
+                                       Options="LimitOptions()" />
                         </label>
                         <label>
                             <span>@L["کلیدواژه‌های محدودیتِ خودِ مدل (همیشه فقط همان مدل را ⏳ می‌کند)"]</span>
@@ -207,7 +204,14 @@
     string CountText(List<string> all, string filter) =>
         filter == "all" ? $"({all.Count})" : $"({all.Count(m => Matches(m, filter))})";
 
-    void OnLimitMode(ChangeEventArgs e) => State.TestLimitMode = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+    void OnLimitMode(string v) => State.TestLimitMode = int.TryParse(v, out var n) ? n : 0;
+
+    AppSelect.SelectOption[] LimitOptions() => new AppSelect.SelectOption[]
+    {
+        new("0", L["فقط همان مدل را ⏳ کن و تست ادامه یابد (پیشنهادی)"]),
+        new("1", L["کل تست صبر کند تا محدودیت تمام شود و ادامه دهد"]),
+        new("2", L["تست متوقف شود"]),
+    };
 
     void SetFilter(string k) => State.TestFilter = k;
 

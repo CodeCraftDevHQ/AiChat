@@ -69,12 +69,8 @@ else
             var par = p;
             <div class="ct-param">
                 <input class="inp" dir="ltr" placeholder="name" value="@par.Name" @oninput="e => { par.Name = e.Value?.ToString() ?? string.Empty; }" />
-                <select class="inp" @onchange="e => { par.Type = e.Value?.ToString() ?? string.Empty; }">
-                    @foreach (var ty in new[] { "string", "number", "integer", "boolean" })
-                    {
-                        <option value="@ty" selected="@(par.Type == ty)">@ty</option>
-                    }
-                </select>
+                <AppSelect Title="@L["نوع"]" Value="@par.Type" ValueChanged="v => par.Type = v"
+                           Options="TypeOptions" />
                 <input class="inp" dir="auto" placeholder="@L["توضیح"]" value="@par.Description" @oninput="e => { par.Description = e.Value?.ToString() ?? string.Empty; }" />
                 <label class="chk"><input type="checkbox" checked="@par.Required" @onchange="e => { par.Required = e.Value is true; }" /> @L["الزامی"]</label>
                 <button class="icon-btn sm" @onclick="() => { t.Params.Remove(par); }">✕</button>
@@ -91,12 +87,10 @@ else
         {
             <label id="set237" class="lbl">@L["درخواست HTTP"]</label>
             <div class="row-btns">
-                <select class="inp" style="max-width:110px" @onchange="e => { t.Method = e.Value?.ToString() ?? string.Empty; }">
-                    @foreach (var m in new[] { "GET", "POST", "PUT", "PATCH", "DELETE" })
-                    {
-                        <option value="@m" selected="@(t.Method.Equals(m, StringComparison.OrdinalIgnoreCase))">@m</option>
-                    }
-                </select>
+                <div style="min-width:110px">
+                    <AppSelect Title="HTTP" Value="@t.Method.ToUpperInvariant()" ValueChanged="v => t.Method = v"
+                               Options="MethodOptions" />
+                </div>
                 <input class="inp" dir="ltr" placeholder="https://api.example.com/search?q={{q}}" value="@t.Url" @oninput="e => { t.Url = e.Value?.ToString() ?? string.Empty; }" />
             </div>
             <p class="muted small">@L["در آدرس، {{name}} خودکار URL-encode می‌شود؛ در هدر و بدنه همان متن است. {{json:name}} = رشته‌ی JSON، {{raw:name}} = بدون تغییر."]</p>
@@ -152,6 +146,12 @@ else
 }
 
 @code {
+    static readonly AppSelect.SelectOption[] TypeOptions =
+        new[] { "string", "number", "integer", "boolean" }.Select(ty => new AppSelect.SelectOption(ty, ty)).ToArray();
+
+    static readonly AppSelect.SelectOption[] MethodOptions =
+        new[] { "GET", "POST", "PUT", "PATCH", "DELETE" }.Select(m => new AppSelect.SelectOption(m, m)).ToArray();
+
     CustomTool? _edit;
     bool _isNew;
     string _json = "";

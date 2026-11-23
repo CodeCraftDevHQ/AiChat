@@ -26,18 +26,12 @@
                         if (!string.IsNullOrWhiteSpace(s.Model) && !models.Contains(s.Model)) models.Insert(0, s.Model);
                         <div class="cmp-col">
     <div class="cmp-pick">
-        <select class="inp" disabled="@State.Compare!.Running" @onchange="e => State.SetCompareProvider(s, e.Value?.ToString() ?? string.Empty)">
-            @foreach (var pr in State.Providers)
-            {
-                <option value="@pr.Id" selected="@(pr.Id == s.ProviderId)">@pr.Name</option>
-            }
-        </select>
-        <select class="inp" dir="ltr" disabled="@State.Compare!.Running" @onchange="e => State.SetCompareModel(s, e.Value?.ToString() ?? string.Empty)">
-            @foreach (var m in models)
-            {
-                <option value="@m" selected="@(m == s.Model)">@m</option>
-            }
-        </select>
+        <AppSelect Title="API" Disabled="@State.Compare!.Running" Value="@s.ProviderId" ValueChanged="v => State.SetCompareProvider(s, v)"
+                   Options="State.Providers.Select(pr => new AppSelect.SelectOption(pr.Id, pr.Name)).ToArray()" />
+        <div dir="ltr">
+            <AppSelect Title="@L["مدل"]" Disabled="@State.Compare!.Running" Value="@s.Model" ValueChanged="v => State.SetCompareModel(s, v)"
+                       Options="models.Select(m => new AppSelect.SelectOption(m, m)).ToArray()" Searchable="true" />
+        </div>
     </div>
     <div class="cmp-out" dir="auto">
         @if (s.Error != null)

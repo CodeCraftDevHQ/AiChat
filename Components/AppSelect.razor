@@ -1,6 +1,7 @@
 @inherits StateComponent
+@inject IJSRuntime JS
 
-<button type="button" class="inp select-btn" @onclick="Open">
+<button type="button" class="inp select-btn" disabled="@Disabled" @onclick="Open">
     <span class="sel-label" dir="auto">@CurrentLabel</span>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
 </button>
@@ -13,8 +14,17 @@
                 <strong>@Title</strong>
                 <button type="button" class="icon-btn sm" title="@L["بستن"]" @onclick="Close">✕</button>
             </div>
+            @if (ShowSearch)
+            {
+                <input @ref="_inp" class="inp sheet-search" dir="auto" placeholder="@L["جست‌وجو..."]" value="@_filter"
+                       @oninput="e => _filter = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
+            }
             <div class="sheet-list">
-                @foreach (var o in Options)
+                @if (!string.IsNullOrWhiteSpace(_filter) && Filtered().Count == 0)
+                {
+                    <div class="sheet-empty">@L["نتیجه‌ای پیدا نشد"]</div>
+                }
+                @foreach (var o in Filtered())
                 {
                     var value = o.Value;
                     <button type="button" class="sheet-item @(value == Value ? "current" : "")" dir="auto" @onclick="() => Pick(value)">
@@ -35,13 +45,48 @@
     [Parameter] public string? Title { get; set; }
     [Parameter] public string? Placeholder { get; set; }
 
+    /// <summary>null = show the search box automatically when the list is long.</summary>
+    [Parameter] public bool? Searchable { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
     bool _open;
+    bool _focus;
+    string _filter = "";
+    ElementReference _inp;
+
+    bool ShowSearch => Searchable ?? Options.Count > 7;
+
+    List<SelectOption> Filtered()
+    {
+        var q = _filter.Trim();
+        if (q.Length == 0) return Options.ToList();
+        return Options.Where(o => o.Label.Contains(q, StringComparison.CurrentCultureIgnoreCase) || o.Value.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        var first = Filtered().FirstOrDefault();
+        if (first != null) _ = Pick(first.Value);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_open && _focus && ShowSearch)
+        {
+            _focus = false;
+            try { await JS.InvokeVoidAsync("chat.focusEl", _inp); } catch { }
+        }
+    }
 
     string CurrentLabel => Options.FirstOrDefault(o => o.Value == Value)?.Label ?? Placeholder ?? "";
 
     void Open()
     {
+        if (Disabled) return;
         _open = true;
+        _filter = "";
+        _focus = true;
         State.PushBack(CloseFromBack);
     }
 

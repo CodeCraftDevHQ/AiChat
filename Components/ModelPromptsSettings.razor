@@ -37,18 +37,10 @@
 }
 
 <label class="lbl">@L["API و مدل"]</label>
-<select class="inp" @onchange="OnProvider">
-    @foreach (var pr in State.Providers)
-    {
-        <option value="@pr.Id" selected="@(pr.Id == _pid)">@pr.Name</option>
-    }
-</select>
-<select class="inp" dir="ltr" style="margin-top:6px" @onchange="OnModel">
-    @foreach (var m in Models())
-    {
-        <option value="@m" selected="@(m == _model)">@m</option>
-    }
-</select>
+<AppSelect Title="API" Value="@_pid" ValueChanged="OnProvider" Options="State.Providers.Select(pr => new AppSelect.SelectOption(pr.Id, pr.Name)).ToArray()" />
+<div style="margin-top:6px" dir="ltr">
+    <AppSelect Title="@L["مدل"]" Value="@_model" ValueChanged="OnModel" Options="Models().Select(m => new AppSelect.SelectOption(m, m)).ToArray()" Searchable="true" />
+</div>
 <input class="inp" dir="ltr" style="margin-top:6px" placeholder="@L["یا نام مدل را بنویسید"]" value="@_model" @onchange="OnModelText" />
 <textarea class="inp" rows="4" dir="auto" style="margin-top:6px" placeholder="@L["دستور برای این مدل..."]" value="@_text" @oninput="e => _text = e.Value?.ToString() ?? string.Empty"></textarea>
 <div class="row">
@@ -81,14 +73,14 @@
         return list;
     }
 
-    void OnProvider(ChangeEventArgs e)
+    void OnProvider(string id)
     {
-        _pid = e.Value?.ToString() ?? "";
+        _pid = id;
         _model = Models().FirstOrDefault() ?? "";
         _text = State.ModelFavs.PromptFor(_pid, _model);
     }
 
-    void OnModel(ChangeEventArgs e) { _model = e.Value?.ToString() ?? ""; _text = State.ModelFavs.PromptFor(_pid, _model); }
+    void OnModel(string m) { _model = m; _text = State.ModelFavs.PromptFor(_pid, _model); }
     void OnModelText(ChangeEventArgs e) { _model = e.Value?.ToString()?.Trim() ?? ""; _text = State.ModelFavs.PromptFor(_pid, _model); }
 
     void Edit(string pid, string model, string text) { _pid = pid; _model = model; _text = text; }

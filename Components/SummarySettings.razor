@@ -19,13 +19,7 @@
     <AppSelect Title="API" Value="@State.SummaryOpts.ProviderId" ValueChanged="OnProvider" Options="ProviderOptions()" />
     @if (!string.IsNullOrEmpty(State.SummaryOpts.ProviderId))
     {
-        <input class="inp" dir="ltr" list="summary-models" placeholder="@L["مدل (خالی = مدل پیش‌فرض API)"]" value="@State.SummaryOpts.Model" @onchange="OnModel" />
-        <datalist id="summary-models">
-            @foreach (var m in State.Providers.FirstOrDefault(x => x.Id == State.SummaryOpts.ProviderId)?.Models ?? new List<string>())
-            {
-                <option value="@m"></option>
-            }
-        </datalist>
+        <ModelField Placeholder="@L["مدل (خالی = مدل پیش‌فرض API)"]" Value="@State.SummaryOpts.Model" ValueChanged="OnModel" Options="ProviderModels()" />
     }
 
     <label id="set114" class="lbl">@L["دستور خلاصه‌سازی (خالی = پیش‌فرض)"]</label>
@@ -43,7 +37,8 @@
     void OnKeep(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var n)) { State.SummaryOpts.KeepLast = Math.Clamp(n, 2, 100); State.SaveSummaryOpts(); } }
     void OnWords(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var n)) { State.SummaryOpts.MaxWords = Math.Clamp(n, 50, 2000); State.SaveSummaryOpts(); } }
     void OnProvider(string id) { State.SummaryOpts.ProviderId = id; State.SummaryOpts.Model = ""; State.SaveSummaryOpts(); }
-    void OnModel(ChangeEventArgs e) { State.SummaryOpts.Model = e.Value?.ToString() ?? string.Empty; State.SaveSummaryOpts(); }
+    void OnModel(string v) { State.SummaryOpts.Model = v; State.SaveSummaryOpts(); }
+    List<string> ProviderModels() => State.Providers.FirstOrDefault(x => x.Id == State.SummaryOpts.ProviderId)?.Models ?? new List<string>();
     void OnPrompt(ChangeEventArgs e) { State.SummaryOpts.Prompt = e.Value?.ToString() ?? string.Empty; State.SaveSummaryOpts(); }
 
     AppSelect.SelectOption[] ProviderOptions() =>

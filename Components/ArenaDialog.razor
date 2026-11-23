@@ -17,18 +17,10 @@
                 <p class="muted small" dir="ltr">A: @State.CurrentProvider?.Name · @State.CurrentModel</p>
 
                 <label class="lbl first">@L["مدل دوم (B)"]</label>
-                <select class="inp" @onchange="OnProvider">
-                    @foreach (var pr in State.Providers)
-                    {
-                        <option value="@pr.Id" selected="@(pr.Id == _provider)">@pr.Name</option>
-                    }
-                </select>
-                <select class="inp" dir="ltr" style="margin-top:6px" @onchange="OnModel">
-                    @foreach (var m in models)
-                    {
-                        <option value="@m" selected="@(m == _model)">@m</option>
-                    }
-                </select>
+                <AppSelect Title="API" Value="@(_provider ?? string.Empty)" ValueChanged="OnProvider" Options="ProviderOpts()" />
+                <div style="margin-top:6px" dir="ltr">
+                    <AppSelect Title="@L["مدل"]" Value="@_model" ValueChanged="OnModel" Options="ModelOpts(models)" Searchable="true" />
+                </div>
             </div>
             <div class="modal-foot">
                 @if (State.ArenaOn)
@@ -60,13 +52,17 @@
         _was = open;
     }
 
-    void OnProvider(ChangeEventArgs e)
+    AppSelect.SelectOption[] ProviderOpts() => State.Providers.Select(p => new AppSelect.SelectOption(p.Id, p.Name)).ToArray();
+
+    static AppSelect.SelectOption[] ModelOpts(List<string> models) => models.Select(m => new AppSelect.SelectOption(m, m)).ToArray();
+
+    void OnProvider(string id)
     {
-        _provider = e.Value?.ToString();
+        _provider = id;
         _model = State.ModelsFor(State.Providers.FirstOrDefault(p => p.Id == _provider)).FirstOrDefault() ?? "";
     }
 
-    void OnModel(ChangeEventArgs e) => _model = e.Value?.ToString() ?? "";
+    void OnModel(string m) => _model = m;
 
     void Apply() => State.SetArena(_provider, _model);
 }

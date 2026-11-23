@@ -15,13 +15,7 @@
         <AppSelect Title="API" Value="@(_edit.ProviderId ?? string.Empty)" ValueChanged="OnProvider" Options="ProviderOptions()" />
         @if (!string.IsNullOrEmpty(_edit.ProviderId))
         {
-            <input class="inp" dir="ltr" list="tpl-models" placeholder="@L["مدل (خالی = مدل پیش‌فرض API)"]" value="@_edit.Model" @onchange="e => _edit.Model = e.Value?.ToString() ?? string.Empty" />
-            <datalist id="tpl-models">
-                @foreach (var m in State.Providers.FirstOrDefault(x => x.Id == _edit.ProviderId)?.Models ?? new List<string>())
-                {
-                    <option value="@m"></option>
-                }
-            </datalist>
+            <ModelField Placeholder="@L["مدل (خالی = مدل پیش‌فرض API)"]" Value="@_edit.Model" ValueChanged="v => _edit.Model = v" Options="ProviderModels()" />
         }
 
         <label class="lbl">@L["ابزارها"]</label>
@@ -121,6 +115,8 @@ else
         State.CloseSettings();
         State.NewChatFromTemplate(t);
     }
+
+    List<string> ProviderModels() => State.Providers.FirstOrDefault(x => x.Id == _edit?.ProviderId)?.Models ?? new List<string>();
 
     void Save()
     {
