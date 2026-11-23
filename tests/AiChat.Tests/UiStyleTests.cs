@@ -55,7 +55,7 @@ public class UiStyleTests
     [Fact]
     public void Values_are_kept_in_range()
     {
-        var s = UiStyleHelper.Normalize(new UiStyle { Radius = 99, Gap = 1, BubbleMax = 10, Pad = "x", Accent = "bad" });
+        var s = UiStyleHelper.Normalize(new UiStyle { Radius = 99, Gap = 1, BubbleMax = 10, Pad = "x", Accent = "not a colour" });
         Assert.Equal((32, 6, 50, "normal", ""), (s.Radius, s.Gap, s.BubbleMax, s.Pad, s.Accent));
     }
 

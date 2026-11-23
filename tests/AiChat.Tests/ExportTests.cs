@@ -87,7 +87,7 @@ public class ExportTests
         using var zip = new ZipArchive(new MemoryStream(bytes));
         var xml = new StreamReader(zip.GetEntry("word/document.xml")!.Open()).ReadToEnd();
         var doc = System.Xml.Linq.XDocument.Parse(xml);
-        Assert.DoesNotContain("\u0001", xml);
+        Assert.False(xml.Contains('\u0001')); // char overload: the string overload is culture-sensitive and ignores control characters
         System.Xml.Linq.XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
         var text = string.Concat(doc.Descendants(w + "t").Select(t => t.Value));
         Assert.Contains("5 < 6 & 7 > 3", text);

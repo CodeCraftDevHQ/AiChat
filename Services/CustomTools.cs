@@ -78,10 +78,12 @@ public static class ToolTemplate
             return mode switch
             {
                 "url" => Uri.EscapeDataString(text),
-                "json" => JsonSerializer.Serialize(text),
+                "json" => JsonSerializer.Serialize(text, JsonRelaxed),
                 _ => text
             };
         });
+
+    static readonly JsonSerializerOptions JsonRelaxed = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>Names used in {{...}} slots.</summary>
     public static List<string> Slots(string template) =>
