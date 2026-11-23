@@ -45,6 +45,7 @@
 		<Compile Include="..\..\Services\AppCatalog.cs" Link="App\AppCatalog.cs" />
 		<Compile Include="..\..\Services\UiStyle.cs" Link="App\UiStyle.cs" />
 		<Compile Include="..\..\Services\ModelFav.cs" Link="App\ModelFav.cs" />
+		<Compile Include="..\..\Services\ChatTags.cs" Link="App\ChatTags.cs" />
 		<Compile Include="..\..\Services\CustomTools.cs" Link="App\CustomTools.cs" />
 		<Compile Include="..\..\Services\CodeRun.cs" Link="App\CodeRun.cs" />
 		<Compile Include="..\..\Services\Export.cs" Link="App\Export.cs" />

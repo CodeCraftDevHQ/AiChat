@@ -270,6 +270,12 @@ public class Conversation
     /// <summary>Settings of this chat only (null = none).</summary>
     public GenSettings? Gen { get; set; }
 
+    /// <summary>Labels of this chat (used to filter the chat list).</summary>
+    public List<string> Tags { get; set; } = new();
+
+    /// <summary>null = follow persona / global setting, true / false = tools on / off in this chat (set by chat templates).</summary>
+    public bool? Tools { get; set; }
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Title { get; set; } = "گفتگوی جدید";
     public string? ProviderId { get; set; }

@@ -28,6 +28,7 @@ public static partial class SettingsIndex
         ("customtools", "ابزارهای من", "custom tools my tools javascript http webhook command prompt template ابزار دلخواه ابزارهای من وب هوک خط فرمان قالب"),
         ("voice", "صدا", "voice speech tts stt read aloud microphone whisper text to speech صدا خواندن میکروفون گفتار تبدیل"),
         ("favmodels", "مدل‌های محبوب و پرامپت مدل‌ها", "favorite models quick switch model prompt system prompt per model star محبوب مدل ستاره تعویض سریع پرامپت هر مدل"),
+        ("templates", "قالب‌ها و برچسب‌های گفتگو", "chat templates tags labels filter persona preset قالب گفتگو برچسب لیبل فیلتر شخصیت"),
         ("keys", "میانبرهای صفحه‌کلید", "keyboard shortcuts hotkeys keys ctrl alt میانبر صفحه کلید کلید"),
         ("localserver", "سرور محلی (API و MCP)", "local server api openai compatible mcp token localhost port visual studio vscode cursor continue سرور محلی توکن پورت برنامه دیگر اتصال"),
         ("cost", "توکن و هزینه", "token cost price usage قیمت هزینه مصرف"),

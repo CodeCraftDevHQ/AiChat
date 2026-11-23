@@ -6,6 +6,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
             <span>@L["گفتگوی جدید"]</span>
         </button>
+        <button class="icon-btn" title="@L["گفتگو از روی قالب"]" @onclick="State.OpenTemplatePicker">📋</button>
         <button class="icon-btn sel-toggle @(_select ? "on" : "")" title="@L["انتخاب چند گفتگو"]" @onclick="ToggleSelect">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="m8 12 3 3 5-6" /></svg>
         </button>
@@ -61,10 +62,26 @@
         </div>
     </div>
 
+    @if (State.AllTags.Count > 0)
+    {
+        <div class="sb-tags">
+            @foreach (var tg in State.AllTags)
+            {
+                var tag = tg.Tag;
+                <button class="tag-chip pick @(State.ActiveTagFilter.Contains(tag, StringComparer.CurrentCultureIgnoreCase) ? "on" : "")" style="@TagDialog.ChipStyle(tag)" dir="auto"
+                        title="@tg.Count" @onclick="() => State.ToggleTagFilter(tag)">#@tag</button>
+            }
+            @if (State.ActiveTagFilter.Count > 0)
+            {
+                <button class="tag-chip clear" title="@L["پاک کردن فیلتر"]" @onclick="State.ClearTagFilter">✕</button>
+            }
+        </div>
+    }
+
     <div class="sb-list">
         @if (Searching)
         {
-            var hits = State.SearchConversations(_query, State.SidebarSearchInContent);
+            var hits = State.SearchConversations(_query, State.SidebarSearchInContent).Where(h => State.PassTagFilter(h.Conv)).ToList();
             if (hits.Count == 0)
             {
                 <div class="sb-empty muted">@L["نتیجه‌ای پیدا نشد"]</div>
@@ -159,6 +176,10 @@
                     }
                     <span class="title" dir="auto" title="@L["برای تغییر نام دوبار کلیک کنید"]"
                           @ondblclick="() => StartRename(conv)">@conv.Title</span>
+                    @foreach (var tg in conv.Tags.Take(3))
+                    {
+                        <span class="tag-dot" style="@TagDialog.ChipStyle(tg)" title="@tg"></span>
+                    }
                     @if (_confirmId == conv.Id)
                     {
                         <button class="del confirm" @onclick="() => Delete(conv)" @onclick:stopPropagation="true">@L["حذف؟"]</button>
@@ -183,11 +204,13 @@
     @if (_menuConv != null)
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
-        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 260px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 330px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
             <button @onclick="SummarizeFromMenu">@L["خلاصه‌سازی همین حالا"]</button>
             <button @onclick="ExportFromMenu">@L["خروجی گرفتن از گفتگو..."]</button>
             <button @onclick="SuggestMemoryFromMenu">@L["پیشنهاد حافظه از این گفتگو"]</button>
             <button @onclick="StartSelectFromMenu">@L["انتخاب چند گفتگو"]</button>
+            <button @onclick="TagsFromMenu">@L["برچسب‌ها..."]</button>
+            <button @onclick="SaveTemplateFromMenu">@L["ذخیره به‌عنوان قالب"]</button>
             <button @onclick="PinFromMenu">@(_menuConv.Pinned ? L["برداشتن پین"] : L["پین کردن"])</button>
             <button @onclick="RenameFromMenu">@L["تغییر نام"]</button>
             <button @onclick="ConvSettingsFromMenu">@L["تنظیمات پاسخ این گفتگو"]</button>
@@ -266,6 +289,14 @@
 
     List<Row> BuildRows()
     {
+        var filter = State.ActiveTagFilter;
+        if (filter.Count > 0)
+        {
+            var rs = new List<Row> { new("header", "🏷 " + string.Join(" + ", filter.Select(t => "#" + t))) };
+            rs.AddRange(State.Conversations.Where(c => State.PassTagFilter(c)).Select(c => new Row("conv", Conv: c)));
+            return rs;
+        }
+
         var rows = new List<Row> { new("projhead") };
 
         foreach (var p in State.Projects)
@@ -427,6 +458,20 @@
         _menuConv = null;
         _menuProj = null;
         _moveOpen = false;
+    }
+
+    void TagsFromMenu()
+    {
+        var c = _menuConv;
+        CloseMenu();
+        if (c != null) State.OpenTagEdit(c);
+    }
+
+    void SaveTemplateFromMenu()
+    {
+        var c = _menuConv;
+        CloseMenu();
+        if (c != null) State.SaveChatAsTemplate(c);
     }
 
     async Task PinFromMenu()

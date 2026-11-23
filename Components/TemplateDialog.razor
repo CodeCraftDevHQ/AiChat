@@ -1,0 +1,53 @@
+@inherits StateComponent
+
+@if (State.TemplatePickerOpen)
+{
+    <div class="modal-backdrop" @onclick="State.CloseTemplatePicker">
+        <div class="sheet wide" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>📋 @L["گفتگو از روی قالب"]</strong>
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="State.CloseTemplatePicker">✕</button>
+            </div>
+            <div class="sheet-list">
+                @if (State.Templates.Count == 0)
+                {
+                    <div class="sheet-empty" dir="auto">@L["هنوز قالبی ندارید. از منوی هر گفتگو «ذخیره به‌عنوان قالب» را بزنید یا در تنظیمات قالب بسازید."]</div>
+                }
+                @foreach (var t in State.Templates)
+                {
+                    var tpl = t;
+                    <button class="sheet-item tpl-item" dir="auto" @onclick="() => State.NewChatFromTemplate(tpl)">
+                        <span class="tpl-ico">@tpl.Icon</span>
+                        <span class="tpl-info"><strong>@tpl.Name</strong><small class="muted">@Summary(tpl)</small></span>
+                    </button>
+                }
+            </div>
+            <div class="sheet-foot">
+                <button class="btn sm" @onclick="Manage">⚙ @L["مدیریت قالب‌ها"]</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    void Manage()
+    {
+        State.CloseTemplatePicker();
+        State.OpenSettingsAt("templates");
+    }
+
+    string Summary(ChatTemplate t)
+    {
+        var parts = new List<string>();
+        var persona = State.Personas.FirstOrDefault(p => p.Id == t.PersonaId);
+        if (persona != null) parts.Add(persona.Icon + " " + persona.Name);
+        var prov = State.Providers.FirstOrDefault(p => p.Id == t.ProviderId);
+        if (prov != null) parts.Add(prov.Name + (string.IsNullOrEmpty(t.Model) ? "" : " · " + t.Model));
+        if (t.Tools != null) parts.Add(t.Tools.Value ? "🔧 on" : "🔧 off");
+        if (t.Memory != null) parts.Add(t.Memory.Value ? "🧠 on" : "🧠 off");
+        var proj = State.Projects.FirstOrDefault(p => p.Id == t.ProjectId);
+        if (proj != null) parts.Add("📁 " + proj.Name);
+        if (t.Tags.Count > 0) parts.Add(string.Join(" ", t.Tags.Select(x => "#" + x)));
+        return string.Join(" · ", parts);
+    }
+}

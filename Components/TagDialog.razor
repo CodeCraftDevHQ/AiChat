@@ -1,0 +1,79 @@
+@inherits StateComponent
+@inject IJSRuntime JS
+
+@if (State.TagEditTarget is { } conv)
+{
+    var others = State.AllTags.Where(t => !ChatTags.Has(conv.Tags, t.Tag)).Take(12).ToList();
+    <div class="modal-backdrop" @onclick="State.CloseTagEdit">
+        <div class="sheet" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>🏷 @L["برچسب‌های گفتگو"]</strong>
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="State.CloseTagEdit">✕</button>
+            </div>
+            <p class="muted small" dir="auto" style="padding:0 14px">@conv.Title</p>
+            <div class="tag-list">
+                @if (conv.Tags.Count == 0)
+                {
+                    <span class="muted small">@L["هنوز برچسبی ندارد."]</span>
+                }
+                @foreach (var t in conv.Tags.ToList())
+                {
+                    var tag = t;
+                    <span class="tag-chip" style="@ChipStyle(tag)" dir="auto">@tag
+                        <button class="tag-x" title="@L["حذف"]" @onclick="() => State.RemoveTagAsync(conv, tag)">✕</button></span>
+                }
+            </div>
+            <div class="tag-add">
+                <input @ref="_inp" class="inp" dir="auto" maxlength="@ChatTags.MaxLength" placeholder="@L["برچسب جدید... (Enter)"]"
+                       value="@_text" @oninput="e => _text = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKey" />
+                <button class="btn sm" disabled="@(ChatTags.Normalize(_text).Length == 0)" @onclick="Add">+</button>
+            </div>
+            @if (others.Count > 0)
+            {
+                <div class="muted small" style="padding:4px 14px 0">@L["برچسب‌های موجود"]</div>
+                <div class="tag-list">
+                    @foreach (var o in others)
+                    {
+                        var tag = o.Tag;
+                        <button class="tag-chip pick" style="@ChipStyle(tag)" dir="auto" @onclick="() => State.AddTagAsync(conv, tag)">+ @tag</button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    ElementReference _inp;
+    string _text = "";
+    string? _lastId;
+
+    public static string ChipStyle(string tag) =>
+        $"--tag-h:{ChatTags.Hue(tag)}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var id = State.TagEditTarget?.Id;
+        if (id != null && id != _lastId)
+        {
+            _lastId = id;
+            _text = "";
+            await JS.InvokeVoidAsync("chat.focusEl", _inp);
+        }
+        else if (id == null) _lastId = null;
+    }
+
+    async Task Add()
+    {
+        var conv = State.TagEditTarget;
+        if (conv == null) return;
+        var t = _text;
+        _text = "";
+        await State.AddTagAsync(conv, t);
+    }
+
+    async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Add();
+    }
+}

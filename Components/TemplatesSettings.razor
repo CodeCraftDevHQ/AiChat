@@ -1,0 +1,188 @@
+@inherits StateComponent
+
+@if (_edit != null)
+{
+    <div class="persona-edit">
+        <div class="row">
+            <input class="inp persona-icon" maxlength="4" value="@_edit.Icon" @onchange="e => _edit.Icon = e.Value?.ToString() ?? string.Empty" />
+            <input class="inp" dir="auto" placeholder="@L["نام قالب"]" value="@_edit.Name" @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
+        </div>
+
+        <label class="lbl">@L["شخصیت"]</label>
+        <AppSelect Title="@L["شخصیت"]" Value="@(_edit.PersonaId ?? string.Empty)" ValueChanged="v => _edit.PersonaId = v.Length == 0 ? null : v" Options="PersonaOptions()" />
+
+        <label class="lbl">@L["API و مدل (اختیاری)"]</label>
+        <AppSelect Title="API" Value="@(_edit.ProviderId ?? string.Empty)" ValueChanged="OnProvider" Options="ProviderOptions()" />
+        @if (!string.IsNullOrEmpty(_edit.ProviderId))
+        {
+            <input class="inp" dir="ltr" list="tpl-models" placeholder="@L["مدل (خالی = مدل پیش‌فرض API)"]" value="@_edit.Model" @onchange="e => _edit.Model = e.Value?.ToString() ?? string.Empty" />
+            <datalist id="tpl-models">
+                @foreach (var m in State.Providers.FirstOrDefault(x => x.Id == _edit.ProviderId)?.Models ?? new List<string>())
+                {
+                    <option value="@m"></option>
+                }
+            </datalist>
+        }
+
+        <label class="lbl">@L["ابزارها"]</label>
+        <AppSelect Title="@L["ابزارها"]" Value="@Tri(_edit.Tools)" ValueChanged="v => _edit.Tools = TriBack(v)" Options="TriOptions()" />
+
+        <label class="lbl">@L["حافظه‌ی بلندمدت"]</label>
+        <AppSelect Title="@L["حافظه‌ی بلندمدت"]" Value="@Tri(_edit.Memory)" ValueChanged="v => _edit.Memory = TriBack(v)" Options="TriOptions()" />
+
+        <label class="lbl">@L["پروژه"]</label>
+        <AppSelect Title="@L["پروژه"]" Value="@(_edit.ProjectId ?? string.Empty)" ValueChanged="v => _edit.ProjectId = v.Length == 0 ? null : v" Options="ProjectOptions()" />
+
+        <label class="lbl">@L["دستور سیستمی اضافه (اختیاری)"]</label>
+        <textarea class="inp" rows="4" dir="auto" value="@_edit.Prompt" @oninput="e => _edit.Prompt = e.Value?.ToString() ?? string.Empty"></textarea>
+
+        <label class="lbl">@L["برچسب‌ها (با ویرگول جدا کنید)"]</label>
+        <input class="inp" dir="auto" value="@_tagsText" @oninput="e => _tagsText = e.Value?.ToString() ?? string.Empty" />
+
+        <div class="row">
+            <button class="primary" disabled="@(string.IsNullOrWhiteSpace(_edit.Name))" @onclick="Save">@L["ذخیره"]</button>
+            <button class="btn" @onclick="() => _edit = null">@L["انصراف"]</button>
+        </div>
+    </div>
+}
+else
+{
+    <p id="set300" class="muted small">@L["قالب = شروع آماده‌ی یک گفتگو: شخصیت، API و مدل، ابزارها، حافظه، پروژه، دستور اضافه و برچسب. با دکمه‌ی 📋 بالای فهرست گفتگوها یک گفتگوی تازه از روی قالب بسازید."]</p>
+
+    @if (State.Templates.Count == 0)
+    {
+        <p class="muted">@L["هنوز قالبی ساخته نشده است."]</p>
+    }
+    @foreach (var t in State.Templates)
+    {
+        var tpl = t;
+        <div class="persona-row">
+            <span class="persona-ico">@tpl.Icon</span>
+            <div class="persona-info">
+                <strong dir="auto">@tpl.Name</strong>
+                <small class="muted" dir="auto">@Summary(tpl)</small>
+            </div>
+            <button class="btn sm" @onclick="() => Start(tpl)">@L["شروع"]</button>
+            <button class="btn sm" @onclick="() => Edit(tpl)">@L["ویرایش"]</button>
+            <button class="btn sm" @onclick="() => Duplicate(tpl)">@L["کپی"]</button>
+            <button class="btn sm" @onclick="() => State.DeleteTemplate(tpl.Id)">@L["حذف"]</button>
+        </div>
+    }
+    <div class="row">
+        <button class="primary" @onclick="New">+ @L["قالب جدید"]</button>
+    </div>
+
+    <label id="set301" class="lbl">🏷 @L["مدیریت برچسب‌ها"]</label>
+    <p class="muted small">@L["برچسب را از منوی ⋯ هر گفتگو اضافه کنید. اینجا می‌توانید نام یک برچسب را در همه‌ی گفتگوها عوض کنید یا آن را حذف کنید."]</p>
+    @if (State.AllTags.Count == 0)
+    {
+        <p class="muted">@L["هنوز برچسبی وجود ندارد."]</p>
+    }
+    @foreach (var tg in State.AllTags)
+    {
+        var tag = tg.Tag;
+        <div class="key-row">
+            @if (_renaming == tag)
+            {
+                <input class="inp" dir="auto" maxlength="@ChatTags.MaxLength" value="@_renameText" @oninput="e => _renameText = e.Value?.ToString() ?? string.Empty" />
+                <button class="btn sm" @onclick="CommitRename">@L["ذخیره"]</button>
+                <button class="btn sm" @onclick="() => _renaming = null">@L["انصراف"]</button>
+            }
+            else
+            {
+                <span class="key-name" dir="auto"><span class="tag-chip" style="@TagDialog.ChipStyle(tag)">@tag</span> <small class="muted">@tg.Count</small></span>
+                <button class="btn sm" @onclick="() => StartRename(tag)">@L["تغییر نام"]</button>
+                <button class="icon-btn" title="@L["حذف"]" @onclick="() => State.DeleteTagAsync(tag)">✕</button>
+            }
+        </div>
+    }
+}
+
+@code {
+    ChatTemplate? _edit;
+    string _tagsText = "";
+    string? _renaming;
+    string _renameText = "";
+
+    void New() { _edit = new ChatTemplate(); _tagsText = ""; }
+
+    void Edit(ChatTemplate t) { _edit = t.Copy(); _tagsText = string.Join(", ", t.Tags); }
+
+    void Duplicate(ChatTemplate t)
+    {
+        var c = t.Copy();
+        c.Id = Guid.NewGuid().ToString("N");
+        c.Name += " (2)";
+        State.SaveTemplate(c);
+    }
+
+    void Start(ChatTemplate t)
+    {
+        State.CloseSettings();
+        State.NewChatFromTemplate(t);
+    }
+
+    void Save()
+    {
+        if (_edit == null || string.IsNullOrWhiteSpace(_edit.Name)) return;
+        var tags = new List<string>();
+        foreach (var part in _tagsText.Split(new[] { ',', '،', ';', '؛' }, StringSplitOptions.RemoveEmptyEntries))
+            ChatTags.Add(tags, part);
+        _edit.Tags = tags;
+        State.SaveTemplate(_edit);
+        _edit = null;
+    }
+
+    void OnProvider(string id)
+    {
+        if (_edit == null) return;
+        _edit.ProviderId = id.Length == 0 ? null : id;
+        _edit.Model = "";
+    }
+
+    void StartRename(string tag) { _renaming = tag; _renameText = tag; }
+
+    async Task CommitRename()
+    {
+        var from = _renaming;
+        _renaming = null;
+        if (from != null) await State.RenameTagAsync(from, _renameText);
+    }
+
+    static string Tri(bool? v) => v == null ? string.Empty : (v.Value ? "1" : "0");
+    static bool? TriBack(string v) => string.IsNullOrEmpty(v) ? null : v == "1";
+
+    AppSelect.SelectOption[] TriOptions() => new AppSelect.SelectOption[]
+    {
+        new(string.Empty, L["طبق شخصیت / تنظیمات عمومی"]),
+        new("1", L["روشن"]),
+        new("0", L["خاموش"]),
+    };
+
+    AppSelect.SelectOption[] PersonaOptions() =>
+        new[] { new AppSelect.SelectOption("", L["— بدون شخصیت —"]) }
+            .Concat(State.Personas.Select(p => new AppSelect.SelectOption(p.Id, p.Icon + " " + p.Name))).ToArray();
+
+    AppSelect.SelectOption[] ProviderOptions() =>
+        new[] { new AppSelect.SelectOption("", L["— بدون تغییر API —"]) }
+            .Concat(State.Providers.Where(p => !p.IsGenerator).Select(p => new AppSelect.SelectOption(p.Id, p.Name))).ToArray();
+
+    AppSelect.SelectOption[] ProjectOptions() =>
+        new[] { new AppSelect.SelectOption("", L["بدون پروژه"]) }
+            .Concat(State.Projects.Select(p => new AppSelect.SelectOption(p.Id, p.Name))).ToArray();
+
+    string Summary(ChatTemplate t)
+    {
+        var parts = new List<string>();
+        var persona = State.Personas.FirstOrDefault(p => p.Id == t.PersonaId);
+        if (persona != null) parts.Add(persona.Icon + " " + persona.Name);
+        var prov = State.Providers.FirstOrDefault(p => p.Id == t.ProviderId);
+        if (prov != null) parts.Add(prov.Name + (string.IsNullOrEmpty(t.Model) ? "" : " · " + t.Model));
+        if (t.Tools != null) parts.Add(t.Tools.Value ? "🔧 on" : "🔧 off");
+        if (t.Memory != null) parts.Add(t.Memory.Value ? "🧠 on" : "🧠 off");
+        var proj = State.Projects.FirstOrDefault(p => p.Id == t.ProjectId);
+        if (proj != null) parts.Add("📁 " + proj.Name);
+        if (t.Tags.Count > 0) parts.Add(string.Join(" ", t.Tags.Select(x => "#" + x)));
+        return string.Join(" · ", parts);
+    }
+}

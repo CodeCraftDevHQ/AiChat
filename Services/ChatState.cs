@@ -623,6 +623,7 @@ public partial class ChatState
         LoadVoiceOpts();
         LoadStyleAndKeys();
         LoadModelFav();
+        LoadTemplates();
         LoadCustomTools();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
@@ -813,7 +814,7 @@ public partial class ChatState
     public void SaveMemoryOpts() { Preferences.Default.Set("memory_opts", System.Text.Json.JsonSerializer.Serialize(MemoryOpts)); Notify(); }
 
     /// <summary>Does the memory apply here? Chat setting, then persona, then the global switch.</summary>
-    public bool MemoryApplies(Conversation? conv) => conv?.Memory ?? PersonaOf(conv)?.Memory ?? MemoryOpts.Enabled;
+    public bool MemoryApplies(Conversation? conv) => conv?.Memory ?? (conv == null ? _draftTemplate?.Memory : null) ?? PersonaOf(conv)?.Memory ?? MemoryOpts.Enabled;
 
     string MemoryPrompt(Conversation? conv) =>
         MemoryApplies(conv) ? MemoryHelper.BuildPrompt(Memory, MemoryOpts) : "";
@@ -1428,6 +1429,7 @@ public partial class ChatState
         {
             Active = new Conversation { Title = MakeTitle(prompt), ProjectId = DraftProjectId, PersonaId = DraftPersonaId };
             DraftProjectId = null; DraftPersonaId = null;
+            ApplyTemplateDraft(Active);
             Conversations.Insert(0, Active);
         }
         var conv = Active;
@@ -1985,8 +1987,8 @@ public partial class ChatState
     public void ResetToolOpts() { ToolOpts = new(); SaveToolOpts(); }
 
     /// <summary>Tools are offered to OpenAI-compatible APIs, Claude and Gemini (when allowed for that API).</summary>
-    bool ToolsApply(ProviderConfig p, Persona? persona = null) =>
-        (persona?.Tools ?? ToolOpts.Enabled) && p.UseTools && !p.IsGenerator &&
+    bool ToolsApply(ProviderConfig p, Persona? persona = null, bool? chatTools = null) =>
+        (chatTools ?? persona?.Tools ?? ToolOpts.Enabled) && p.UseTools && !p.IsGenerator &&
         p.Type is ProviderType.OpenAiCompatible or ProviderType.Anthropic or ProviderType.Gemini;
 
     /// <summary>Call after changing a field of <see cref="SearchOpts"/>.</summary>
@@ -2660,6 +2662,8 @@ public partial class ChatState
         if (MemorySuggest != null) { CloseMemorySuggest(); return true; }
         if (PromptsOpen) { ClosePrompts(); return true; }
         if (QuickModelOpen) { CloseQuickModel(); return true; }
+        if (TagEditTarget != null) { CloseTagEdit(); return true; }
+        if (TemplatePickerOpen) { CloseTemplatePicker(); return true; }
         if (Picker != null) { ClosePicker(); return true; }
         if (Viewer != null) { CloseViewer(); return true; }
         if (ShowLogs) { CloseLogs(); return true; }
@@ -2877,6 +2881,7 @@ public partial class ChatState
         Active = null;
         DraftProjectId = null;
         DraftPersonaId = null;
+        _draftTemplate = null;
         if (IsNarrow) SidebarOpen = false;
         Notify();
     }
@@ -3065,6 +3070,7 @@ public partial class ChatState
             };
             DraftProjectId = null;
             DraftPersonaId = null;
+            ApplyTemplateDraft(Active);
             Active.ArenaProviderId = _draftArenaProvider;
             Active.ArenaModel = _draftArenaModel;
             _draftArenaProvider = null; _draftArenaModel = "";
@@ -3174,7 +3180,7 @@ public partial class ChatState
 
         provider = WithGen(provider, conv);
         var kbToolHits = new List<KnowledgeHit>();
-        if (ToolsApply(provider, PersonaOf(conv)))
+        if (ToolsApply(provider, PersonaOf(conv), conv.Tools))
         {
             _toolAllowAll = false;
             provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts, null, MemoryTools(conv));
