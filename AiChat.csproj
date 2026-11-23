@@ -15,8 +15,8 @@
 
 		<ApplicationTitle>AI Chat</ApplicationTitle>
 		<ApplicationId>com.aichat.multiprovider</ApplicationId>
-		<ApplicationDisplayVersion>1.2.0</ApplicationDisplayVersion>
-		<ApplicationVersion>3</ApplicationVersion>
+		<ApplicationDisplayVersion>1.3.0</ApplicationDisplayVersion>
+		<ApplicationVersion>4</ApplicationVersion>
 
 		<!-- Windows: unpackaged (plain .exe), no MSIX signing needed -->
 		<WindowsPackageType>None</WindowsPackageType>

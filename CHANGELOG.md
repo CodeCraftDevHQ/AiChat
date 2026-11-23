@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0
+- Project knowledge base: add documents (txt, md, csv, json, html, docx, pptx, xlsx, pdf, UTF-16 / Windows-1256 text) to a project; Persian-aware BM25 search with optional embeddings, automatic context, a search tool for the model, sources under the answer, incremental sync of a folder on the computer
+- Chats of one project can be searched and read by the model; read-only, jailed folder tools (list / read files of the project folder)
+- Local server (Windows): OpenAI-compatible API (`/v1/models`, `/v1/chat/completions`, streaming) and an MCP endpoint (ask_ai, list / read conversations, list projects, search project knowledge) on 127.0.0.1 with a bearer token
+- MCP apps catalog: ready entries with fill-in fields, export of your servers as `mcpServers` JSON
+- Appearance: accent and bubble colours, bubble shape, spacing, more themes; configurable keyboard shortcuts (computer)
+- Favourite models, recent models, quick model switch (Ctrl+K) and a system prompt per model
+- Chat tags with a filter above the chat list, tag management (rename / merge / delete) and chat templates (persona, API + model, tools, memory, project, extra prompt, tags)
+- Two-model chat: the second model can use tools too
+- Menus and dialogs: composer menus open above their own button, searchable pickers instead of native lists, chat menu stays on screen
+- Mobile: thinking / tools boxes can be scrolled while streaming, no flash of an empty screen at start, computer-only settings are hidden, compare dialog fits phones
+
 ## 1.2.0
 - Tools (function calling) for OpenAI-compatible APIs, Claude and Gemini: date & time, calculator, web search (model-controlled count / pages / time range, limits), read page; on by default; all calls of an answer in one collapsible box like the thinking box
 - Code execution tool: built-in JavaScript sandbox (Windows + Android) and, on Windows, Python / PowerShell / CMD / Node.js / C# script or your own programs; per-language switch, ask-before-run, clean environment, limits; the question is a dialog with the code shown

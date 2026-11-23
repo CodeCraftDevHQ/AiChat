@@ -70,6 +70,18 @@ A modern, cross-platform ChatGPT-style application built for **Windows** and **A
 
 * **Prompt library:** your own `/commands` with a searchable picker (📚) and a full editor with import / export.
 
+* **Project knowledge base:** documents of a project (txt, md, csv, json, html, docx, pptx, xlsx, pdf) are searched with a Persian-aware BM25 index (optional embeddings); the best passages go with your question or the model searches them as a tool; sources under the answer; a folder on the computer can be synced. The model can also search and read the other chats of the project.
+
+* **Local server (Windows):** an OpenAI-compatible API and an MCP endpoint on `127.0.0.1`, protected by a bearer token, so other apps and tools can use your APIs, chats and project knowledge.
+
+* **Favourite models & quick switch:** star models, see recent ones, switch with `Ctrl+K`, and give each model its own system prompt.
+
+* **Tags & templates:** label chats and filter the chat list by tags; start a chat from a template (persona, API + model, tools, memory, project, extra prompt, tags).
+
+* **Two-model chat and compare:** send a message to two models at once (both can use tools) or compare two models on one question.
+
+* **Appearance & shortcuts:** accent / bubble colours, bubble shape, spacing, extra themes, and configurable keyboard shortcuts on the computer.
+
 ### 📎 Attachments & File Handling
 
 * Attach images, documents (PDFs), and plain text via drag-and-drop, clipboard paste, or file selection (supports camera input on mobile).
