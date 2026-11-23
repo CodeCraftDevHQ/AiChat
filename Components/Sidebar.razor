@@ -204,7 +204,7 @@
     @if (_menuConv != null)
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
-        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 330px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+        <div class="menu" style="top:max(8px, min(@(_menuY)px, calc(100dvh - 470px))); left:max(8px, min(@(_menuX)px, calc(100vw - 290px)))" @onclick:stopPropagation="true">
             <button @onclick="SummarizeFromMenu">@L["خلاصه‌سازی همین حالا"]</button>
             <button @onclick="ExportFromMenu">@L["خروجی گرفتن از گفتگو..."]</button>
             <button @onclick="SuggestMemoryFromMenu">@L["پیشنهاد حافظه از این گفتگو"]</button>
@@ -239,7 +239,7 @@
     @if (_menuProj != null)
     {
         <div class="menu-backdrop" @onclick="CloseMenu" @onclick:stopPropagation="true"></div>
-        <div class="menu" style="top:min(@(_menuY)px, calc(100dvh - 200px)); left:min(@(_menuX)px, calc(100vw - 210px))" @onclick:stopPropagation="true">
+        <div class="menu" style="top:max(8px, min(@(_menuY)px, calc(100dvh - 260px))); left:max(8px, min(@(_menuX)px, calc(100vw - 290px)))" @onclick:stopPropagation="true">
             <button @onclick="NewChatInProjectFromMenu">@L["گفتگوی جدید در این پروژه"]</button>
             <button @onclick="EditProjectFromMenu">@L["ویرایش پروژه (دستورالعمل و فایل‌ها)"]</button>
             <button class="danger" @onclick="DeleteProjectFromMenu">@L["حذف پروژه"]</button>

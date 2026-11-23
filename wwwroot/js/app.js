@@ -306,6 +306,7 @@ window.chat = {
                 el.__stick = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
             }, { passive: true });
         }
+        if (window.chat.restoreThink) window.chat.restoreThink();
         if (force || el.__stick !== false) {
             el.scrollTop = el.scrollHeight;
             el.__stick = true;
@@ -811,4 +812,51 @@ window.chat.appendValue = function (el, text) {
         e.preventDefault();
         window.chat.dotnet.invokeMethodAsync('OnShortcut', a);
     }, true);
+})();
+
+// While the user scrolls inside a thinking / tools box, the stream must not re-create that box
+// (Blazor replaces the markup on every chunk, which kills the touch scroll). The UI is held until the finger
+// has been gone for a moment; the scroll position of the box is restored afterwards.
+(function () {
+    let dn = null, holding = false, timer = 0, last = null;
+    const boxOf = t => (t && t.closest) ? t.closest('.think-body') : null;
+    const idxOf = b => Array.prototype.indexOf.call(document.querySelectorAll('#messages .think-body'), b);
+    function hold(on) {
+        if (holding === on) return;
+        holding = on;
+        if (dn) dn.invokeMethodAsync('OnThinkHold', on).catch(() => { });
+    }
+    function begin(e) {
+        const b = boxOf(e.target);
+        if (!b) return;
+        clearTimeout(timer);
+        last = { idx: idxOf(b), top: b.scrollTop };
+        hold(true);
+    }
+    function later(e) {
+        if (!holding) return;
+        const b = boxOf(e.target);
+        if (b) last = { idx: idxOf(b), top: b.scrollTop };
+        clearTimeout(timer);
+        timer = setTimeout(() => { window.chat.__thinkRestore = last; hold(false); }, 1200);
+    }
+    window.chat.initThinkHold = function (ref) {
+        dn = ref;
+        if (window.__thinkHoldInit) return;
+        window.__thinkHoldInit = true;
+        document.addEventListener('touchstart', begin, { capture: true, passive: true });
+        document.addEventListener('pointerdown', begin, { capture: true, passive: true });
+        document.addEventListener('wheel', e => { begin(e); later(e); }, { capture: true, passive: true });
+        document.addEventListener('scroll', later, { capture: true, passive: true });
+        document.addEventListener('touchend', later, { capture: true, passive: true });
+        document.addEventListener('touchcancel', later, { capture: true, passive: true });
+        document.addEventListener('pointerup', later, { capture: true, passive: true });
+    };
+    window.chat.restoreThink = function () {
+        const r = window.chat.__thinkRestore;
+        if (!r) return;
+        window.chat.__thinkRestore = null;
+        const b = document.querySelectorAll('#messages .think-body')[r.idx];
+        if (b) b.scrollTop = r.top;
+    };
 })();

@@ -101,11 +101,14 @@
 <label class="lbl">@L["گفتگوهای دیگر و پوشه"]</label>
 <label class="chk"><input type="checkbox" checked="@O.ChatTools" @onchange="e => O.ChatTools = e.Value is true" /> @L["مدل بتواند گفتگوهای دیگر این پروژه را فهرست، جستجو و بخواند (ابزار)"]</label>
 <label class="chk"><input type="checkbox" checked="@O.IncludeChats" @onchange="e => O.IncludeChats = e.Value is true" /> @L["در حالت خودکار، تکه‌های مرتبط گفتگوهای دیگر هم اضافه شود"]</label>
+@if (OperatingSystem.IsWindows())
+{
 <label class="chk"><input type="checkbox" checked="@O.FolderTools" @onchange="e => O.FolderTools = e.Value is true" /> @L["مدل بتواند فایل‌های پوشه را (فقط‌خواندنی و فقط داخل همان پوشه) بخواند"]</label>
 
 <label class="lbl">@L["پوشه روی کامپیوتر (اختیاری)"]</label>
 <input class="inp" dir="ltr" placeholder="C:\Docs\MyProject" value="@O.Folder" @onchange="e => O.Folder = Str(e)" />
 <label class="chk"><input type="checkbox" checked="@O.Subfolders" @onchange="e => O.Subfolders = e.Value is true" /> @L["زیرپوشه‌ها هم خوانده شوند"]</label>
+}
 
 <details class="adv-search">
     <summary>@L["پیشرفته"]</summary>

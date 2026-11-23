@@ -226,11 +226,13 @@ else
     void OnWorkDir(ChangeEventArgs e) { if (_edit != null) _edit.WorkDir = e.Value?.ToString() ?? string.Empty; }
     void OnTransport(string v) { if (_edit != null) { _edit.Transport = v; State.ForgetMcp(_edit.Id); _status = null; } }
     string ArgsText() => _edit == null ? string.Empty : string.Join("\n", _edit.Args);
-    AppSelect.SelectOption[] TransportOptions() => new AppSelect.SelectOption[]
-    {
-        new("http", L["سرور راه‌دور (HTTP)"]),
-        new("stdio", L["برنامه روی این کامپیوتر (stdio)"]),
-    };
+    AppSelect.SelectOption[] TransportOptions() => McpProcess.Supported
+        ? new AppSelect.SelectOption[]
+        {
+            new("http", L["سرور راه‌دور (HTTP)"]),
+            new("stdio", L["برنامه روی این کامپیوتر (stdio)"]),
+        }
+        : new AppSelect.SelectOption[] { new("http", L["سرور راه‌دور (HTTP)"]) };
     void OnUrl(ChangeEventArgs e) { if (_edit != null) _edit.Url = e.Value?.ToString() ?? string.Empty; }
     void OnHeaders(ChangeEventArgs e) { if (_edit != null) _edit.Headers = e.Value?.ToString() ?? string.Empty; }
     void OnEnabled(ChangeEventArgs e) { if (_edit != null) _edit.Enabled = e.Value is true; }

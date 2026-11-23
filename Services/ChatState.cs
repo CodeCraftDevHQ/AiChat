@@ -575,6 +575,21 @@ public partial class ChatState
     }
 
     public bool IsRtl { get; private set; } = true;
+
+    /// <summary>True while the user scrolls inside a thinking / tools box (renders are postponed).</summary>
+    public bool HoldRender { get; private set; }
+
+    /// <summary>False until the saved settings, APIs and chats are loaded (the UI stays invisible meanwhile).</summary>
+    public bool Ready { get; private set; }
+
+    public void MarkReady() { if (!Ready) { Ready = true; Notify(); } }
+
+    public void SetHoldRender(bool on)
+    {
+        if (HoldRender == on) return;
+        HoldRender = on;
+        if (!on) Notify();
+    }
     public string SystemPrompt { get; private set; } = "";
 
     // ------------------------------------------------------------ init
@@ -670,6 +685,7 @@ public partial class ChatState
             _modelByProvider[provider.Id] = model; // older versions only remembered one global model
         CurrentModel = PickModel(provider);
 
+        Ready = true;
         Notify();
     }
 
@@ -1245,7 +1261,9 @@ public partial class ChatState
                 history.Insert(0, new ChatMessage { Role = "user", Content = "(Reference files of this project)", Attachments = project.Files });
             var system = BuildSystem(provider, project, conv, model);
             var gen = WithGen(provider, conv);
-            gen.Tools = null; // the second model answers without tools / web search
+            gen.Tools = null;
+            if (!provider.IsGenerator)
+                system = await PrepareToolsAsync(conv, gen, project, system, new List<KnowledgeHit>(), ct); // the second model gets the same tools
             var impl = _factory.Create(gen.Type);
 
             async Task OnImage(string rawMime, byte[] data)
@@ -1826,6 +1844,12 @@ public partial class ChatState
 
         var detail = tool.Preview != null ? tool.Preview(args)
             : string.Join("\n", args.Select(kv => kv.Key + ": " + (kv.Value is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : kv.Value?.ToJsonString())));
+        // two models can ask at the same time (two-model chat): one question at a time
+        try { await _askGate.WaitAsync(ct); }
+        catch (OperationCanceledException) { return false; }
+        try
+        {
+        if (_toolAllowAll) return true;
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _toolAskTcs = tcs;
         string? code = null, sub = null;
@@ -1844,7 +1868,11 @@ public partial class ChatState
         var ok = await tcs.Task;
         if (ToolAsk != null && ReferenceEquals(_toolAskTcs, tcs)) { ToolAsk = null; _toolAskTcs = null; Notify(); }
         return ok;
+        }
+        finally { _askGate.Release(); }
     }
+
+    readonly SemaphoreSlim _askGate = new(1, 1);
 
     // ---- MCP servers
     public List<McpServerConfig> McpServers { get; private set; } = new();
@@ -3180,33 +3208,8 @@ public partial class ChatState
 
         provider = WithGen(provider, conv);
         var kbToolHits = new List<KnowledgeHit>();
-        if (ToolsApply(provider, PersonaOf(conv), conv.Tools))
-        {
-            _toolAllowAll = false;
-            provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts, null, MemoryTools(conv));
-            provider.Tools.Approve = (tool, args) => ApproveToolAsync(tool, args, ct);
-            provider.Tools.Log = m => _log.Warn(m);
-            if (ToolOpts.McpEnabled && McpServers.Count > 0)
-                provider.Tools.Tools.AddRange(await BuildMcpToolsAsync(ct));
-            if (ToolOpts.CustomEnabled && CustomTools.Count > 0)
-                provider.Tools.Tools.AddRange(CustomToolBuilder.BuildAll(CustomTools, ToolOpts.Code, _http, provider.Tools.Tools.Select(x => x.Name).ToHashSet()));
-            if (project != null && project.Knowledge.Mode == "tool" && await HasKnowledgeAsync(project))
-                provider.Tools.Tools.Add(KnowledgeTool(project, kbToolHits));
-            if (project != null && project.Knowledge.ChatTools)
-                provider.Tools.Tools.AddRange(ChatTools(project, conv, kbToolHits));
-            if (project != null && project.Knowledge.FolderTools)
-            {
-                var ft = FolderTools(project).ToList();
-                if (ft.Count > 0)
-                {
-                    provider.Tools.Tools.AddRange(ft);
-                    system = string.Join("\n\n", new[] { system, "The project has a folder of documents. Read its files only with list_project_folder / read_project_file; do not use code execution to reach files outside of what the user asked." }.Where(x => !string.IsNullOrWhiteSpace(x)));
-                }
-            }
-            if (provider.Tools.Tools.Count == 0) provider.Tools = null;
-            else if (!string.IsNullOrWhiteSpace(ToolOpts.ExtraPrompt))
-                system = string.Join("\n\n", new[] { system, ToolOpts.ExtraPrompt }.Where(x => !string.IsNullOrWhiteSpace(x)));
-        }
+        _toolAllowAll = false;
+        system = await PrepareToolsAsync(conv, provider, project, system, kbToolHits, ct);
         if (project is { Files.Count: > 0 })
             history.Insert(0, new ChatMessage
             {
@@ -3357,6 +3360,38 @@ public partial class ChatState
             Notify();
             await _storage.SaveConversationsAsync(Conversations);
         }
+    }
+
+    /// <summary>Gives the (already copied) provider its tools for this chat and returns the system prompt with the tool notes added.</summary>
+    async Task<string> PrepareToolsAsync(Conversation conv, ProviderConfig provider, Project? project, string system, List<KnowledgeHit> kbToolHits, CancellationToken ct)
+    {
+        if (ToolsApply(provider, PersonaOf(conv), conv.Tools))
+        {
+            provider.Tools = BuiltInTools.Build(ToolOpts, Search, SearchEngine, SearchKey, SearchBaseUrl, SearchOpts, null, MemoryTools(conv));
+            provider.Tools.Approve = (tool, args) => ApproveToolAsync(tool, args, ct);
+            provider.Tools.Log = m => _log.Warn(m);
+            if (ToolOpts.McpEnabled && McpServers.Count > 0)
+                provider.Tools.Tools.AddRange(await BuildMcpToolsAsync(ct));
+            if (ToolOpts.CustomEnabled && CustomTools.Count > 0)
+                provider.Tools.Tools.AddRange(CustomToolBuilder.BuildAll(CustomTools, ToolOpts.Code, _http, provider.Tools.Tools.Select(x => x.Name).ToHashSet()));
+            if (project != null && project.Knowledge.Mode == "tool" && await HasKnowledgeAsync(project))
+                provider.Tools.Tools.Add(KnowledgeTool(project, kbToolHits));
+            if (project != null && project.Knowledge.ChatTools)
+                provider.Tools.Tools.AddRange(ChatTools(project, conv, kbToolHits));
+            if (project != null && project.Knowledge.FolderTools)
+            {
+                var ft = FolderTools(project).ToList();
+                if (ft.Count > 0)
+                {
+                    provider.Tools.Tools.AddRange(ft);
+                    system = string.Join("\n\n", new[] { system, "The project has a folder of documents. Read its files only with list_project_folder / read_project_file; do not use code execution to reach files outside of what the user asked." }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                }
+            }
+            if (provider.Tools.Tools.Count == 0) provider.Tools = null;
+            else if (!string.IsNullOrWhiteSpace(ToolOpts.ExtraPrompt))
+                system = string.Join("\n\n", new[] { system, ToolOpts.ExtraPrompt }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        }
+        return system;
     }
 
     string MakeTitle(string text)

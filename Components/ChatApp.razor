@@ -3,7 +3,7 @@
 @inject IJSRuntime JS
 @inject LogService Log
 
-<div class="app" dir="@(State.IsRtl ? "rtl" : "ltr")">
+<div class="app @(State.Ready ? "" : "booting")" dir="@(State.IsRtl ? "rtl" : "ltr")">
 
     <Sidebar />
     <div class="scrim @(State.SidebarOpen == true ? "show" : "")" @onclick="State.CloseSidebar"></div>
@@ -538,12 +538,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await State.InitAsync();
+        try { await State.InitAsync(); }
+        finally { State.MarkReady(); }
     }
 
     string? _ctxLang;
 
     object CtxLabels() => new { cut = L["برش"], copy = L["کپی"], paste = L["چسباندن"], all = L["انتخاب همه"] };
+
+    [JSInvokable]
+    public Task OnThinkHold(bool on) => InvokeAsync(() => State.SetHoldRender(on));
 
     [JSInvokable]
     public async Task<string> OnPasteRequest() => await Clipboard.Default.GetTextAsync() ?? "";
@@ -595,6 +599,7 @@
         {
             _self = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("chat.initComposer", _input, _self);
+            await JS.InvokeVoidAsync("chat.initThinkHold", _self);
             State.PlayAudioBytes = async (bytes, mime, ct) =>
             {
                 using var reg = ct.Register(() => _ = JS.InvokeVoidAsync("chat.stopAudio"));

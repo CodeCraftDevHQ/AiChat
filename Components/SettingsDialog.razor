@@ -33,7 +33,7 @@
                     </div>
                     @if (_q.Trim().Length > 0)
                     {
-                        var hits = SettingsIndex.Search(_q, L);
+                        var hits = SettingsIndex.Search(_q, L, 80).Where(h => SectionVisible(h.Section)).Take(40).ToList();
                         if (hits.Count == 0)
                         {
                             <p class="muted small s-nohit">@L["چیزی پیدا نشد. با کلمه‌ی دیگری امتحان کنید؛ فارسی و انگلیسی هر دو جواب می‌دهند."]</p>
@@ -461,7 +461,7 @@
                                 <details class="adv-search">
                                     <summary id="set62">🧪 @L["تنظیمات اجرای کد"]</summary>
                                     <p class="muted small">@L["مدل با هر زبانی که فعال کنید می‌تواند کد بنویسد و اجرا کند. جاوااسکریپت داخل یک محیط ایزوله‌ی خود برنامه اجرا می‌شود (بدون فایل و شبکه). زبان‌های دیگر برنامه‌ی نصب‌شده روی همین کامپیوتر را اجرا می‌کنند (فقط ویندوز) و ایزوله نیستند: با دسترسی‌های خود شما کار می‌کنند، پس پرسیدن قبل از اجرا را روشن نگه دارید."]</p>
-                                    @foreach (var lg in to.CodeLanguages)
+                                    @foreach (var lg in to.CodeLanguages.Where(x => x.Builtin || CodeRunner.ExternalAllowed))
                                     {
                                         <details class="adv-search">
                                             <summary>@(lg.Enabled ? "✅" : "⬜") @lg.Name</summary>
@@ -486,8 +486,11 @@
                                             }
                                         </details>
                                     }
-                                    <button class="btn sm" style="margin-top:8px" @onclick="AddLang">➕ @L["افزودن زبان یا برنامه"]</button>
-                                    <button class="btn sm" style="margin-top:8px" @onclick="ResetLangs">@L["بازنشانی فهرست زبان‌ها"]</button>
+                                    @if (CodeRunner.ExternalAllowed)
+                                    {
+                                        <button class="btn sm" style="margin-top:8px" @onclick="AddLang">➕ @L["افزودن زبان یا برنامه"]</button>
+                                        <button class="btn sm" style="margin-top:8px" @onclick="ResetLangs">@L["بازنشانی فهرست زبان‌ها"]</button>
+                                    }
 
                                     <label id="set69" class="lbl" style="margin-top:12px">@L["حداکثر زمان اجرا (ثانیه)"]</label>
                                     <input class="inp" type="number" min="1" max="120" value="@to.Code.TimeoutSec" @onchange="e => ToolOpt(o => o.Code.TimeoutSec = Math.Clamp(ToInt(e), 1, 120))" />
@@ -907,7 +910,12 @@ else if (_dlg == 2)
 
     record SectionItem(string Key, string Title);
 
-    SectionItem[] Sections => new[]
+    /// <summary>Sections that only make sense on a computer (keyboard shortcuts, a local server).</summary>
+    static bool SectionVisible(string key) => OperatingSystem.IsWindows() || key is not ("keys" or "localserver");
+
+    SectionItem[] Sections => AllSections.Where(x => SectionVisible(x.Key)).ToArray();
+
+    SectionItem[] AllSections => new[]
     {
         new SectionItem("general", L["عمومی"]),
         new SectionItem("appearance", L["ظاهر"]),
@@ -938,7 +946,7 @@ else if (_dlg == 2)
 
     string Title => Section == null
         ? L["تنظیمات"]
-        : Sections.First(x => x.Key == Section).Title;
+        : (Sections.FirstOrDefault(x => x.Key == Section) ?? Sections[0]).Title;
 
     void Back() => State.SetSettingsSection(null);
 
@@ -949,7 +957,7 @@ else if (_dlg == 2)
     void OnSearchKey(KeyboardEventArgs e)
     {
         if (e.Key == "Escape") _q = "";
-        else if (e.Key == "Enter" && SettingsIndex.Search(_q, L, 1).FirstOrDefault() is { } h) GoTo(h);
+        else if (e.Key == "Enter" && SettingsIndex.Search(_q, L, 80).FirstOrDefault(x => SectionVisible(x.Section)) is { } h) GoTo(h);
     }
 
     void GoTo(SettingsHit h)

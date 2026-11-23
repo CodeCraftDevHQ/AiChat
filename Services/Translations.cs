@@ -1012,5 +1012,6 @@ public static class Translations
         ["مدل"] = "Model",
         ["خطای محدودیت (429)"] = "Rate-limit error (429)",
         ["انتخاب از فهرست"] = "Pick from list",
+        ["هر پیام شما هم به مدل بالای صفحه (A) و هم به مدل دومی که اینجا انتخاب می‌کنید (B) فرستاده می‌شود و دو جواب کنار هم می‌آید. هر مدل تاریخچه‌ی جواب‌های خودش را می‌بیند. مدل B هم از ابزارها استفاده می‌کند (اما جستجوی خودکار وب فقط برای مدل A است)."] = "Every message goes to the model at the top (A) and to the second model you choose here (B), and the two answers appear side by side. Each model sees the history of its own answers. Model B can use tools too (but the automatic web search is for model A only).",
     };
 }

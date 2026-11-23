@@ -13,7 +13,12 @@ public abstract class StateComponent : ComponentBase, IDisposable
         State.Changed += OnStateChanged;
     }
 
-    void OnStateChanged() => _ = InvokeAsync(StateHasChanged);
+    void OnStateChanged()
+    {
+        // the user is scrolling inside a thinking / tools box: keep the DOM still, render once when released
+        if (State.HoldRender) return;
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     public virtual void Dispose()
     {

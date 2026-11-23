@@ -967,3 +967,10 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .select-btn:disabled { opacity: .55; cursor: default; }
 .model-field { display: flex; gap: 4px; align-items: center; }
 .model-field .inp { flex: 1; min-width: 0; }
+.app.booting { visibility: hidden; }
+.menu { max-height: calc(100dvh - 16px); overflow-y: auto; max-width: min(280px, calc(100vw - 16px)); }
+@media (max-width: 760px) {
+    .cmp-body textarea.inp { min-height: 96px; flex: none; resize: vertical; }
+    .cmp-out { min-height: 110px; max-height: 30dvh; }
+}
+.cmp-body textarea.inp { flex-shrink: 0; }
