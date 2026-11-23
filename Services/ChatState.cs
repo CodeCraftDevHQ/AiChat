@@ -622,6 +622,7 @@ public partial class ChatState
         LoadSummaryOpts();
         LoadVoiceOpts();
         LoadStyleAndKeys();
+        LoadModelFav();
         LoadCustomTools();
         try { ToolOpts = System.Text.Json.JsonSerializer.Deserialize<ToolOptions>(Preferences.Default.Get("tool_opts", "")) ?? new(); }
         catch { ToolOpts = new(); }
@@ -712,8 +713,8 @@ public partial class ChatState
     }
 
     /// <summary>All system instructions in order: global, API, project, this chat.</summary>
-    string BuildSystem(ProviderConfig provider, Project? project, Conversation? conv) =>
-        string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, PersonaOf(conv)?.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt, MemoryPrompt(conv) }
+    string BuildSystem(ProviderConfig provider, Project? project, Conversation? conv, string? model = null) =>
+        string.Join("\n\n", new[] { SystemPrompt, provider.Gen.SystemPrompt, ModelFavs.PromptFor(provider.Id, model), PersonaOf(conv)?.Gen.SystemPrompt, project?.Instructions, conv?.Gen?.SystemPrompt, MemoryPrompt(conv) }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
 
     // ---- summary of long chats
@@ -1241,7 +1242,7 @@ public partial class ChatState
             var project = ProjectOf(conv);
             if (project is { Files.Count: > 0 })
                 history.Insert(0, new ChatMessage { Role = "user", Content = "(Reference files of this project)", Attachments = project.Files });
-            var system = BuildSystem(provider, project, conv);
+            var system = BuildSystem(provider, project, conv, model);
             var gen = WithGen(provider, conv);
             gen.Tools = null; // the second model answers without tools / web search
             var impl = _factory.Create(gen.Type);
@@ -1364,7 +1365,7 @@ public partial class ChatState
         try
         {
             var conv = c.UseChat ? Active : null;
-            var system = BuildSystem(provider, conv != null ? ProjectOf(conv) : null, conv);
+            var system = BuildSystem(provider, conv != null ? ProjectOf(conv) : null, conv, side.Model);
             var gen = WithGen(provider, conv);
             gen.Tools = null; // compare = plain answers (no tools / web search), so both sides get the same chance
             var impl = _factory.Create(gen.Type);
@@ -2658,6 +2659,7 @@ public partial class ChatState
         if (Export != null) { CloseExport(); return true; }
         if (MemorySuggest != null) { CloseMemorySuggest(); return true; }
         if (PromptsOpen) { ClosePrompts(); return true; }
+        if (QuickModelOpen) { CloseQuickModel(); return true; }
         if (Picker != null) { ClosePicker(); return true; }
         if (Viewer != null) { CloseViewer(); return true; }
         if (ShowLogs) { CloseLogs(); return true; }
@@ -2795,6 +2797,8 @@ public partial class ChatState
 
     void PersistSelection()
     {
+        ModelFavs.Touch(CurrentProviderId, CurrentModel);
+        SaveModelFav();
         Preferences.Default.Set("provider", CurrentProviderId ?? "");
         Preferences.Default.Set("model", CurrentModel);
         if (Active != null)
@@ -2834,6 +2838,8 @@ public partial class ChatState
         Providers.RemoveAll(p => p.Id == id);
         _storage.DeleteSecret(id);
         if (_modelByProvider.Remove(id)) SaveModelMap();
+        ModelFavs.DropProvider(id);
+        SaveModelFav();
 
         if (CurrentProviderId == id)
         {
@@ -3144,7 +3150,7 @@ public partial class ChatState
         var fileCount = history.Sum(m => m.Attachments.Count);
         _log.Info($"Request: {provider.Name} ({provider.Type}) / {model}, {history.Count} messages, {fileCount} attachments" +
                   (project != null ? $", project '{project.Name}'" : ""));
-        var system = BuildSystem(provider, project, conv);
+        var system = BuildSystem(provider, project, conv, model);
 
         // long chats: the older messages are replaced by a summary (a failure only means "send everything")
         InvalidateSummary(conv, history.Count);

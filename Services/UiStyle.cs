@@ -108,6 +108,7 @@ public static class KeyBindings
         new("prompts", "کتابخانه‌ی پرامپت", "Ctrl+Shift+P"),
         new("gallery", "گالری", "Ctrl+Shift+G"),
         new("compare", "مقایسه‌ی دو مدل", "Ctrl+Shift+M"),
+        new("modelswitch", "تعویض سریع مدل", "Ctrl+K"),
     };
 
     static readonly Dictionary<string, string> Names = new(StringComparer.OrdinalIgnoreCase)

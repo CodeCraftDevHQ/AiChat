@@ -193,6 +193,8 @@ public static partial class SettingsIndex
         ("set283", "appearance", "فاصله‌ی داخلی حباب"),
         ("set284", "appearance", "فاصله‌ی بین پیام‌ها"),
         ("set285", "appearance", "حداکثر عرض حباب پیام شما"),
+        ("set290", "favmodels", "مدل‌های محبوب"),
+        ("set291", "favmodels", "پرامپت پیش‌فرض هر مدل"),
         ("set94b", "data", "ثبت پاسخ خام مدل‌ها در لاگ (برای عیب‌یابی)"),
     };
 }

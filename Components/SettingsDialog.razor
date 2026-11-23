@@ -556,6 +556,10 @@
                             <VoiceSettings />
                             break;
 
+                        case "favmodels":
+                            <ModelPromptsSettings />
+                            break;
+
                         case "keys":
                             <KeyboardSettings />
                             break;
@@ -903,6 +907,7 @@ else if (_dlg == 2)
     {
         new SectionItem("general", L["عمومی"]),
         new SectionItem("appearance", L["ظاهر"]),
+        new SectionItem("favmodels", L["مدل‌های محبوب و پرامپت مدل‌ها"]),
         new SectionItem("keys", L["میانبرهای صفحه‌کلید"]),
         new SectionItem("api", L["API ها"]),
         new SectionItem("chat", L["گفتگو"]),

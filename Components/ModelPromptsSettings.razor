@@ -1,0 +1,99 @@
+@inherits StateComponent
+
+<p class="muted small">@L["مدل‌های محبوب با ★ علامت می‌خورند (در فهرست مدل‌ها، کنار نام مدل بالای چت یا در تعویض سریع) و در تعویض سریع مدل (Ctrl+K) اول نشان داده می‌شوند."]</p>
+
+<label id="set290" class="lbl first">★ @L["مدل‌های محبوب"]</label>
+@if (State.ModelFavs.Favs.Count == 0)
+{
+    <p class="muted">@L["هنوز مدلی محبوب نشده است."]</p>
+}
+@foreach (var key in State.ModelFavs.Favs.ToList())
+{
+    var k = key;
+    var (pid, model) = ModelFav.Split(k);
+    var prov = State.Providers.FirstOrDefault(p => p.Id == pid);
+    <div class="key-row">
+        <span class="key-name" dir="auto">@(prov?.Name ?? "?") · @model @(prov == null ? "⚠" : "")</span>
+        <button class="icon-btn" title="@L["بالا"]" @onclick="() => State.MoveFavorite(k, -1)">▲</button>
+        <button class="icon-btn" title="@L["پایین"]" @onclick="() => State.MoveFavorite(k, 1)">▼</button>
+        <button class="icon-btn" title="@L["حذف"]" @onclick="() => State.ToggleFavorite(pid, model)">✕</button>
+    </div>
+}
+<button class="btn sm" @onclick="OpenQuick">⚡ @L["تعویض سریع مدل"]</button>
+
+<label id="set291" class="lbl">📝 @L["پرامپت پیش‌فرض هر مدل"]</label>
+<p class="muted small">@L["اگر برای یک مدل دستور بنویسید، هر بار که آن مدل جواب می‌دهد به دستور سیستم اضافه می‌شود (بعد از دستور کلی و دستور API). مثلاً برای یک مدل کوچک «کوتاه و به فارسی جواب بده»."]</p>
+
+@foreach (var kv in State.ModelFavs.Prompts.ToList())
+{
+    var k = kv.Key;
+    var (pid, model) = ModelFav.Split(k);
+    var prov = State.Providers.FirstOrDefault(p => p.Id == pid);
+    <div class="key-row">
+        <span class="key-name" dir="auto"><b>@(prov?.Name ?? "?") · @model</b><br /><small class="muted">@Short(kv.Value)</small></span>
+        <button class="btn sm" @onclick="() => Edit(pid, model, kv.Value)">@L["ویرایش"]</button>
+        <button class="icon-btn" title="@L["حذف"]" @onclick="() => State.SetModelPrompt(pid, model, null)">✕</button>
+    </div>
+}
+
+<label class="lbl">@L["API و مدل"]</label>
+<select class="inp" @onchange="OnProvider">
+    @foreach (var pr in State.Providers)
+    {
+        <option value="@pr.Id" selected="@(pr.Id == _pid)">@pr.Name</option>
+    }
+</select>
+<select class="inp" dir="ltr" style="margin-top:6px" @onchange="OnModel">
+    @foreach (var m in Models())
+    {
+        <option value="@m" selected="@(m == _model)">@m</option>
+    }
+</select>
+<input class="inp" dir="ltr" style="margin-top:6px" placeholder="@L["یا نام مدل را بنویسید"]" value="@_model" @onchange="OnModelText" />
+<textarea class="inp" rows="4" dir="auto" style="margin-top:6px" placeholder="@L["دستور برای این مدل..."]" value="@_text" @oninput="e => _text = e.Value?.ToString() ?? string.Empty"></textarea>
+<div class="row">
+    <button class="primary" disabled="@(string.IsNullOrWhiteSpace(_model) || string.IsNullOrWhiteSpace(_text))" @onclick="SavePrompt">@L["ذخیره"]</button>
+</div>
+
+@code {
+    string _pid = "";
+    string _model = "";
+    string _text = "";
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _pid = State.CurrentProviderId ?? State.Providers.FirstOrDefault()?.Id ?? "";
+        _model = State.CurrentModel;
+        _text = State.ModelFavs.PromptFor(_pid, _model);
+    }
+
+    static string Short(string s)
+    {
+        s = s.Replace('\n', ' ');
+        return s.Length > 90 ? s[..90] + "…" : s;
+    }
+
+    List<string> Models()
+    {
+        var list = State.ModelsFor(State.Providers.FirstOrDefault(p => p.Id == _pid));
+        if (!string.IsNullOrWhiteSpace(_model) && !list.Contains(_model)) list.Insert(0, _model);
+        return list;
+    }
+
+    void OnProvider(ChangeEventArgs e)
+    {
+        _pid = e.Value?.ToString() ?? "";
+        _model = Models().FirstOrDefault() ?? "";
+        _text = State.ModelFavs.PromptFor(_pid, _model);
+    }
+
+    void OnModel(ChangeEventArgs e) { _model = e.Value?.ToString() ?? ""; _text = State.ModelFavs.PromptFor(_pid, _model); }
+    void OnModelText(ChangeEventArgs e) { _model = e.Value?.ToString()?.Trim() ?? ""; _text = State.ModelFavs.PromptFor(_pid, _model); }
+
+    void Edit(string pid, string model, string text) { _pid = pid; _model = model; _text = text; }
+
+    void SavePrompt() => State.SetModelPrompt(_pid, _model, _text);
+
+    void OpenQuick() { State.CloseSettings(); State.OpenQuickModel(); }
+}

@@ -1,0 +1,70 @@
+@inherits StateComponent
+@inject IJSRuntime JS
+
+@if (State.QuickModelOpen)
+{
+    var items = State.QuickItems();
+    <div class="modal-backdrop" @onclick="State.CloseQuickModel">
+        <div class="sheet wide" @onclick:stopPropagation="true">
+            <div class="sheet-head">
+                <strong>⚡ @L["تعویض سریع مدل"]</strong>
+                <button class="icon-btn sm" title="@L["بستن"]" @onclick="State.CloseQuickModel">✕</button>
+            </div>
+            <input @ref="_inp" class="inp sheet-search" dir="auto" placeholder="@L["نام مدل یا API... (Enter = اولین مورد)"]"
+                   value="@State.QuickFilter" @oninput="e => State.SetQuickFilter(e.Value?.ToString() ?? string.Empty)" @onkeydown="OnKey" />
+            <div class="sheet-list">
+                @if (items.Count == 0)
+                {
+                    <div class="sheet-empty">@L["نتیجه‌ای پیدا نشد"]</div>
+                }
+                @{ string? last = null; }
+                @foreach (var it in items)
+                {
+                    var item = it;
+                    @if (item.Section != last)
+                    {
+                        last = item.Section;
+                        <div class="quick-sec">@(item.Section == "fav" ? "★ " + L["محبوب‌ها"] : item.Section == "recent" ? "🕘 " + L["اخیر"] : L["همه‌ی مدل‌ها"])</div>
+                    }
+                    var current = item.Provider.Id == State.CurrentProviderId && item.Model == State.CurrentModel;
+                    var hasPrompt = State.ModelPromptFor(item.Provider.Id, item.Model).Length > 0;
+                    <div class="sheet-row">
+                        <button class="sheet-item @(current ? "current" : "")" dir="auto" @onclick="() => Pick(item)">
+                            <span><span class="muted">@item.Provider.Name ·</span> @item.Model @(hasPrompt ? "📝" : "")</span>@if (current) { <span>✓</span> }
+                        </button>
+                        <button class="icon-btn sm fav @(State.IsFavorite(item.Provider.Id, item.Model) ? "on" : "")" title="@L["محبوب"]"
+                                @onclick="() => State.ToggleFavorite(item.Provider.Id, item.Model)">@(State.IsFavorite(item.Provider.Id, item.Model) ? "★" : "☆")</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    ElementReference _inp;
+    bool _wasOpen;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (State.QuickModelOpen && !_wasOpen)
+        {
+            _wasOpen = true;
+            await JS.InvokeVoidAsync("chat.focusEl", _inp);
+        }
+        else if (!State.QuickModelOpen) _wasOpen = false;
+    }
+
+    void Pick(QuickItem it)
+    {
+        State.SelectProviderModel(it.Provider.Id, it.Model);
+        State.CloseQuickModel();
+    }
+
+    void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        var first = State.QuickItems().FirstOrDefault();
+        if (first != null) Pick(first);
+    }
+}

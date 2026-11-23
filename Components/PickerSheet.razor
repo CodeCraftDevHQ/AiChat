@@ -10,6 +10,10 @@
         <div class="sheet @(isModel ? "wide" : "")" @onclick:stopPropagation="true">
             <div class="sheet-head">
                 <strong>@(isModel ? L["مدل"] : L["سرویس‌دهنده"])</strong>
+                @if (isModel)
+                {
+                    <button class="btn sm" title="@L["تعویض سریع مدل"]" @onclick="OpenQuick">⚡</button>
+                }
                 <button class="icon-btn sm" title="@L["بستن"]" @onclick="State.ClosePicker">✕</button>
             </div>
 
@@ -77,6 +81,11 @@
                         <button class="sheet-item @(current ? "current" : "") @(test is { Ok: false } ? "failed" : "")" dir="auto" title="@tip" @onclick="() => PickItem(value)">
                             <span>@Icon(test)@label</span>@if (current) { <span>✓</span> }
                         </button>
+                        @if (isModel)
+                        {
+                            <button class="icon-btn sm fav @(State.IsFavorite(State.CurrentProviderId, value) ? "on" : "")" title="@L["محبوب"]"
+                                    @onclick="() => State.ToggleFavorite(State.CurrentProviderId, value)">@(State.IsFavorite(State.CurrentProviderId, value) ? "★" : "☆")</button>
+                        }
                         @if (!isModel)
                         {
                             <button class="icon-btn sm sheet-edit" title="@L["ویرایش این API"]" @onclick="() => State.OpenEditApi(value)">✎</button>
@@ -171,7 +180,7 @@
 
     (string Key, string Label)[] Filters => new[]
     {
-        ("all", L["همه"]), ("ok", "✅"), ("failed", "❌"), ("limited", "⏳"), ("untested", L["تست‌نشده"])
+        ("all", L["همه"]), ("fav", "★"), ("ok", "✅"), ("failed", "❌"), ("limited", "⏳"), ("untested", L["تست‌نشده"])
     };
 
     static string Icon(ModelTestResult? t) => t == null ? "" : t.Ok ? "✅ " : t.RateLimited ? "⏳ " : "❌ ";
@@ -181,6 +190,7 @@
         var r = State.TestResultOf(model);
         return filter switch
         {
+            "fav" => State.IsFavorite(State.CurrentProviderId, model),
             "ok" => r is { Ok: true },
             "failed" => r is { Ok: false, RateLimited: false },
             "limited" => r is { Ok: false, RateLimited: true },
@@ -200,6 +210,8 @@
     void OnLimitMode(ChangeEventArgs e) => State.TestLimitMode = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
 
     void SetFilter(string k) => State.TestFilter = k;
+
+    void OpenQuick() { State.ClosePicker(); State.OpenQuickModel(); }
 
     void OnPickerFilter(ChangeEventArgs e) => State.SetPickerFilter(e.Value?.ToString() ?? "");
 

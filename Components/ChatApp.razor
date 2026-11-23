@@ -53,6 +53,11 @@
                 {
                     <button class="picker" title="@L["سرویس‌دهنده"]" @onclick='() => State.OpenPicker("provider")'>@State.CurrentProvider?.Name <span class="caret">▾</span></button>
                     <button class="picker model" title="@L["مدل"]" @onclick='() => State.OpenPicker("model")'>@(string.IsNullOrWhiteSpace(State.CurrentModel) ? L["— مدل —"] : State.CurrentModel) <span class="caret">▾</span></button>
+                    @if (!string.IsNullOrWhiteSpace(State.CurrentModel))
+                    {
+                        <button class="icon-btn sm fav @(State.IsFavorite(State.CurrentProviderId, State.CurrentModel) ? "on" : "")" title="@L["محبوب"]"
+                                @onclick="() => State.ToggleFavorite(State.CurrentProviderId, State.CurrentModel)">@(State.IsFavorite(State.CurrentProviderId, State.CurrentModel) ? "★" : "☆")</button>
+                    }
                 }
             </div>
 
@@ -384,6 +389,7 @@
 <MemorySuggestDialog />
 <ExportDialog />
 <CompareDialog />
+<QuickModelDialog />
 <ArenaDialog />
 
     @if (State.ShowLogs)
@@ -662,6 +668,7 @@
             case "prompts": State.OpenPrompts(); break;
             case "gallery": State.OpenGallery(); break;
             case "compare": State.OpenCompare(); break;
+            case "modelswitch": State.OpenQuickModel(); break;
         }
     });
 

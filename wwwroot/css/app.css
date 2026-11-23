@@ -929,3 +929,8 @@ details.toolbox > .toollist { display: flex; flex-direction: column; gap: 4px; }
 .key-row .key-name { flex: 1; min-width: 0; }
 .key-row .key-inp { width: 170px; text-align: center; font-family: monospace; cursor: pointer; }
 .key-row .key-inp.rec { border-color: var(--accent); }
+
+/* favourite models, quick switch */
+.icon-btn.fav { color: var(--muted); }
+.icon-btn.fav.on { color: #e0a400; }
+.quick-sec { font-size: 12px; color: var(--muted); padding: 8px 14px 2px; }
